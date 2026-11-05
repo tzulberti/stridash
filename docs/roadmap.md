@@ -5,15 +5,15 @@ demoable. Status: ☐ planned · 🔨 in progress · ✅ done
 
 ## M1 — Monorepo skeleton 🔨
 
-- [ ] npm workspaces layout (`apps/*`, `packages/*`)
-- [ ] Shared TypeScript config, ESLint, Prettier
-- [ ] `packages/types`: domain + API types from the [data model](data-model.md)
-- [ ] `apps/server`: Hono boilerplate, health endpoint, Prisma schema matching
+- [x] npm workspaces layout (`apps/*`, `packages/*`)
+- [x] Shared TypeScript config; Prettier configured (ESLint: `expo lint` runs in mobile; root-level ESLint still pending)
+- [x] `packages/types`: domain + API types from the [data model](data-model.md)
+- [x] `apps/server`: Hono boilerplate, health endpoint, Prisma schema matching
       the data model, migrations, auth groundwork (register/login/refresh)
-- [ ] `apps/mobile`: Expo app boots on Android/iOS/web, renders connected
-      health from the local API
-- [ ] CI: typecheck + lint + tests on PR
-- [ ] Docker compose for local Postgres
+- [x] `apps/mobile`: Expo app boots on Android/iOS/web, renders API health
+      from the local server
+- [x] CI: typecheck on push/PR (lint + tests to follow with first test suites)
+- [x] Docker compose for local Postgres (port 5433)
 
 ## M2 — Strava integration ☐
 

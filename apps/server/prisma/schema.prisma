@@ -1,0 +1,268 @@
+// Source of truth: docs/data-model.md — mirrored in packages/types/src/index.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+
+enum Sex {
+  MALE
+  FEMALE
+  OTHER
+  UNDISCLOSED
+}
+
+model User {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  displayName String
+  heightCm    Decimal?  @map("height_cm")
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  sex         Sex?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  connections   Connection[]
+  activities    Activity[]
+  measurements  Measurement[]
+  gear          Gear[]
+  authIdentities AuthIdentity[]
+
+  @@map("users")
+}
+
+enum IdentityKind {
+  PASSWORD
+}
+
+model AuthIdentity {
+  id         String       @id @default(uuid())
+  userId     String       @map("user_id")
+  kind       IdentityKind @default(PASSWORD)
+  /// argon2id-style encoding: "scrypt:$salt:$hash" (node crypto scrypt)
+  secretHash String       @map("secret_hash")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auth_identities")
+}
+
+// ─── Connections (external providers) ────────────────────────────────────────
+
+enum Provider {
+  STRAVA
+  GARMIN
+  OMRON
+  MANUAL
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACTIVE
+  ERROR
+  REVOKED
+}
+
+model Connection {
+  id              String           @id @default(uuid())
+  userId          String           @map("user_id")
+  provider        Provider
+  providerUserId  String           @map("provider_user_id")
+  status          ConnectionStatus @default(PENDING)
+  /// AES-256-GCM (key from STRIDASH_ENC_KEY env). Never leaves the server.
+  accessTokenEnc  String?          @map("access_token_enc")
+  refreshTokenEnc String?          @map("refresh_token_enc")
+  tokenExpiresAt  DateTime?        @map("token_expires_at")
+  scopes          String[]         @default([])
+  lastSyncedAt    DateTime?        @map("last_synced_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  syncLogs      SyncLog[]
+  activities    ActivitySource[]
+  measurements  Measurement[]
+
+  @@unique([userId, provider, providerUserId])
+  @@map("connections")
+}
+
+enum SyncKind {
+  ACTIVITIES
+  MEASUREMENTS
+  TOKEN_REFRESH
+}
+
+enum SyncStatus {
+  OK
+  PARTIAL
+  ERROR
+}
+
+model SyncLog {
+  id            String     @id @default(uuid())
+  connectionId  String     @map("connection_id")
+  kind          SyncKind
+  status        SyncStatus
+  itemsPulled   Int        @default(0) @map("items_pulled")
+  itemsCreated  Int        @default(0) @map("items_created")
+  itemsUpdated  Int        @default(0) @map("items_updated")
+  errorDetail   Json?      @map("error_detail")
+  startedAt     DateTime   @default(now()) @map("started_at")
+  finishedAt    DateTime?  @map("finished_at")
+
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId, startedAt])
+  @@map("sync_logs")
+}
+
+// ─── Activities ──────────────────────────────────────────────────────────────
+
+enum ActivityType {
+  RUN
+  RIDE
+  VIRTUAL_RIDE
+  WALK
+  HIKE
+  SWIM
+  WORKOUT
+  OTHER
+}
+
+model Activity {
+  id          String       @id @default(uuid())
+  userId      String       @map("user_id")
+  headline    String
+  type        ActivityType
+  /// Dedup key component — see docs/data-model.md
+  startTime   DateTime     @map("start_time")
+  durationS   Int          @map("duration_s")
+  movingTimeS Int?         @map("moving_time_s")
+  distanceM   Decimal?     @map("distance_m") @db.Decimal(10, 2)
+  totalAscentM Decimal?    @map("total_ascent_m") @db.Decimal(8, 2)
+  avgSpeedMs  Decimal?     @map("avg_speed_ms") @db.Decimal(6, 2)
+  maxSpeedMs  Decimal?     @map("max_speed_ms") @db.Decimal(6, 2)
+  avgHr       Int?         @map("avg_hr")
+  maxHr       Int?         @map("max_hr")
+  avgPowerW   Int?         @map("avg_power_w")
+  maxPowerW   Int?         @map("max_power_w")
+  caloriesKcal Int?        @map("calories_kcal")
+  indoor      Boolean      @default(false)
+  gearId      String?      @map("gear_id")
+  notes       String?
+  raw         Json?
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gear    Gear?            @relation(fields: [gearId], references: [id], onDelete: SetNull)
+  sources ActivitySource[]
+
+  @@unique([userId, startTime, type, distanceM])
+  @@map("activities")
+}
+
+model ActivitySource {
+  activityId       String   @map("activity_id")
+  connectionId     String   @map("connection_id")
+  sourceActivityId String   @map("source_activity_id")
+  sourceUpdatedAt  DateTime @map("source_updated_at")
+
+  activity   Activity   @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, connectionId])
+  @@map("activity_sources")
+}
+
+// ─── Gear ────────────────────────────────────────────────────────────────────
+
+enum GearKind {
+  BIKE
+  SHOES
+  OTHER
+}
+
+model Gear {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  kind      GearKind @default(OTHER)
+  brand     String?
+  model     String?
+  retired   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities Activity[]
+
+  @@map("gear")
+}
+
+// ─── Measurements ────────────────────────────────────────────────────────────
+
+enum MeasurementKind {
+  WEIGH_IN
+  BLOOD_PRESSURE
+}
+
+model Measurement {
+  id                    String          @id @default(uuid())
+  userId                String          @map("user_id")
+  /// null = manual entry in Stridash
+  connectionId          String?         @map("connection_id")
+  kind                  MeasurementKind
+  /// Dedup key component — see docs/data-model.md
+  measuredAt            DateTime        @map("measured_at")
+  // — WEIGH_IN —
+  weightKg              Decimal         @map("weight_kg") @db.Decimal(6, 2)
+  bodyFatPct            Decimal?        @map("body_fat_pct") @db.Decimal(5, 2)
+  muscleMassKg          Decimal?        @map("muscle_mass_kg") @db.Decimal(6, 2)
+  skeletalMusclePct     Decimal?        @map("skeletal_muscle_pct") @db.Decimal(5, 2)
+  bmi                   Decimal?
+  /// Omron code 264 (one decimal on the 702T generation ⇒ not an Int)
+  visceralFatLevel      Decimal?        @map("visceral_fat_level") @db.Decimal(4, 1)
+  restingMetabolismKcal Int?            @map("resting_metabolism_kcal")
+  metabolicAge          Int?            @map("metabolic_age")
+  /// Omron code 281
+  subcutaneousFatPct    Decimal?        @map("subcutaneous_fat_pct") @db.Decimal(5, 2)
+  /// Omron code 268
+  fatFreeMassKg         Decimal?        @map("fat_free_mass_kg") @db.Decimal(6, 2)
+  /// Omron code 295
+  fatMassKg             Decimal?        @map("fat_mass_kg") @db.Decimal(6, 2)
+  /// Omron code 294
+  skeletalMuscleMassKg  Decimal?        @map("skeletal_muscle_mass_kg") @db.Decimal(6, 2)
+  /// Omron code 267 — raw BIA reading
+  impedanceOhm          Decimal?        @map("impedance_ohm") @db.Decimal(6, 2)
+  bodyWaterPct          Decimal?        @map("body_water_pct") @db.Decimal(5, 2)
+  boneMassKg            Decimal?        @map("bone_mass_kg") @db.Decimal(6, 2)
+  // — BLOOD_PRESSURE —
+  systolicMmhg          Int?            @map("systolic_mmhg")
+  diastolicMmhg         Int?            @map("diastolic_mmhg")
+  pulseBpm              Int?            @map("pulse_bpm")
+  /// Omron code 16
+  meanArterialPressure  Decimal?        @map("mean_arterial_pressure") @db.Decimal(5, 2)
+  // — meta —
+  notes                 String?
+  /// Segmental body composition (Omron codes 275–288) — shape in docs/data-model.md
+  segments              Json?
+  raw                   Json?
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+
+  @@unique([connectionId, kind, measuredAt])
+  @@index([userId, measuredAt])
+  @@map("measurements")
+}

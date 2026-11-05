@@ -10,7 +10,7 @@ activities, weight, body composition, blood pressure, and more.
 
 | | |
 |---|---|
-| **Status** | 🚧 Early development — see the [Roadmap](docs/roadmap.md) |
+| **Status** | 🔨 M1 (monorepo skeleton) in progress — see the [Roadmap](docs/roadmap.md) |
 | **Platforms** | Android · iOS · Web (single codebase) |
 | **License** | TBD — see [License notes](#license-notes) |
 
@@ -73,14 +73,26 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 
 ## Development
 
-> ⚠️ Not functional yet — the repo is in the skeleton phase. Sections below will
-> be filled in as milestones land.
+Requirements: Node ≥ 20, Docker (for the local Postgres), npm ≥ 10.
 
 ```bash
-npm install            # install all workspace dependencies
-npm run dev -w server  # run the API server
-npm run dev -w mobile  # run the Expo app
+npm install                         # install all workspace dependencies
+
+npm run db:up                       # start local Postgres on port 5433
+npm run db:migrate                  # apply Prisma migrations
+npm run dev:server                  # API on http://localhost:3000
+
+npm run dev:mobile                  # Expo app: Android / iOS / web
+#   press w in the Expo terminal for web, or:
+npm run dev:web
+
+npm run typecheck                   # typecheck all workspaces
 ```
+
+Server configuration lives in `apps/server/.env` (copy from
+`.env.example`; secrets can be regenerated with `openssl rand -hex 32`).
+The Expo app targets the API via `EXPO_PUBLIC_API_URL` — set it to your
+machine's LAN IP to test from a phone.
 
 ## License notes
 

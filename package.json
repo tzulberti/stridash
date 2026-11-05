@@ -1,0 +1,37 @@
+{
+  "name": "stridash",
+  "private": true,
+  "version": "0.1.0",
+  "description": "One dashboard for every stride — open-source fitness aggregator",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:server": "npm run dev -w @stridash/server",
+    "dev:mobile": "npm run start -w @stridash/mobile",
+    "dev:web": "npm run start:web -w @stridash/mobile",
+    "db:up": "docker compose up -d db",
+    "db:generate": "npm run prisma:generate -w @stridash/server",
+    "db:migrate": "npm run prisma:migrate -w @stridash/server",
+    "db:studio": "npm run prisma:studio -w @stridash/server"
+  },
+  "devDependencies": {
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.2": true,
+    "prisma@6.19.3": true
+  }
+}
