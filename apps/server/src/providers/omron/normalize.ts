@@ -132,7 +132,8 @@ export function normalizeSample(
       restingMetabolismKcal: read(list, V.BASAL_METABOLISM),
       metabolicAge: read(list, V.METABOLIC_AGE),
       subcutaneousFatPct: read(list, V.SEG_SUBCUT_FAT),
-      fatFreeMassKg: read(list, V.FAT_FREE_MASS),
+      // code 268 is FFMI (kg/m², dimensionless — verified against real HBF-702T
+      // data), NOT fat-free mass in kg → kept in raw, no column maps it
       fatMassKg: read(list, V.BODY_FAT_MASS, { weight: false }),
       skeletalMuscleMassKg: read(list, V.SKELETAL_MUSCLE_MASS),
       impedanceOhm: read(list, V.IMPEDANCE),

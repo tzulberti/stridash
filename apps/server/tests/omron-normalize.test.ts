@@ -73,7 +73,7 @@ describe("normalizeSample — WEIGH_IN", () => {
     const sample = fullScaleSample();
     // complete with the high-fidelity codes
     sample.bodyIndexList[V.IMPEDANCE] = entry(534, 0);
-    sample.bodyIndexList[V.FAT_FREE_MASS] = entry(6410, -2); // 64.10 kg
+    sample.bodyIndexList[V.FAT_FREE_MASS] = entry(1935, -2); // 19.35 kg/m² (FFMI, dimensionless)
     sample.bodyIndexList[V.BODY_FAT_MASS] = entry(184, -1); // 18.4 kg
     sample.bodyIndexList[V.SKELETAL_MUSCLE_MASS] = entry(347, -1); // 34.7 kg
     sample.bodyIndexList[V.SEG_MUSCLE_ARMS] = entry(438, -1); // 43.8 %
@@ -101,7 +101,9 @@ describe("normalizeSample — WEIGH_IN", () => {
     expect(row.visceralFatLevel).toBe(7);
     // fields omramin discards:
     expect(row.impedanceOhm).toBe(534);
-    expect(row.fatFreeMassKg).toBeCloseTo(64.10, 5);
+    // code 268 = FFMI (dimensionless) — value lives in raw, no column
+    expect(row.fatFreeMassKg === null || row.fatFreeMassKg === undefined).toBe(true);
+    expect(row.raw.values?.FAT_FREE_MASS?.value).toBeCloseTo(19.35, 5);
     expect(row.fatMassKg).toBeCloseTo(18.4, 5);
     expect(row.skeletalMuscleMassKg).toBeCloseTo(34.7, 5);
     expect(row.subcutaneousFatPct).toBeCloseTo(19.6, 5);

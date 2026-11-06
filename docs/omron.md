@@ -42,7 +42,7 @@ weight entries are converted to kg via their unit `subtype`
 | 264 | visceral fat level | `visceral_fat_level` |
 | 265 / 266 | visceral fat / skeletal muscle check flags | `raw` |
 | 267 | **impedance (Ω)** | `impedance_ohm` |
-| 268 | **fat-free mass (kg)** | `fat_free_mass_kg` |
+| 268 | **FFMI (kg/m²** — fat-free mass *index*, unit 0; ≈ FFM/height²) | `raw.values.FAT_FREE_MASS` |
 | 294 | **skeletal muscle mass (kg)** | `skeletal_muscle_mass_kg` |
 | 295 | **body fat mass (kg)** | `fat_mass_kg` |
 | 275 / 277 / 279 | segmental muscle % (arms / trunk / legs) | `segments.jsonb` |

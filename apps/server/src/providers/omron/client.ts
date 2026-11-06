@@ -49,7 +49,7 @@ export const Value = {
   VISCERAL_FAT_CHECK: "265",
   SKELETAL_MUSCLE_CHECK: "266",
   IMPEDANCE: "267", // ohm
-  FAT_FREE_MASS: "268", // kg (after scale)
+  FAT_FREE_MASS: "268", // FFMI kg/m² (dimensionless, unit 0 — verified vs real data)
   AVG_WEIGHT: "269",
   AVG_WEIGHT_FFM: "270",
   BLE_BMI: "292",
