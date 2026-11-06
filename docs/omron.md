@@ -78,7 +78,7 @@ clear error list.
 
 | Route | Behavior |
 |---|---|
-| `POST /api/connections` | body `{provider:"OMRON", email, password, country}` — verifies the credentials live against Omron, **stores only encrypted tokens** (never the password), returns the connection |
+| `POST /api/connections` | body `{provider:"OMRON", identifier, password, country}` — `identifier` is the account's email OR username (the protocol's login field is `username`); verifies the credentials live against Omron, **stores only encrypted tokens** (never the password), returns the connection |
 | `POST /api/connections/:id/sync` | refreshes the token if needed, pulls all devices (BPM + scale) since the last sync (1 day overlap for corrections), upserts into `measurements` (dedup: `connection_id + kind + measured_at`), writes a `sync_logs` row |
 | `GET /api/connections/:id/syncs` | last 50 sync logs |
 

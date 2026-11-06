@@ -13,8 +13,10 @@ import type { Env } from "../env.js";
 
 const omronConnectSchema = z.object({
   provider: z.literal("OMRON"),
-  /** Omron Connect account email + password. Verified immediately, never stored. */
-  email: z.string().email(),
+  /** Omron Connect account identifier — email OR username (the API's login
+   * field is literally `username`; accounts register either way). */
+  identifier: z.string().min(1),
+  /** Verified against Omron immediately, never stored. */
   password: z.string().min(1),
   /** ISO 3166-1 alpha-2 country of the Omron Connect account. */
   country: z.string().length(2),
@@ -71,7 +73,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     if (!parsed.success) {
       return c.json({ error: "Invalid body", detail: parsed.error.flatten().fieldErrors }, 400);
     }
-    const { email, password, country } = parsed.data;
+    const { identifier, password, country } = parsed.data;
 
     const region = regionForCountry(country);
     if (!region) {
@@ -87,7 +89,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     const client = new OmronConnectV1(region);
     let tokens;
     try {
-      tokens = await client.login(email, password);
+      tokens = await client.login(identifier, password);
     } catch (err) {
       if (err instanceof OmronConnectError) {
         return c.json({ error: "Omron login failed", detail: err.message }, 401);
@@ -95,11 +97,11 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       throw err;
     }
 
-    // Provider-side identity: stable per-account; fall back to the email.
-    let providerUserId = email;
+    // Provider-side identity: stable per-account; fall back to the identifier.
+    let providerUserId = identifier;
     try {
       const me = await client.withAccessToken(tokens.accessToken).getUser();
-      providerUserId = String(me.userID ?? me.loginName ?? me.email ?? email);
+      providerUserId = String(me.userID ?? me.loginName ?? me.email ?? identifier);
     } catch {
       // identity endpoint is best-effort; don't block connecting
     }

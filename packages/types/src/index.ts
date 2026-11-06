@@ -57,7 +57,8 @@ export interface Connection {
 /** Connect an Omron account (server verifies credentials; password never stored). */
 export interface OmronConnectRequest {
   provider: "OMRON";
-  email: string;
+  /** Omron Connect account identifier — email or username. */
+  identifier: string;
   /** Omron Connect account password — sent over TLS once, never persisted. */
   password: string;
   /** ISO 3166-1 alpha-2 country the account was registered under. */
