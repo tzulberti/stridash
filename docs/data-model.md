@@ -5,7 +5,18 @@ provider-agnostic: every external service (Garmin, Strava, Omron, …) is modele
 as a "connection", and everything the services send us lands in normalized
 domain tables (activities, measurements), not provider-specific tables.
 
-Implemented with Prisma on PostgreSQL (M1). Diagrams are entity-level only.
+Implemented with Prisma 7 on PostgreSQL 18 (M1). This file is the
+column-level reference; [`db-diagram.md`](db-diagram.md) holds the
+mermaid ER diagram of the same structure.
+
+Conventions:
+
+- **Primary keys are ULIDs** (`@default(ulid())`): 26-char,
+  lexicographically sortable ids — key order equals creation order. Do not
+  use `uuid`/`autoincrement` PKs in new migrations.
+- **One migration per table / alter**: new migrations must touch exactly one
+  table (its enums and indexes included), never combine several tables or
+  unrelated changes in one file.
 Types typed in `packages/types` mirror this schema so the API and apps share it.
 
 ## Entity relationship overview
@@ -27,7 +38,7 @@ User ──< Connection ──< SyncLog
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | uuid PK | |
+| `id` | ulid PK | |
 | `email` | text unique | login + service OAuth callbacks |
 | `display_name` | text | |
 | `height_cm` | numeric | used to compute BMI on ingest |
@@ -41,8 +52,8 @@ One row per (user, external account). Provider-agnostic by design.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | uuid PK | |
-| `user_id` | uuid FK → users | |
+| `id` | ulid PK | |
+| `user_id` | ulid FK → users | |
 | `provider` | enum | `STRAVA` \| `GARMIN` \| `OMRON` \| `MANUAL` |
 | `provider_user_id` | text | the ID at the provider (Strava athlete id, …) |
 | `status` | enum | `PENDING` \| `ACTIVE` \| `ERROR` \| `REVOKED` |
@@ -62,8 +73,8 @@ requests, failures).
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | uuid PK | |
-| `connection_id` | uuid FK → connections | |
+| `id` | ulid PK | |
+| `connection_id` | ulid FK → connections | |
 | `kind` | enum | `ACTIVITIES` \| `MEASUREMENTS` \| `TOKEN_REFRESH` |
 | `status` | enum | `OK` \| `PARTIAL` \| `ERROR` |
 | `items_pulled` | int | |
@@ -78,8 +89,8 @@ don't map get parked in `raw` for later backfill.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | uuid PK | |
-| `user_id` | uuid FK → users | |
+| `id` | ulid PK | |
+| `user_id` | ulid FK → users | |
 | `headline` | text | activity title |
 | `type` | enum | `RUN` \| `RIDE` \| `VIRTUAL_RIDE` \| `WALK` \| `SWIM` \| `WORKOUT` \| `OTHER` … |
 | `start_time` | timestamptz | canonical dedup key (with `source`) |
@@ -92,7 +103,7 @@ don't map get parked in `raw` for later backfill.
 | `avg_power_w` / `max_power_w` | int nullable | cycling power |
 | `calories_kcal` | int nullable | |
 | `indoor` | bool | Zwift/trainer rides are flagged here |
-| `gear_id` | uuid FK → gear nullable | |
+| `gear_id` | ulid FK → gear nullable | |
 | `notes` | text | edited in Stridash only (never pushed back) |
 | `raw` | jsonb | original provider payload |
 | `created_at` / `updated_at` | timestamptz | |
@@ -114,8 +125,8 @@ which field.
 
 | Column | Type | Notes |
 |---|---|---|
-| `activity_id` | uuid FK → activities | |
-| `connection_id` | uuid FK → connections | |
+| `activity_id` | ulid FK → activities | |
+| `connection_id` | ulid FK → connections | |
 | `source_activity_id` | text | id at the provider |
 | `source_updated_at` | timestamptz | provider-side edit detection |
 | PK | (`activity_id`, `connection_id`) | |
@@ -130,9 +141,9 @@ values, etc.) land without migrations.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | uuid PK | |
-| `user_id` | uuid FK → users | |
-| `connection_id` | uuid FK → connections nullable | NULL = manual entry |
+| `id` | ulid PK | |
+| `user_id` | ulid FK → users | |
+| `connection_id` | ulid FK → connections nullable | NULL = manual entry |
 | `kind` | enum | `WEIGH_IN` \| `BLOOD_PRESSURE` |
 | `measured_at` | timestamptz | canonical dedup key (with `connection`) |
 | --- WEIGH_IN columns --- | | |
@@ -185,8 +196,8 @@ Strava-community feature users ask for when leaving Strava).
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | uuid PK | |
-| `user_id` | uuid FK → users | |
+| `id` | ulid PK | |
+| `user_id` | ulid FK → users | |
 | `name` | text | |
 | `kind` | enum | `BIKE` \| `SHOES` \| `OTHER` |
 | `brand` / `model` | text nullable | |
@@ -200,8 +211,8 @@ Local credential (password hash) per user; structured so a future
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | uuid PK | |
-| `user_id` | uuid FK → users | |
+| `id` | ulid PK | |
+| `user_id` | ulid FK → users | |
 | `kind` | enum | `PASSWORD` |
 | `secret_hash` | text | argon2id |
 | `updated_at` | timestamptz | |

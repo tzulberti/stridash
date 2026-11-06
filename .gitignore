@@ -154,3 +154,4 @@ vite.config.ts.timestamp-*
 .env.*
 .expo/
 coverage/
+apps/server/src/generated/

@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:17
+    image: postgres:18
     environment:
       POSTGRES_USER: stridash
       POSTGRES_PASSWORD: stridash
@@ -9,7 +9,9 @@ services:
       # 5433 on the host — 5432 commonly conflicts with other local Postgres
       - "5433:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # PG18 image wants the mount at /var/lib/postgresql (data goes into a
+      # subdirectory, enabling in-place pg_upgrade on later major bumps)
+      - pgdata18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U stridash"]
       interval: 5s
@@ -17,4 +19,4 @@ services:
       retries: 10
 
 volumes:
-  pgdata:
+  pgdata18:
