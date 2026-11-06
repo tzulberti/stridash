@@ -41,7 +41,7 @@ case "${1:-}" in
     auth
     echo "connecting Omron (${2}, ${3})…"
     req -X POST "$BASE/connections" -H "Authorization: Bearer $BIG" -H "Content-Type: application/json" \
-      -d "{\"provider\":\"OMRON\",\"email\":\"$3\",\"password\":\"$4\",\"country\":\"$2\"}" | head -20
+      -d "{\"provider\":\"OMRON\",\"identifier\":\"$3\",\"password\":\"$4\",\"country\":\"$2\"}" | head -20
     ;;
   igpsport)
     auth
