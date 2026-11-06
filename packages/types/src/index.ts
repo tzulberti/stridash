@@ -35,7 +35,7 @@ export type IdentityKind = "PASSWORD";
 // ─── Connections (external providers) ────────────────────────────────────────
 
 /** Providers Stridash can sync from. */
-export type Provider = "STRAVA" | "GARMIN" | "OMRON" | "MANUAL";
+export type Provider = "STRAVA" | "GARMIN" | "ZWIFT" | "IGPSPORT" | "OMRON" | "MANUAL";
 
 export type ConnectionStatus = "PENDING" | "ACTIVE" | "ERROR" | "REVOKED";
 
@@ -47,9 +47,21 @@ export interface Connection {
   providerUserId: string;
   status: ConnectionStatus;
   scopes: string[];
+  /** provider-specific non-secret config (e.g. { omron: { country } }) */
+  config: Record<string, unknown> | null;
   lastSyncedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Connect an Omron account (server verifies credentials; password never stored). */
+export interface OmronConnectRequest {
+  provider: "OMRON";
+  email: string;
+  /** Omron Connect account password — sent over TLS once, never persisted. */
+  password: string;
+  /** ISO 3166-1 alpha-2 country the account was registered under. */
+  country: string;
 }
 
 export type SyncKind = "ACTIVITIES" | "MEASUREMENTS" | "TOKEN_REFRESH";

@@ -96,8 +96,10 @@ machine's LAN IP to test from a phone.
 
 ## License notes
 
-To be decided at the first tagged release. Constraint to keep in mind: parts of
-the Omron sync logic are informed by [omramin](https://github.com/bugficks/omramin)
-(GPLv2). If its code is incorporated rather than merely referenced, this project
-must be distributed under a GPLv2-compatible license — **AGPL-3.0** is the likely
-choice, given the self-hosted/server nature of the product.
+To be decided at the first tagged release. Constraint to keep in mind: the
+Omron integration was written after observing the protocol that the official
+Omron Connect app speaks, with [omramin](https://github.com/bugficks/omramin)
+(GPLv2) consulted for **protocol facts only — no omramin code is used** (the
+TypeScript implementation is independent, see [`docs/omron.md`](docs/omron.md)).
+Given the self-hosted/server nature of the product, **AGPL-3.0** remains the
+likely choice.

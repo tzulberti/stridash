@@ -69,6 +69,8 @@ model AuthIdentity {
 enum Provider {
   STRAVA
   GARMIN
+  ZWIFT
+  IGPSPORT
   OMRON
   MANUAL
 }
@@ -91,6 +93,9 @@ model Connection {
   refreshTokenEnc String?          @map("refresh_token_enc")
   tokenExpiresAt  DateTime?        @map("token_expires_at") @db.Timestamptz(6)
   scopes          String[]         @default([])
+  /// Provider-specific connection config (e.g. Omron country code +
+  /// registration metadata). Contains no secrets — tokens live encrypted above.
+  config          Json?
   lastSyncedAt    DateTime?        @map("last_synced_at") @db.Timestamptz(6)
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -278,7 +283,7 @@ model Measurement {
   /// Dedup key component — see docs/data-model.md
   measuredAt            DateTime        @map("measured_at") @db.Timestamptz(6)
   // — WEIGH_IN —
-  weightKg              Decimal         @map("weight_kg") @db.Decimal(6, 2)
+  weightKg              Decimal?        @map("weight_kg") @db.Decimal(6, 2)
   bodyFatPct            Decimal?        @map("body_fat_pct") @db.Decimal(5, 2)
   muscleMassKg          Decimal?        @map("muscle_mass_kg") @db.Decimal(6, 2)
   skeletalMusclePct     Decimal?        @map("skeletal_muscle_pct") @db.Decimal(5, 2)

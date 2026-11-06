@@ -38,20 +38,24 @@ iGPSPORT both push to Strava.)*
 - [ ] Blood pressure ingest
 - [ ] E2E dedup testing against Strava-originated duplicates
 
-## M4 — Omron scale integration ☐
+## M4 — Omron scale integration ✅ (server side)
 
-Target scale: **Omron KRD-703T** via the OMRON Connect cloud API. Approach and
-field mapping follow [omramin](https://github.com/bugficks/omramin) (GPLv2);
-license implication documented in README.
+Target scale: **Omron KRD-703T** via the OMRON Connect cloud API (protocol
+mapped by observing the official app; [omramin][omramin] used as a reference
+for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 
-- [ ] Omron auth + token refresh (region-dependent server endpoints)
-- [ ] Weigh-in ingest — **full fidelity, not the standard 7 fields**: weight,
+- [x] Omron auth + token refresh (region-dependent server endpoints; API v1
+      regional registry in `providers/omron/regions.ts`)
+- [x] Weigh-in ingest — **full fidelity, not the standard 7 fields**: weight,
       BMI, body fat %, skeletal muscle % + mass, subcutaneous fat %, fat
       mass, fat-free mass, impedance, resting metabolism, metabolic age,
       visceral fat level, and the segmental arms/trunk/legs breakdown
       (via `raw` + `segments`, per the data model)
-- [ ] BP monitor ingest (incl. mean arterial pressure + quality flags)
-- [ ] Region config validated for the user's account country
+- [x] BP monitor ingest (incl. mean arterial pressure + quality flags)
+- [x] Region config validated for the user's account country
+- [x] Unit tests for the value-code mapping (`apps/server/tests/`)
+- [ ] Real-account E2E verification (needs a live Omron account)
+- [ ] Mobile connection UI (M5 scope)
 
 ## M5 — App dashboard ☐
 
