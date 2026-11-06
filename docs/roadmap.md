@@ -27,6 +27,25 @@ iGPSPORT both push to Strava.)*
 - [ ] Gear mapping from Strava
 - [ ] `sync_logs` entries + basic backfill support (`--days N` style)
 
+## M2.1 — iGPSPORT direct integration ✅ (server side)
+
+*(Pulled ahead: rides sync straight from the iGPSPORT cloud, no Strava in
+the loop. International accounts use plain JWT auth; CN accounts need the
+web client's WASM signer and are rejected for now. See
+[`igpsport.md`](igpsport.md).)*
+
+- [x] Login + encrypted token storage + silent re-auth on JWT expiry
+- [x] Paginated activity discovery with "stop at known pages" watermarking
+- [x] Per-ride FIT download → decode → full stream series into
+      `activity_data_points` + scalars derived from records
+- [x] User-level dedup against other providers (provenance in
+      `activity_sources`)
+- [x] `sync_logs` OK/PARTIAL/ERROR with per-ride failure detail
+- [x] Protocol mapping unit tests (`apps/server/tests/igpsport-normalize.test.ts`)
+- [ ] Real-account E2E verification (needs a live iGPSPORT account)
+- [ ] CN-region support (requires executing the WASM request signer) — only
+      if a CN user shows up
+
 ## M3 — Garmin Connect integration ☐
 
 *(Unofficial API — treat as the risky sibling of M2.)*
