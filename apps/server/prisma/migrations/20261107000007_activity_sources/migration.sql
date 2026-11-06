@@ -1,7 +1,7 @@
 -- CreateTable
 CREATE TABLE "activity_sources" (
-    "activity_id" TEXT NOT NULL,
-    "connection_id" TEXT NOT NULL,
+    "activity_id" UUID NOT NULL,
+    "connection_id" UUID NOT NULL,
     "source_activity_id" TEXT NOT NULL,
     "source_updated_at" TIMESTAMPTZ NOT NULL,
 

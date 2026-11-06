@@ -3,8 +3,8 @@ CREATE TYPE "ActivityType" AS ENUM ('RUN', 'RIDE', 'VIRTUAL_RIDE', 'WALK', 'HIKE
 
 -- CreateTable
 CREATE TABLE "activities" (
-    "id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
     "headline" TEXT NOT NULL,
     "type" "ActivityType" NOT NULL,
     "start_time" TIMESTAMPTZ NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE "activities" (
     "max_power_w" INTEGER,
     "calories_kcal" INTEGER,
     "indoor" BOOLEAN NOT NULL DEFAULT false,
-    "gear_id" TEXT,
+    "gear_id" UUID,
     "notes" TEXT,
     "raw" JSONB,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,

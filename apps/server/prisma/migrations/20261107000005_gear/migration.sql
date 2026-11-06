@@ -3,8 +3,8 @@ CREATE TYPE "GearKind" AS ENUM ('BIKE', 'SHOES', 'OTHER');
 
 -- CreateTable
 CREATE TABLE "gear" (
-    "id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "kind" "GearKind" NOT NULL DEFAULT 'OTHER',
     "brand" TEXT,

@@ -6,8 +6,8 @@ CREATE TYPE "SyncStatus" AS ENUM ('OK', 'PARTIAL', 'ERROR');
 
 -- CreateTable
 CREATE TABLE "sync_logs" (
-    "id" TEXT NOT NULL,
-    "connection_id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
+    "connection_id" UUID NOT NULL,
     "kind" "SyncKind" NOT NULL,
     "status" "SyncStatus" NOT NULL,
     "items_pulled" INTEGER NOT NULL DEFAULT 0,

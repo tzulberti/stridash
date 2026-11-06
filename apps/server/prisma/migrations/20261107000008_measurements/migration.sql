@@ -3,9 +3,9 @@ CREATE TYPE "MeasurementKind" AS ENUM ('WEIGH_IN', 'BLOOD_PRESSURE');
 
 -- CreateTable
 CREATE TABLE "measurements" (
-    "id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
-    "connection_id" TEXT,
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "connection_id" UUID,
     "kind" "MeasurementKind" NOT NULL,
     "measured_at" TIMESTAMPTZ NOT NULL,
     "weight_kg" DECIMAL(6,2) NOT NULL,

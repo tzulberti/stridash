@@ -3,7 +3,7 @@ CREATE TYPE "Sex" AS ENUM ('MALE', 'FEMALE', 'OTHER', 'UNDISCLOSED');
 
 -- CreateTable
 CREATE TABLE "users" (
-    "id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
     "email" TEXT NOT NULL,
     "display_name" TEXT NOT NULL,
     "height_cm" DECIMAL(4,1),

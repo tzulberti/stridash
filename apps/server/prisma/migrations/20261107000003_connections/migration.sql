@@ -6,8 +6,8 @@ CREATE TYPE "ConnectionStatus" AS ENUM ('PENDING', 'ACTIVE', 'ERROR', 'REVOKED')
 
 -- CreateTable
 CREATE TABLE "connections" (
-    "id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
     "provider" "Provider" NOT NULL,
     "provider_user_id" TEXT NOT NULL,
     "status" "ConnectionStatus" NOT NULL DEFAULT 'PENDING',

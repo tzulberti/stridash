@@ -3,8 +3,8 @@ CREATE TYPE "IdentityKind" AS ENUM ('PASSWORD');
 
 -- CreateTable
 CREATE TABLE "auth_identities" (
-    "id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
     "kind" "IdentityKind" NOT NULL DEFAULT 'PASSWORD',
     "secret_hash" TEXT NOT NULL,
     "updated_at" TIMESTAMPTZ NOT NULL,
