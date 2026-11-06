@@ -22,6 +22,7 @@ erDiagram
     connections ||--o{ activity_sources : ingestion
 
     activities ||--o{ activity_sources : "produced by"
+    activities ||--o{ activity_data_points : "sample series"
     gear |o--o{ activities : used
 
     users {
@@ -72,11 +73,39 @@ erDiagram
         enum type
         timestamptz start_time "dedup key"
         int duration_s
-        decimal distance_m
-        enum-plus avg_hr "avg/max HR, speed, power, calories"
+        int moving_time_s
+        decimal distance_m "speed / distance"
+        decimal avg_speed_ms
+        decimal max_speed_ms
+        decimal total_ascent_m "terrain"
+        decimal total_descent_m
+        decimal elevation_high_m
+        decimal elevation_low_m
+        int avg_hr "heart rate"
+        int max_hr
+        jsonb hr_zones_min "minutes per zone"
+        int avg_power_w "power / cadence"
+        int max_power_w
+        int avg_cadence
+        int max_cadence
+        int calories_kcal "effort"
+        int training_load "TSS-like, provider-dependent"
         bool indoor
         uuid7 gear_id FK
+        text notes
         jsonb raw
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    activity_data_points {
+        uuid7 id PK "UUIDv7"
+        uuid7 activity_id FK
+        enum provider "one row per activity+provider"
+        int sample_count
+        jsonb series "timeMs, latDeg, lngDeg, distanceM, altitudeM, speedMs, hrBpm, cadenceRpm, powerW, temperatureC"
+        jsonb raw
+        timestamptz created_at
+        timestamptz updated_at
     }
     activity_sources {
         uuid7 activity_id PK "part of composite"
@@ -131,6 +160,12 @@ Notes not visible in the diagram:
     arriving from both Strava and Garmin collapses here
   - `activity_sources`: `(activity_id, connection_id)` — how one activity
     records "known by N providers"
+  - `activity_data_points`: `(activity_id, provider)` — an activity can carry
+    one series per provider; the richest wins at query time, others kept for
+    provenance. `series` jsonb holds parallel numeric arrays (`timeMs`,
+    `latDeg`, `lngDeg`, `distanceM`, `altitudeM`, `speedMs`, `hrBpm`,
+    `cadenceRpm`, `powerW`, `temperatureC`); delivering providers simply
+    omit the streams they don't have.
   - `measurements`: `(connection_id, kind, measured_at)`
 - Omron body-composition value → column mapping (incl. the values omramin
   drops, like impedance and the segmental arms/trunk/legs breakdown) is

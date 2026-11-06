@@ -157,15 +157,30 @@ model Activity {
   startTime    DateTime     @map("start_time") @db.Timestamptz(6)
   durationS    Int          @map("duration_s")
   movingTimeS  Int?         @map("moving_time_s")
+  // — performance: distance / speed —
   distanceM    Decimal?     @map("distance_m") @db.Decimal(10, 2)
-  totalAscentM Decimal?     @map("total_ascent_m") @db.Decimal(8, 2)
   avgSpeedMs   Decimal?     @map("avg_speed_ms") @db.Decimal(6, 2)
   maxSpeedMs   Decimal?     @map("max_speed_ms") @db.Decimal(6, 2)
+  // — performance: terrain —
+  totalAscentM Decimal?     @map("total_ascent_m") @db.Decimal(8, 2)
+  totalDescentM Decimal?    @map("total_descent_m") @db.Decimal(8, 2)
+  elevationHighM Decimal?   @map("elevation_high_m") @db.Decimal(7, 2)
+  elevationLowM  Decimal?   @map("elevation_low_m") @db.Decimal(7, 2)
+  // — performance: heart rate / zones —
   avgHr        Int?         @map("avg_hr")
   maxHr        Int?         @map("max_hr")
+  /// minutes per HR zone (index 0 = zone 1), source-reported when available
+  hrZonesMin   Json?        @map("hr_zones_min")
+  // — performance: power / cadence —
   avgPowerW    Int?         @map("avg_power_w")
   maxPowerW    Int?         @map("max_power_w")
+  avgCadence   Int?         @map("avg_cadence")
+  maxCadence   Int?         @map("max_cadence")
+  // — performance: effort / load —
   caloriesKcal Int?         @map("calories_kcal")
+  /// Source-reported training load / stress (TSS-like); semantics vary by
+  /// provider — the raw payload is the authority
+  trainingLoad Int?         @map("training_load")
   indoor       Boolean      @default(false)
   gearId       String?      @db.Uuid @map("gear_id")
   notes        String?
@@ -173,13 +188,39 @@ model Activity {
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  gear    Gear?            @relation(fields: [gearId], references: [id], onDelete: SetNull)
-  sources ActivitySource[]
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gear       Gear?               @relation(fields: [gearId], references: [id], onDelete: SetNull)
+  sources    ActivitySource[]
+  dataPoints ActivityDataPoint[]
 
   @@index([userId, startTime])
   @@unique([userId, startTime, type, distanceM])
   @@map("activities")
+}
+
+/// Per-sample performance series for an activity (the FIT/GPX "stream").
+/// One row per (activity, provider): arrays live in `series` jsonb —
+/// { timeMs: [], latDeg: [], lngDeg: [], distanceM: [], altitudeM: [],
+///   speedMs: [], hrBpm: [], cadenceRpm: [], powerW: [], temperatureC: [] } —
+/// every chart an app ever draws fetches just this one row.
+model ActivityDataPoint {
+  id          String   @id @db.Uuid @default(uuid(7))
+  /// Dedup key component
+  activityId  String   @map("activity_id") @db.Uuid
+  /// Which provider's series this is (an activity can arrive via Garmin AND
+  /// Strava with different streams; the richest set wins, others are kept
+  /// for provenance)
+  provider    Provider
+  sampleCount Int      @map("sample_count")
+  series      Json
+  raw         Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, provider])
+  @@map("activity_data_points")
 }
 
 model ActivitySource {

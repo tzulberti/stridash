@@ -98,11 +98,15 @@ don't map get parked in `raw` for later backfill.
 | `duration_s` | int | elapsed time |
 | `moving_time_s` | int nullable | |
 | `distance_m` | numeric | |
-| `total_ascent_m` | numeric nullable | |
 | `avg_speed_ms` / `max_speed_ms` | numeric nullable | |
+| `total_ascent_m` / `total_descent_m` | numeric nullable | cumulative climb/drop |
+| `elevation_high_m` / `elevation_low_m` | numeric nullable | altitude range |
 | `avg_hr` / `max_hr` | int nullable | heart rate |
+| `hr_zones_min` | jsonb nullable | minutes per HR zone (index 0 = zone 1), source-reported when available |
 | `avg_power_w` / `max_power_w` | int nullable | cycling power |
+| `avg_cadence` / `max_cadence` | int nullable | rpm (or run step-cadence as delivered) |
 | `calories_kcal` | int nullable | |
+| `training_load` | int nullable | source-reported TSS-like load; semantics vary by provider — `raw` is the authority |
 | `indoor` | bool | Zwift/trainer rides are flagged here |
 | `gear_id` | `uuid` (v7) FK → gear nullable | |
 | `notes` | text | edited in Stridash only (never pushed back) |
@@ -131,6 +135,37 @@ which field.
 | `source_activity_id` | text | id at the provider |
 | `source_updated_at` | timestamptz | provider-side edit detection |
 | PK | (`activity_id`, `connection_id`) | |
+
+### `activity_data_points`
+
+Per-sample performance series (the FIT/GPX "stream") for charts and deeper
+analysis. One row per `(activity, provider)` — the same ride from Garmin and
+Strava keeps both series; at query time the richest wins, the rest stay as
+provenance. Streams live in `series` jsonb as *parallel numeric arrays*
+(matching index across arrays = one sample):
+
+| `series` key | Meaning |
+|---|---|
+| `timeMs` | sample clock (ms since epoch) — always present |
+| `latDeg` / `lngDeg` | GPS track |
+| `distanceM` | cumulative distance |
+| `altitudeM` | barometer/GPS altitude |
+| `speedMs` | instantaneous speed |
+| `hrBpm` / `cadenceRpm` / `powerW` | heart rate, cadence, power |
+| `temperatureC` | device temperature |
+
+Providers that don't deliver a stream simply omit its array.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` (v7) PK | |
+| `activity_id` | `uuid` (v7) FK → activities | on delete cascade |
+| `provider` | enum | which provider's series |
+| `sample_count` | int | length of every array |
+| `series` | jsonb | parallel numeric arrays (above) |
+| `raw` | jsonb nullable | untouched original stream payload |
+| `created_at` / `updated_at` | timestamptz | |
+| PK | (`activity_id`, `provider`) unique | |
 
 ### `measurements`
 

@@ -90,16 +90,53 @@ export interface Activity {
   movingTimeS: number | null;
   distanceM: number | null;
   totalAscentM: number | null;
+  totalDescentM: number | null;
+  elevationHighM: number | null;
+  elevationLowM: number | null;
   avgSpeedMs: number | null;
   maxSpeedMs: number | null;
   avgHr: number | null;
   maxHr: number | null;
+  /** minutes per HR zone, index 0 = zone 1 — source-reported when available */
+  hrZonesMin: number[] | null;
   avgPowerW: number | null;
   maxPowerW: number | null;
+  avgCadence: number | null;
+  maxCadence: number | null;
   caloriesKcal: number | null;
+  /** source-reported training load / stress (TSS-like); semantics vary by provider */
+  trainingLoad: number | null;
   indoor: boolean;
   gearId: string | null;
   notes: string | null;
+  createdAt: string;
+}
+
+/**
+ * A named numeric series array. Only the keys the provider delivered are
+ * present; unrelated streams are absent (not null-filled).
+ */
+export type ActivitySeriesArray = {
+  timeMs: number[]; // always present — sample clock in ms since epoch
+  latDeg?: number[];
+  lngDeg?: number[];
+  distanceM?: number[];
+  altitudeM?: number[];
+  speedMs?: number[];
+  hrBpm?: number[];
+  cadenceRpm?: number[];
+  powerW?: number[];
+  temperatureC?: number[];
+};
+
+/** Per-sample performance series for an activity ("stream"). */
+export interface ActivityDataPoint {
+  id: string;
+  activityId: string;
+  /** which provider delivered this series (one row per activity+provider) */
+  provider: Provider;
+  sampleCount: number;
+  series: ActivitySeriesArray;
   createdAt: string;
 }
 
