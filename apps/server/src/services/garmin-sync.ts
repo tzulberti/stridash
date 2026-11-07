@@ -19,7 +19,7 @@ import {
   type GarminActivityRow,
 } from "../providers/garmin/api.js";
 import { fitToActivity, rowToActivity, type Series } from "../providers/garmin/normalize.js";
-import { parseFitSeries } from "../providers/igpsport/fit.js";
+import { garminFitToSeries } from "../providers/garmin/fitzip.js";
 import type { FitRecord } from "../providers/igpsport/normalize.js";
 import type { ActivityInput } from "../providers/garmin/normalize.js";
 import type { Env } from "../env.js";
@@ -173,9 +173,14 @@ async function ingestActivity(
   let records: FitRecord[] = [];
   try {
     const fit = await downloadFit(bearer, id);
-    records = await parseFitSeries(fit);
+    records = await garminFitToSeries(fit);
   } catch (err) {
+    // NOTE: surfaces in sync logs as PARTIAL for that id — never fatal
     console.error(`[garmin] FIT unavailable/failed for activity ${id} — using list summary`, err);
+  }
+
+  if (records.length === 0) {
+    console.warn(`[garmin] activity ${id} ingested WITHOUT a series (FIT empty/unparsed)`);
   }
 
   const typeKey = (row.activityType?.typeKey ?? "").toLowerCase();

@@ -114,7 +114,12 @@ per new activity, downloads the authoritative original file:
 GET connectapi/download-service/files/activity/<id>   (FIT)
 ```
 
-decoded with the same MIT `fit-file-parser` as iGPSPORT. Scalar averages
+**Format caveat** (verified live, 2026-11): the download answers
+`application/x-zip-compressed` — a *streamed* ZIP whose one member is
+`<id>_ACTIVITY.fit`, with the local header's compressed-size field zeroed
+(data descriptor). Stridash unwraps it in `providers/garmin/fitzip.ts`
+(magic detection + a tiny one-member un-zipper on node zlib) before the same
+MIT `fit-file-parser` used for iGPSPORT rides. Scalar averages
 derive from the same records so summary and series can never disagree; when
 the FIT is unavailable the list summary is stored with
 `raw.approximateStartTime: true` and the sync continues as OK/PARTIAL with

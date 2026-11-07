@@ -4,6 +4,7 @@
  * fixtures below come from the widget pages documented in python-garminconnect.)
  */
 import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { parseWidgetMfaVars, pageTitle, peekJwtExpMs } from "../src/providers/garmin/sso.js";
 
 describe("parseWidgetMfaVars", () => {
