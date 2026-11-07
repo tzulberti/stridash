@@ -82,15 +82,23 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [ ] Real-account E2E verification (needs a live Omron account)
 - [ ] Mobile connection UI (M5 scope)
 
-## M5 — App dashboard ☐
+## M5 — App dashboard ▶ (web dashboard — first cut)
 
-- [ ] Onboarding: create user → connect providers → first sync
-- [ ] Weight + body-composition trend charts (custom-built to avoid heavy deps;
-      offline-capable, no chart library — keep it light on RN-web)
-- [ ] Activity feed w/ type filter, indoor flag
-- [ ] Connections screen: status per connection, "sync now", last-sync watermark
-- [ ] Error surfacing from `sync_logs` in human language
-- [ ] Web dashboard deploy (Expo web build)
+- [x] `apps/web` — Vite + React + TS dashboard (dev proxy `/api` → Hono on
+      :3000; production served beside the API, same origin)
+- [x] Login page (JWT, stored per browser session)
+- [x] Stat cards: latest weight / body fat / visceral fat / muscle mass,
+      activity + weigh-in counts
+- [x] Body-composition trend chart (pure SVG, no chart deps): weight, fat %,
+      visceral, muscle % — switchable metric tabs, all real weigh-ins
+- [x] Activity feed table (type, distance, time, speed, HR, power) with
+      drill-down: per-activity detail cards + HR / power / speed / cadence /
+      altitude series charts (new `GET /api/activities/:id` endpoint)
+- [x] Connections status pills (provider · status · last sync)
+- [ ] Onboarding: create user → connect providers → first sync (UI)
+- [ ] Connections screen with "sync now" buttons + `sync_logs` error surfacing
+- [ ] Manual entry UI
+- [ ] Mobile (Expo) app UI — dashboards phone-sized
 
 ## M6 — Extras ☐
 

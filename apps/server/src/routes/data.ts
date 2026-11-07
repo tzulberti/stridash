@@ -55,6 +55,19 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     });
   });
 
+  routes.get("/activities/:id", async (c) => {
+    const id = c.req.param("id");
+    const activity = await prisma.activity.findFirst({
+      where: { id, userId: c.get("userId") },
+    });
+    if (!activity) return c.json({ error: "Not found" }, 404);
+    const points = await prisma.activityDataPoint.findMany({
+      where: { activityId: id },
+      select: { provider: true, sampleCount: true, series: true },
+    });
+    return c.json({ items: [{ ...serializeRow(activity), series: points }] });
+  });
+
   routes.get("/measurements", async (c) => {
     const q = listQuerySchema.safeParse(c.req.query());
     if (!q.success) return c.json({ error: "Invalid query", detail: q.error.flatten().fieldErrors }, 400);
