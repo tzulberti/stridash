@@ -229,8 +229,8 @@ const asStr = (v: unknown, suffix = ""): string | null =>
 
 export default function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
-  const [email, setEmail] = useState("tom@example.com");
-  const [password, setPassword] = useState("supersecret1");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
