@@ -46,12 +46,18 @@ web client's WASM signer and are rejected for now. See
 - [ ] CN-region support (requires executing the WASM request signer) — only
       if a CN user shows up
 
-## M3 — Garmin Connect integration ☐
+## M3 — Garmin Connect integration ▶ (server side, scraping path built)
 
-*(Unofficial API — treat as the risky sibling of M2.)*
+*(Unofficial SSO-scraping API — see `docs/garmin.md`. Long-term: replace with
+the official Garmin Connect Developer Program "Personal" tier OAuth once an
+application is approved; the auth half is a swap-in.)*
 
-- [ ] Garmin auth (session-based, MFA aware, token caching)
-- [ ] Activity FIT download → normalize to domain model
+- [x] Garmin auth: 3-strategy SSO chain (mobile iOS / embed widget / portal
+      web), CAS ticket → DI OAuth2 token exchange, refresh grant, anti-WAF
+      delays, token verification against the API tier
+- [x] MFA-aware connect (202 PENDING_MFA + `POST /connections/:id/mfa {code}`)
+- [x] Activity list paging + FIT download → normalize to domain model
+- [ ] Live E2E against a real account (needs a real Garmin login to run)
 - [ ] Weight / body composition ingest (Garmin Index or any scale synced to
       Garmin)
 - [ ] Blood pressure ingest

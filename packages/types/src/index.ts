@@ -65,6 +65,21 @@ export interface OmronConnectRequest {
   country: string;
 }
 
+/** Connect a Garmin account (SSO credential login; only DI tokens are stored). */
+export interface GarminConnectRequest {
+  provider: "GARMIN";
+  /** Garmin account email (SSO login field). */
+  email: string;
+  /** Garmin account password — used once over TLS, never persisted. */
+  password: string;
+}
+
+/** Complete a pending Garmin MFA login. */
+export interface GarminMfaRequest {
+  /** Verification code from the second-factor channel. */
+  code: string;
+}
+
 export type SyncKind = "ACTIVITIES" | "MEASUREMENTS" | "TOKEN_REFRESH";
 export type SyncStatus = "OK" | "PARTIAL" | "ERROR";
 

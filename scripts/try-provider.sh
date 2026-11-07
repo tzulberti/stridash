@@ -8,7 +8,9 @@
 # Usage:
 #   ./scripts/try-provider.sh register [email]      # create a user, prints TOKEN
 #   ./scripts/try-provider.sh omron AR you@mail.com 'acct-pass'
-#   ./scripts/try-provider.sh igpsport username 'acct-pass'
+#   ./scripts/try-provider.sh igpsport username 'acct-pass'      # intl works, CN not yet
+#   ./scripts/try-provider.sh garmin account@e.mail 'acct-pass'  # 202 ⇒ ./try-provider.sh mfa CONN CODE
+#   ./scripts/try-provider.sh mfa <conn_id> <verification_code>
 #   ./scripts/try-provider.sh sync <connection_id>
 #   ./scripts/try-provider.sh status <connection_id>
 #   ./scripts/try-provider.sh revoke <connection_id>
@@ -49,6 +51,18 @@ case "${1:-}" in
     req -X POST "$BASE/connections" -H "Authorization: Bearer $BIG" -H "Content-Type: application/json" \
       -d "{\"provider\":\"IGPSPORT\",\"username\":\"$2\",\"password\":\"$3\",\"region\":\"intl\"}" | head -20
     ;;
+  garmin)
+    auth
+    echo "connecting Garmin (${2})… (SSO chain with built-in anti-WAF delays; can take ~30s)"
+    req -X POST "$BASE/connections" -H "Authorization: Bearer $BIG" -H "Content-Type: application/json" \
+      -d "{\"provider\":\"GARMIN\",\"email\":\"$2\",\"password\":\"$3\"}" | head -30
+    ;;
+  mfa)
+    auth
+    echo "completing Garmin MFA for $2…"
+    req -X POST "$BASE/connections/$2/mfa" -H "Authorization: Bearer $BIG" -H "Content-Type: application/json" \
+      -d "{\"code\":\"$3\"}" | head -30
+    ;;
   sync)
     auth
     echo "syncing $2… (first sync pulls history; can take a moment)"
@@ -75,6 +89,6 @@ case "${1:-}" in
     req -X DELETE "$BASE/connections/$2" -H "Authorization: Bearer $BIG"
     ;;
   *)
-    echo "usage: $0 {register [email]|omron COUNTRY email pass|igpsport user pass|sync CONN|status|syncs CONN|measurements|activities|revoke CONN}"
+    echo "usage: $0 {register [email]|omron COUNTRY identifier pass|igpsport user pass|garmin EMAIL pass|mfa CONN CODE|sync CONN|status|syncs CONN|measurements|activities|revoke CONN}"
     ;;
 esac

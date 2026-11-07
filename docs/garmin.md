@@ -1,0 +1,160 @@
+# Garmin Connect (scraping-based)
+
+Garmin does not offer a self-service public API for personal projects (the
+official **Garmin Connect Developer Program** requires an approved
+application; as of 2026-10 it reopened with Personal / Starter / Enterprise
+tiers — Personal is the long-term goal for Stridash). Until approvals land,
+Garmin sync uses the **SSO credential login** the Garmin Connect mobile and
+web clients themselves use, exact strategy chain as
+[`cyberjunky/python-garminconnect`](https://github.com/cyberjunky/python-garminconnect)'s
+`client/sso.py`, ported to TypeScript.
+
+Password only ever travels once over TLS to `sso.garmin.com` — the server
+keeps the resulting OAuth tokens (never the password):
+
+```
+Stridash API ──→ sso.garmin.com            (sign-in, one of 3 strategies)
+            ──→ diauth.garmin.com          (CAS ticket → DI OAuth2 tokens)
+            ──→ connectapi.garmin.com      (Bearer-token REST API)
+```
+
+## Login strategy chain
+
+A signed `POST /api/connections {provider:"GARMIN", email, password}` runs the
+strategies in order and stops at the first success. Only credential errors
+stop the chain immediately; rate limits / bot challenges / transport failures
+fall through:
+
+| # | Strategy | Notes |
+|---|----------|-------|
+| 1 | Mobile iOS (`/mobile/api/login`) | POSTs JSON creds like the iOS app, after loading the sign-in page (its `SESSION`/`__cf_bm` cookies make the POST work) |
+| 2 | SSO embed widget (`/sso/signin` HTML form) | separate rate-limit bucket; carries a CSRF token; the ticket comes back in the success page |
+| 3 | Portal web (`/portal/api/login`) | desktop browser flow |
+
+Anti-WAF delays are part of the protocol and kept verbatim: mobile 2–5 s,
+widget 3–8 s, portal 10–20 s between page load and credential POST. A full
+connect call therefore takes seconds to ~1 minute — do not short-circuit them,
+Cloudflare deflects tight GET→POST sequences with 427/429/403.
+
+Differences from the Python reference (deliberate):
+
+- **No curl_cffi TLS impersonation** — browser TLS-fingerprint spoofing is not
+  realistically reachable from Node's TLS stack. The three rate-limit
+  *buckets* are kept; the per-fingerprint rotation is not. Consequence:
+  usernames/networks being actively throttled may see more 429s than the
+  Python client until strategy 2 or 3 catches.
+- **No JWT_WEB cookie fallback** for session establishment — the DI token
+  exchange (below) must succeed. JWT_WEB required SSO/TGT cookie babysitting
+  and is the first casualty whenever Garmin reworks auth.
+
+### MFA (second factor)
+
+If the account has MFA, connect answers
+
+```
+202 { mfaRequired: true, method: "email", connection }
+```
+
+and parks the pending SSO session (cookies + CSRF, AES-256-GCM encrypted in
+the connection's refresh-token slot — these are session-level secrets).
+Complete it with
+
+```
+POST /api/connections/:id/mfa { code: "123456" }
+```
+
+The code goes to the same endpoint family the apps use: widget flow →
+`/sso/verifyMFA/loginEnterMfaCode`, JSON flows → `/{mobile,portal}/api/mfa/verifyCode`
+(both paths are tried, they sit in different rate buckets). A wrong code does
+**not** destroy the pending state — retry with a new code. The password is
+never re-asked for MFA. `method` is the
+`customerMfaInfo.mfaLastMethodUsed` / widget `mfaMethod` value (TOTP apps,
+email, SMS are all supported; for email/SMS the server proactively requests
+requests a code if Garmin did not send one during the sign-in POST, mirroring
+the widget's "Request a new code" link).
+
+## Session establishment
+
+After a successful strategy reply contains a **CAS service ticket** (`ST-…`).
+Stridash exchanges it on `diauth.garmin.com/di-oauth2-service/oauth/token`
+(form-encoded, HTTP Basic with the DI client id) using grant type
+`https://connectapi.garmin.com/di-oauth2-service/oauth/grant/service_ticket`,
+trying client ids `GARMIN_CONNECT_MOBILE_ANDROID_DI_2025Q2`,
+`…_2024Q4`, `…_DI`, `GARMIN_CONNECT_MOBILE_IOS_DI` — the same chain
+python-garminconnect uses (2026: Garmin rotates the Android DI client id at
+the top of the list).
+
+Result: `access_token` (a JWT, typically ~1 h) + `refresh_token`. Both stored
+AES-256-GCM encrypted (`access_token_enc` / `refresh_token_enc`); the client
+id that worked is noted in `config.garmin.diClientId`. Every login is
+verified against the API tier (`GET /userprofile-service/socialProfile`) —
+garmin's DI endpoint can return tokens the connect API rejects 401
+("token is not active", region dependent); that surfaces as
+`502 { error: "Garmin token rejected by API tier" }` instead of a useless
+connection row.
+
+Refresh before expiry uses the DI refresh grant on the same token endpoint
+(locks: refresh happens when the JWT is <15 min from expiry). If a refresh
+is ever permanent-failed (upstream credential revoked server-side), the
+connection errors visibly; reconnecting the account (email+password again
+via connect) re-establishes it. Like garth, Stridash never re-puts the
+password to refresh a session.
+
+## Sync
+
+`POST /api/connections/:id/sync` pages the list endpoint newest-first:
+
+```
+GET connectapi/activitylist-service/activities/search/activities?start=0&limit=20
+```
+
+per new activity, downloads the authoritative original file:
+
+```
+GET connectapi/download-service/files/activity/<id>   (FIT)
+```
+
+decoded with the same MIT `fit-file-parser` as iGPSPORT. Scalar averages
+derive from the same records so summary and series can never disagree; when
+the FIT is unavailable the list summary is stored with
+`raw.approximateStartTime: true` and the sync continues as OK/PARTIAL with
+the failed ids in `errorDetail.failed`.
+
+Dedup is identical to the other providers: prefer the user-level key
+(`userId, startTime, type, distance`) so the same ride from Garmin and
+iGPSPORT/Zwift becomes one activity; provenance is registered in
+`activity_sources` (unique per connection) and streams in
+`activity_data_points` (`provider = "GARMIN"`).
+
+Scope today: **activities** (+ GPS/HR/power/cadence/altitude/temperature
+series). Weight/HRV/daily wellness endpoints exist for the Personal-API or
+garmin connect scraping but are not wired into the measurement pipeline yet.
+
+## API surface
+
+| Endpoint | Notes |
+|----------|-------|
+| `POST /api/connections` | body `{provider:"GARMIN", email, password}` — runs the SSO strategy chain; **202 PENDING_MFA** or 201 connection. The account password is verified, used once, **not stored**. |
+| `POST /api/connections/:id/mfa` | body `{code}` — completes a 202 pending second-factor login. |
+| `POST /api/connections/:id/sync` | pages + ingests activities (first sync pulls up to 200; rerun for older history as pages fill). |
+| `DELETE /api/connections/:id` | revoke: wipes tokens, stops syncing (data rows stay). |
+
+## Operational reality check
+
+- Garmin changed their auth flow in 2025 (deprecating matin/garth and a
+  wave of 429s). Expect drift; errors deliberately surface Garmin's own
+  responseStatus values (`MFA_REQUIRED`, `INVALID_USERNAME_PASSWORD`,
+  `CAPTCHA_REQUIRED`, HTTP 427/429) verbatim.
+- Login **rate limits are aggressive and per-fingerprint**, not per-IP.
+  Repeated connect attempts hitting 429s should stop; the account may be
+  temporarily blocked.
+- When the Garmin application (Personal tier) is approved for Stridash
+  deployments, this scraping path should be **replaced** by the official
+  OAuth2 flow — the sync/ingest/normalize halves here are provider-agnostic
+  and stay.
+
+## Reference notes
+
+The chain mirrors python-garminconnect (cyberjunky) 2026 `client/sso.py`.
+Licensing: this file reproduces behavior/URLs/regexes **documented in prose**
+and does not copy code from any GPL'd project — same policy as `docs/omron.md`.
