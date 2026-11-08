@@ -57,6 +57,12 @@ application is approved; the auth half is a swap-in.)*
       delays, token verification against the API tier
 - [x] MFA-aware connect (202 PENDING_MFA + `POST /connections/:id/mfa {code}`)
 - [x] Activity list paging + FIT download → normalize to domain model
+- [x] Full-fidelity FIT ingest (2026-11): running dynamics channels
+      (vertical oscillation, stance time, vertical ratio, step length),
+      respiration + stamina, session physiology (VO2max, training effect,
+      normalized power, training load, recovery) in `raw.session`,
+      source-reported HR zones; verified live (200/200 activities,
+      ~579k samples) — see `docs/garmin.md` FIT fidelity notes
 - [ ] Live E2E against a real account (needs a real Garmin login to run)
 - [ ] Weight / body composition ingest (Garmin Index or any scale synced to
       Garmin)
