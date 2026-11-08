@@ -25,6 +25,43 @@ export interface FitRecord {
   cadenceRpm?: number;
   powerW?: number;
   temperatureC?: number;
+  // ─ running dynamics + body metrics (Garmin rich files; iGPSPORT lacks them) ─
+  /** vertical oscillation of the center of mass, meters (FIT "vertical_oscillation") */
+  verticalOscillationM?: number;
+  /** ground-contact time as % of stride cycle (FIT "stance_time_percent") */
+  stanceTimePct?: number;
+  /** vertical oscillation ÷ step length, % (FIT "vertical_ratio") */
+  verticalRatioPct?: number;
+  /** step length, meters */
+  stepLengthM?: number;
+  /** respiration rate, breaths/min (FIT "enhanced_respiration_rate") */
+  respirationRate?: number;
+  /** Garmin "stamina" — % of potential remaining, work-based */
+  staminaPct?: number;
+}
+
+/** Session-level (one per file) summary metrics from the FIT session/user
+ * messages + HR-zones "time in zone". Source-reported, so they may disagree
+ * slightly with our derived averages. */
+export interface FitSession {
+  sport?: string;
+  subSport?: string;
+  totalCalories?: number;
+  avgHr?: number;
+  maxHr?: number;
+  avgPowerW?: number;
+  maxPowerW?: number;
+  normalizedPowerW?: number;
+  trainingLoadPeak?: number;
+  totalTrainingEffect?: number;
+  totalAnaerobicTrainingEffect?: number;
+  primaryBenefit?: string;
+  vo2Max?: number;
+  recoveryTimeH?: number;
+  avgRespirationRate?: number;
+  maxRespirationRate?: number;
+  /** source-reported HR-zone minutes, zone 1 first (FIT time_in_zone) */
+  hrZonesMin?: number[];
 }
 
 /** exerciseType → ActivityType. 0 = cycling (mapping per protocol observation). */

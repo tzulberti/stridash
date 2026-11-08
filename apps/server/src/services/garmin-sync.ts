@@ -19,8 +19,9 @@ import {
   type GarminActivityRow,
 } from "../providers/garmin/api.js";
 import { fitToActivity, rowToActivity, type Series } from "../providers/garmin/normalize.js";
-import { garminFitToSeries } from "../providers/garmin/fitzip.js";
-import type { FitRecord } from "../providers/igpsport/normalize.js";
+import { extractFitFromDownload } from "../providers/garmin/fitzip.js";
+import { parseFitFile } from "../providers/igpsport/fit.js";
+import type { FitRecord, FitSession } from "../providers/igpsport/normalize.js";
 import type { ActivityInput } from "../providers/garmin/normalize.js";
 import type { Env } from "../env.js";
 
@@ -171,9 +172,10 @@ async function ingestActivity(
   const id = String(row.activityId);
 
   let records: FitRecord[] = [];
+  let session: FitSession | null = null;
   try {
     const fit = await downloadFit(bearer, id);
-    records = await garminFitToSeries(fit);
+    ({ records, session } = await parseFitFile(extractFitFromDownload(fit)));
   } catch (err) {
     // NOTE: surfaces in sync logs as PARTIAL for that id — never fatal
     console.error(`[garmin] FIT unavailable/failed for activity ${id} — using list summary`, err);
@@ -188,7 +190,7 @@ async function ingestActivity(
     typeKey === "cycling" && !records.some((r) => r.latDeg !== undefined)
   );
 
-  const parsed = records.length ? fitToActivity(row, records, { indoor: extraIndoor }) : null;
+  const parsed = records.length ? fitToActivity(row, records, { indoor: extraIndoor, session }) : null;
   if (parsed) {
     await upsertActivity(connection, id, parsed.activity, parsed.series);
     return;
@@ -275,6 +277,7 @@ function toActivityCreate(userId: string, input: ActivityInput) {
     trainingLoad: input.trainingLoad ?? null,
     caloriesKcal: input.caloriesKcal,
     indoor: input.indoor,
+    hrZonesMin: (input.hrZonesMin as unknown as Prisma.InputJsonValue) ?? Prisma.JsonNull,
     raw: input.raw as unknown as Prisma.InputJsonValue,
   };
 }

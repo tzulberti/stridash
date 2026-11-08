@@ -129,6 +129,12 @@ interface ActivitySeriesPoint {
     hrBpm?: number[];
     cadenceRpm?: number[];
     powerW?: number[];
+    verticalOscillationM?: number[];
+    stanceTimePct?: number[];
+    verticalRatioPct?: number[];
+    stepLengthM?: number[];
+    respirationRate?: number[];
+    staminaPct?: number[];
     temperatureC?: number[];
   };
 }
@@ -172,6 +178,12 @@ function ActivityDetail({
     push("speedMs", "Speed (m/s)", "#30a46c", "");
     push("cadenceRpm", "Cadence", "#0091ff", "");
     push("altitudeM", "Altitude", "#b8860b", "");
+    push("respirationRate", "Respiration (br/min)", "#d6409f", "");
+    push("staminaPct", "Stamina (%)", "#d29922", " %");
+    push("stepLengthM", "Step length (m)", "#80a9a0", " m");
+    push("verticalOscillationM", "Vertical oscillation (m)", "#9c6ade", " m");
+    push("stanceTimePct", "Ground contact (% of stride)", "#bf7f26", " %");
+    push("verticalRatioPct", "Vertical ratio (%)", "#bf7f26", " %");
     return out;
   }, [series]);
 

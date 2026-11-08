@@ -6,7 +6,7 @@
  * never disagree), falling back to the list row when the FIT is unavailable.
  */
 
-import type { FitRecord, ActivityType } from "../igpsport/normalize.js";
+import type { FitRecord, FitSession, ActivityType } from "../igpsport/normalize.js";
 import type { GarminActivityRow } from "./api.js";
 
 /** Garmin activityTypes typeKey → our domain enum (strava-flavored). */
@@ -55,10 +55,16 @@ export interface Series {
   cadenceRpm: number[];
   powerW: number[];
   temperatureC: number[];
+  verticalOscillationM: number[];
+  stanceTimePct: number[];
+  verticalRatioPct: number[];
+  stepLengthM: number[];
+  respirationRate: number[];
+  staminaPct: number[];
 }
 
 /** Series builder shared with the FIT parser — same per-channel push logic. */
-export function seriesFromRecords(records: FitRecord[]): Series {
+export function seriesFromRecords(records: FitRecord[], session?: FitSession | null): Series {
   const series: Series = {
     timeMs: [],
     latDeg: [],
@@ -70,6 +76,12 @@ export function seriesFromRecords(records: FitRecord[]): Series {
     cadenceRpm: [],
     powerW: [],
     temperatureC: [],
+    verticalOscillationM: [],
+    stanceTimePct: [],
+    verticalRatioPct: [],
+    stepLengthM: [],
+    respirationRate: [],
+    staminaPct: [],
   };
   for (const r of records) {
     series.timeMs.push(r.timeMs);
@@ -84,7 +96,21 @@ export function seriesFromRecords(records: FitRecord[]): Series {
     if (r.cadenceRpm !== undefined) series.cadenceRpm.push(r.cadenceRpm);
     if (r.powerW !== undefined) series.powerW.push(r.powerW);
     if (r.temperatureC !== undefined) series.temperatureC.push(r.temperatureC);
+    if (r.verticalOscillationM !== undefined) series.verticalOscillationM.push(r.verticalOscillationM);
+    if (r.stanceTimePct !== undefined) series.stanceTimePct.push(r.stanceTimePct);
+    if (r.verticalRatioPct !== undefined) series.verticalRatioPct.push(r.verticalRatioPct);
+    if (r.stepLengthM !== undefined) series.stepLengthM.push(r.stepLengthM);
+    if (r.respirationRate !== undefined) series.respirationRate.push(r.respirationRate);
+    if (r.staminaPct !== undefined) series.staminaPct.push(r.staminaPct);
   }
+  // empty arrays at the chart's expense: a channel nobody sampled still sticks
+  // around as [] — serialization cost is negligible and the dashboard's
+  // "has-channel" test is arrays.length
+  for (const [k, v] of Object.entries(series)) {
+    if (k === "timeMs") continue;
+    if (!(v as number[]).length) delete (series as unknown as Record<string, unknown>)[k];
+  }
+  void session;
   return series;
 }
 
@@ -111,6 +137,8 @@ export interface ActivityInput {
   trainingLoad: number | null;
   caloriesKcal: number | null;
   indoor: boolean;
+  /** source-reported HR-zone minutes (FIT time_in_zone) */
+  hrZonesMin: number[] | null;
   raw: Record<string, unknown>;
 }
 
@@ -121,11 +149,12 @@ function scalarStats(series: Series) {
   const last = (xs: number[]) => (xs.length ? xs[xs.length - 1] : null);
   const first = (xs: number[]) => (xs.length ? xs[0] : null);
 
-  const speeds = series.speedMs.filter((v) => v >= 0);
-  const hrs = series.hrBpm.filter((v) => v > 0);
-  const powers = series.powerW.filter((v) => v >= 0);
-  const cadences = series.cadenceRpm.filter((v) => v >= 0);
-  const alts = series.altitudeM.filter((v) => typeof v === "number");
+  const nonEmpty = (xs?: number[]) => xs ?? [];
+  const speeds = nonEmpty(series.speedMs).filter((v) => v >= 0);
+  const hrs = nonEmpty(series.hrBpm).filter((v) => v > 0);
+  const powers = nonEmpty(series.powerW).filter((v) => v >= 0);
+  const cadences = nonEmpty(series.cadenceRpm).filter((v) => v >= 0);
+  const alts = nonEmpty(series.altitudeM).filter((v) => typeof v === "number");
   let ascent: number | null = null;
   let descent: number | null = null;
   if (alts.length > 1) {
@@ -153,7 +182,7 @@ function scalarStats(series: Series) {
     descent,
     low: alts.length ? Math.min(...alts) : null,
     high: alts.length ? Math.max(...alts) : null,
-    distance: last(series.distanceM),
+    distance: last(series.distanceM ?? []),
     startAlt: first(alts),
   };
 }
@@ -166,9 +195,9 @@ function scalarStats(series: Series) {
 export function fitToActivity(
   row: GarminActivityRow,
   records: FitRecord[],
-  extra: { indoor: boolean },
+  extra: { indoor: boolean; session?: FitSession | null },
 ): { activity: ActivityInput; series: Series } | null {
-  const series = seriesFromRecords(records);
+  const series = seriesFromRecords(records, extra.session);
   if (!series.timeMs.length && !row.startTimeGMT) return null;
 
   const stats = scalarStats(series);
@@ -181,7 +210,9 @@ export function fitToActivity(
   const durationFromSeries = Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 1000));
 
   const type = mapType(row.activityType?.typeKey);
-  const indoor = extra.indoor || (type === "RIDE" && !series.latDeg.length);
+  const indoor = extra.indoor || (type === "RIDE" && !(series.latDeg?.length));
+
+  const session = extra.session ?? null;
 
   const activity: ActivityInput = {
     headline: row.activityName ?? "Garmin activity",
@@ -196,21 +227,25 @@ export function fitToActivity(
     totalDescentM: stats.descent ?? (row.elevationLoss ?? null),
     elevationHighM: stats.high,
     elevationLowM: stats.low,
-    avgHr: stats.avgHr ?? (row.averageHR ?? null),
-    maxHr: stats.maxHr ?? (row.maxHR ?? null),
-    avgPowerW: stats.avgPower ?? (row.averagePower ?? null),
-    maxPowerW: stats.maxPower ?? (row.maxPower ?? null),
+    avgHr: session?.avgHr ?? stats.avgHr ?? (row.averageHR ?? null),
+    maxHr: session?.maxHr ?? stats.maxHr ?? (row.maxHR ?? null),
+    avgPowerW: session?.avgPowerW ?? stats.avgPower ?? (row.averagePower ?? null),
+    maxPowerW: session?.maxPowerW ?? stats.maxPower ?? (row.maxPower ?? null),
     avgCadence: stats.avgCadence,
     maxCadence: stats.maxCadence,
-    trainingLoad: null, // only surfaced by Garmin's fitnessstats endpoints
-    caloriesKcal: row.calories ?? null,
+    trainingLoad: session?.trainingLoadPeak ?? null, // source-reported, ambiguous unit — see types
+    caloriesKcal: session?.totalCalories ?? (row.calories ?? null),
+    hrZonesMin: session?.hrZonesMin ?? null,
     indoor,
     raw: {
       provider: "GARMIN",
       activityId: row.activityId,
       typeKey: row.activityType?.typeKey,
-      listRow: row,
       approximateStartTime: series.timeMs.length === 0,
+      // per-session physiology/scoring straight from the FIT (VO2max, TE,
+      // NP, recovery…): not columned anywhere, kept query-ready in jsonb
+      session,
+      listRow: row,
     },
   };
   return { activity, series };
@@ -239,6 +274,7 @@ export function rowToActivity(row: GarminActivityRow): ActivityInput {
     maxCadence: null,
     trainingLoad: null,
     caloriesKcal: row.calories ?? null,
+    hrZonesMin: null,
     indoor: false,
     raw: {
       provider: "GARMIN",

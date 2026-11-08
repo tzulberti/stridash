@@ -163,3 +163,30 @@ garmin connect scraping but are not wired into the measurement pipeline yet.
 The chain mirrors python-garminconnect (cyberjunky) 2026 `client/sso.py`.
 Licensing: this file reproduces behavior/URLs/regexes **documented in prose**
 and does not copy code from any GPL'd project — same policy as `docs/omron.md`.
+
+## FIT fidelity (2026-11)
+
+Garmin serves FITs as a streamed ZIP (`application/x-zip-compressed`,
+`extractFitFromDownload` unwraps the `<id>_ACTIVITY.fit` member; local header
+`compressedSize=0` due to data descriptors). Inside, the files use the
+**`enhanced_*`** variants of speed/altitude (`enhanced_speed`,
+`enhanced_altitude`, `enhanced_respiration_rate`) — the bare `speed`/`altitude`
+fields are absent in modern files, so the parser rides either spelling.
+
+Per-sample series channels stored in `activity_data_points.series`:
+
+`timeMs, latDeg, lngDeg, distanceM, altitudeM, speedMs, hrBpm, cadenceRpm,
+powerW, temperatureC` — plus running dynamics / body metrics (Garmin running
+files; iGPSPORT head-unit files do not carry them):
+`verticalOscillationM, stanceTimePct, verticalRatioPct, stepLengthM,
+respirationRate, staminaPct`.
+
+Unit gotchas: `fit-file-parser` rescales `distance`/`altitude` per
+`lengthUnit`, but leaves `vertical_oscillation` and `step_length` in raw
+**millimetres** — the parser divides by 1000.
+
+Session-level summaries land in `activities.raw.session` (jsonb): sport,
+VO2max, recovery time, aerobic/anaerobic training effect, normalized power,
+`training_load_peak` (also mirrored into `training_load`), avg/max HR and
+power, avg/max respiration, total calories. Source-reported HR-zone minutes
+(FIT `time_in_zone`) go to the `hr_zones_min` column, zone 1 first.

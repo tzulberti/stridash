@@ -154,6 +154,18 @@ export type ActivitySeriesArray = {
   hrBpm?: number[];
   cadenceRpm?: number[];
   powerW?: number[];
+  /** FIT "vertical_oscillation" (Garmin running dynamics), meters */
+  verticalOscillationM?: number[];
+  /** FIT "stance_time_percent" — ground-contact % of stride cycle */
+  stanceTimePct?: number[];
+  /** FIT "vertical_ratio" — vertical oscillation ÷ step length, % */
+  verticalRatioPct?: number[];
+  /** FIT "step_length", meters */
+  stepLengthM?: number[];
+  /** breaths/min (FIT "enhanced_respiration_rate") */
+  respirationRate?: number[];
+  /** Garmin stamina — % of potential remaining */
+  staminaPct?: number[];
   temperatureC?: number[];
 };
 
