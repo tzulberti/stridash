@@ -103,6 +103,42 @@ export function tokenExpiryMs(token: string): number | null {
   return peekJwtExpMs(token);
 }
 
+// ─── Wellness endpoints (verified live 2026-11 with a DI bearer) ────────────
+
+/** Range-capped daily sleep summaries (≤ 28 days per request — 400 beyond).
+ * Rows carry stage minutes, score, resting HR, HRV status/avg, sleep need. */
+export async function getSleepStatsRange(bearer: string, start: string, end: string): Promise<Record<string, unknown>[]> {
+  const { status, json } = await connectapiGet(
+    `/sleep-service/stats/sleep/daily/${start}/${end}`,
+    bearer,
+  );
+  if (status !== 200) throw new GarminError("CONNECTION", `sleep stats ${start}→${end} returned HTTP ${status}`);
+  return ((json as { individualStats?: Record<string, unknown>[] })?.individualStats ?? []);
+}
+
+/** One day of full sleep detail (stages percentages, naps, sleep need,
+ * feedback phrases...) — one request per date. */
+export async function getSleepDay(bearer: string, date: string): Promise<Record<string, unknown> | null> {
+  const { status, json } = await connectapiGet(
+    `/sleep-service/sleep/dailySleepData?date=${date}&nonSleepBufferMinutes=60`,
+    bearer,
+  );
+  if (status !== 200) throw new GarminError("CONNECTION", `sleep day ${date} returned HTTP ${status}`);
+  const dto = (json as { dailySleepDTO?: Record<string, unknown> })?.dailySleepDTO;
+  return typeof dto === "object" && dto !== null ? dto : null;
+}
+
+/** Daily summaries for a date range (steps, floors, calories, HR, IM,
+ * stress, body battery in ONE call — larger than 28 days still answers). */
+export async function getDailySummaries(bearer: string, start: string, end: string): Promise<Record<string, unknown>[]> {
+  const { status, json } = await connectapiGet(
+    `/usersummary-service/v2/dailysummaries?startDate=${start}&endDate=${end}`,
+    bearer,
+  );
+  if (status !== 200) throw new GarminError("CONNECTION", `daily summaries ${start}→${end} returned HTTP ${status}`);
+  return ((json as { data?: Record<string, unknown>[] })?.data ?? []);
+}
+
 /** Re-authenticate a Garmin connection with the DI refresh grant. */
 export async function maybeRefresh(
   tokens: DiTokens,

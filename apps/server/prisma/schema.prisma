@@ -42,6 +42,8 @@ model User {
   measurements   Measurement[]
   gear           Gear[]
   authIdentities AuthIdentity[]
+  sleepSessions  SleepSession[]
+  dailyWellness  DailyWellness[]
 
   @@map("users")
 }
@@ -104,6 +106,8 @@ model Connection {
   syncLogs     SyncLog[]
   activities   ActivitySource[]
   measurements Measurement[]
+  sleep        SleepSession[]
+  dailyWellness DailyWellness[]
 
   @@index([userId])
   @@unique([userId, provider, providerUserId])
@@ -113,6 +117,7 @@ model Connection {
 enum SyncKind {
   ACTIVITIES
   MEASUREMENTS
+  WELLNESS
   TOKEN_REFRESH
 }
 
@@ -138,6 +143,92 @@ model SyncLog {
 
   @@index([connectionId, startedAt])
   @@map("sync_logs")
+}
+
+// ─── Wellness (nightly sleep + daily wearer metrics) ─────────────────────────
+
+/// One night of sleep as the source device recorded it. The sleep window
+/// usually crosses midnight — `dateKey` is the wearer's LOCAL calendar date
+/// the window ENDED on (Garmin's calendarDate), the same key the watch shows.
+model SleepSession {
+  id           String   @id @db.Uuid @default(uuid(7))
+  userId       String   @db.Uuid @map("user_id")
+  connectionId String   @db.Uuid @map("connection_id")
+  provider     Provider
+  dateKey      String   @map("date_key")
+  /// actual sleep window (pauses included, naps excluded)
+  startAt      DateTime @map("start_at") @db.Timestamptz(6)
+  endAt        DateTime? @map("end_at") @db.Timestamptz(6)
+  /// stage seconds sum to ≤ totalSleepS when some time was unmeasurable
+  totalSleepS  Int?     @map("total_sleep_s")
+  deepS        Int?     @map("deep_s")
+  lightS       Int?     @map("light_s")
+  remS         Int?     @map("rem_s")
+  awakeS       Int?     @map("awake_s")
+  napS         Int?     @map("nap_s")
+  awakeCount   Int?     @map("awake_count")
+  avgSleepStress Decimal? @map("avg_sleep_stress") @db.Decimal(5, 1)
+  avgHr        Int?     @map("avg_hr")
+  avgRespiration Decimal? @map("avg_respiration") @db.Decimal(4, 1)
+  restingHr    Int?     @map("resting_hr")
+  /// Gen-5+ watch tracks overnight HRV: BALANCED / LOW / UNBALANCED / HIGH
+  hrvStatus    String?
+  hrvAvg       Decimal? @map("hrv_avg") @db.Decimal(5, 1)
+  /// body-battery gained awake − drained asleep over the window
+  bodyBatteryChange Int? @map("body_battery_change")
+  /// watch's suggested sleep need, minutes
+  sleepNeedMin Int?     @map("sleep_need_min")
+  /// device-computed overall night score (0-100)
+  sleepScore   Int?     @map("sleep_score")
+  raw          Json?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, dateKey])
+  @@index([userId, dateKey])
+  @@map("sleep_sessions")
+}
+
+/// One wearer-day of non-activity metrics (steps, floors, calories, stress,
+/// body battery, resting HR...). Keyed the same way as SleepSession.
+model DailyWellness {
+  id            String  @id @db.Uuid @default(uuid(7))
+  userId        String  @db.Uuid @map("user_id")
+  connectionId  String  @db.Uuid @map("connection_id")
+  provider      Provider
+  dateKey       String  @map("date_key")
+  steps         Int?
+  stepsGoal     Int?    @map("steps_goal")
+  distanceM     Decimal? @map("distance_m") @db.Decimal(8, 1)
+  floorsAsc     Int?    @map("floors_asc")
+  floorsDesc    Int?    @map("floors_desc")
+  activeCal     Int?    @map("active_cal")
+  restingCal    Int?    @map("resting_cal")
+  totalCal      Int?    @map("total_cal")
+  hrMin         Int?    @map("hr_min")
+  hrMax         Int?    @map("hr_max")
+  restingHr     Int?    @map("resting_hr")
+  moderateMin   Int?    @map("moderate_min")
+  vigorousMin   Int?    @map("vigorous_min")
+  intensityGoal Int?    @map("intensity_goal")
+  stressAvg     Float?  @map("stress_avg")
+  stressMax     Float?  @map("stress_max")
+  batteryMin    Int?    @map("battery_min")
+  batteryMax    Int?    @map("battery_max")
+  batteryLatest Int?    @map("battery_latest")
+  raw           Json?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, dateKey])
+  @@index([userId, dateKey])
+  @@map("daily_wellness")
 }
 
 // ─── Activities ──────────────────────────────────────────────────────────────

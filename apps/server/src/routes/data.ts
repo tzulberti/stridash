@@ -55,6 +55,56 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     });
   });
 
+  // ─── Wellness: nightly sleep + daily wearer metrics ──────────────────────
+
+  const rangeQuerySchema = z.object({
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}/, "YYYY-MM-DD").optional(),
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}/, "YYYY-MM-DD").optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(60),
+  });
+  /** dateKey-based rows sorted newest-first; from/to key off date_key, not a
+   * timestamp column. */
+  async function listDateKeyed(
+    table: "sleepSession" | "dailyWellness",
+    userId: string,
+    from: string | undefined,
+    to: string | undefined,
+    limit: number,
+  ) {
+    if (table === "sleepSession") {
+      return prisma.sleepSession.findMany({
+        where: {
+          userId,
+          ...(from || to ? { dateKey: { ...(from ? { gte: from.slice(0, 10) } : {}), ...(to ? { lte: to.slice(0, 10) } : {}) } } : {}),
+        },
+        orderBy: { dateKey: "desc" },
+        take: limit,
+      });
+    }
+    return prisma.dailyWellness.findMany({
+      where: {
+        userId,
+        ...(from || to ? { dateKey: { ...(from ? { gte: from.slice(0, 10) } : {}), ...(to ? { lte: to.slice(0, 10) } : {}) } } : {}),
+      },
+      orderBy: { dateKey: "desc" },
+      take: limit,
+    });
+  }
+
+  routes.get("/sleeps", async (c) => {
+    const q = rangeQuerySchema.safeParse(c.req.query());
+    if (!q.success) return c.json({ error: "Invalid query", detail: q.error.flatten().fieldErrors }, 400);
+    const items = await listDateKeyed("sleepSession", c.get("userId"), q.data.from, q.data.to, q.data.limit);
+    return c.json({ items: items.map(serializeRow) });
+  });
+
+  routes.get("/wellness", async (c) => {
+    const q = rangeQuerySchema.safeParse(c.req.query());
+    if (!q.success) return c.json({ error: "Invalid query", detail: q.error.flatten().fieldErrors }, 400);
+    const items = await listDateKeyed("dailyWellness", c.get("userId"), q.data.from, q.data.to, q.data.limit);
+    return c.json({ items: items.map(serializeRow) });
+  });
+
   routes.get("/activities/:id", async (c) => {
     const id = c.req.param("id");
     const activity = await prisma.activity.findFirst({

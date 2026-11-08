@@ -18,6 +18,7 @@ import {
 } from "../providers/garmin/sso.js";
 import { verifyToken, getProfile } from "../providers/garmin/api.js";
 import { syncGarminConnection } from "../services/garmin-sync.js";
+import { syncGarminWellness } from "../services/garmin-wellness.js";
 import { decryptToken } from "../crypto.js";
 import { syncIgpSportConnection } from "../services/igpsport-sync.js";
 import { syncOmronConnection } from "../services/omron-sync.js";
@@ -491,7 +492,15 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     }
     if (connection.provider === "GARMIN") {
       const result = await syncGarminConnection(env, connection);
-      return c.json({ result });
+      // sleep/daily-metrics pass runs below the activities so one tap syncs
+      // both; a wellness failure doesn't invalidate the activities result
+      let wellness: Awaited<ReturnType<typeof syncGarminWellness>> | undefined;
+      try {
+        wellness = await syncGarminWellness(env, connection);
+      } catch (err) {
+        console.error("[garmin] wellness sync failed:", err);
+      }
+      return c.json({ result, wellness });
     }
     const result = await syncOmronConnection(env, connection);
     return c.json({ result });

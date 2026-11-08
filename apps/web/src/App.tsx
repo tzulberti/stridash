@@ -219,6 +219,51 @@ function ActivityDetail({
 
 // ─── Main dashboard ──────────────────────────────────────────────────────────
 
+interface SleepRow {
+  dateKey: string;
+  startAt: string | null;
+  endAt: string | null;
+  totalSleepS: number | null;
+  deepS: number | null;
+  lightS: number | null;
+  remS: number | null;
+  awakeS: number | null;
+  napS: number | null;
+  awakeCount: number | null;
+  avgSleepStress: number | null;
+  avgHr: number | null;
+  avgRespiration: number | null;
+  restingHr: number | null;
+  hrvStatus: string | null;
+  hrvAvg: number | null;
+  bodyBatteryChange: number | null;
+  sleepNeedMin: number | null;
+  sleepScore: number | null;
+}
+
+interface DailyWellnessRow {
+  dateKey: string;
+  steps: number | null;
+  stepsGoal: number | null;
+  distanceM: number | null;
+  floorsAsc: number | null;
+  floorsDesc: number | null;
+  activeCal: number | null;
+  restingCal: number | null;
+  totalCal: number | null;
+  hrMin: number | null;
+  hrMax: number | null;
+  restingHr: number | null;
+  moderateMin: number | null;
+  vigorousMin: number | null;
+  intensityGoal: number | null;
+  stressAvg: number | null;
+  stressMax: number | null;
+  batteryMin: number | null;
+  batteryMax: number | null;
+  batteryLatest: number | null;
+}
+
 interface ConnectionRow {
   id: string;
   provider: string;
@@ -227,7 +272,7 @@ interface ConnectionRow {
   lastSyncedAt: string | null;
 }
 
-function Card({ label, value }: { label: string; value: string | number | null | undefined }) {
+function Card({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="card">
       <div className="card-label">{label}</div>
@@ -240,6 +285,30 @@ const has = (v: unknown): boolean => v !== null && v !== undefined;
 const asStr = (v: unknown, suffix = ""): string | null =>
   has(v) ? `${String(v)}${suffix}` : null;
 
+// ⟵ sleep + daily-metric chart channel descriptors
+const SLEEP_METRIC: Record<
+  "hours" | "score" | "hrv" | "sleepHr" | "battery",
+  { fn: (s: SleepRow) => number | null; color: string; unit: string; label: string }
+> = {
+  hours: { fn: (s) => (s.totalSleepS !== null ? s.totalSleepS / 3600 : null), color: "#3b5bd6", unit: " h", label: "Sleep duration" },
+  score: { fn: (s) => s.sleepScore, color: "#9c6ade", unit: "", label: "Sleep score" },
+  hrv: { fn: (s) => s.hrvAvg, color: "#d6409f", unit: " ms", label: "Overnight HRV" },
+  sleepHr: { fn: (s) => s.avgHr, color: "#e5484d", unit: " bpm", label: "Avg sleep HR" },
+  battery: { fn: (s) => s.bodyBatteryChange, color: "#30a46c", unit: "", label: "Body battery change" },
+};
+
+const DAILY_METRIC: Record<
+  "steps" | "restingHr" | "stressAvg" | "battery" | "activeCal" | "floors",
+  { fn: (w: DailyWellnessRow) => number | null; color: string; unit: string; label: string }
+> = {
+  steps: { fn: (w) => w.steps, color: "#6e56cf", unit: "", label: "Steps" },
+  restingHr: { fn: (w) => w.restingHr, color: "#e5484d", unit: " bpm", label: "Resting heart rate" },
+  stressAvg: { fn: (w) => w.stressAvg, color: "#d29922", unit: "", label: "Average stress" },
+  battery: { fn: (w) => w.batteryLatest, color: "#30a46c", unit: "", label: "Body battery (latest)" },
+  activeCal: { fn: (w) => w.activeCal, color: "#d6409f", unit: " kcal", label: "Active calories" },
+  floors: { fn: (w) => (w.floorsAsc !== null ? w.floorsAsc : null), color: "#0091ff", unit: "", label: "Floors ascended" },
+};
+
 export default function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
   const [email, setEmail] = useState("");
@@ -249,8 +318,12 @@ export default function App() {
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [sleep, setSleep] = useState<SleepRow[]>([]);
+  const [wellness, setWellness] = useState<DailyWellnessRow[]>([]);
   const [detail, setDetail] = useState<Activity | null>(null);
   const [bodyMetric, setBodyMetric] = useState<"weightKg" | "bodyFatPct" | "visceralFatLevel" | "skeletalMusclePct">("weightKg");
+  const [sleepMetric, setSleepMetric] = useState<"hours" | "score" | "hrv" | "sleepHr" | "battery">("hours");
+  const [dailyMetric, setDailyMetric] = useState<"steps" | "restingHr" | "stressAvg" | "battery" | "activeCal" | "floors">("steps");
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async (tok: string) => {
@@ -279,6 +352,32 @@ export default function App() {
         cursor = r.nextCursor;
       }
       setActivities(acts);
+
+      // sleep + daily wellness: newest-first pages of 200, walk back with
+      // the `to` date filter (rows keyed by calendar date)
+      const fetchDateKeyedAll = async <T extends { dateKey: string }>(path: string): Promise<T[]> => {
+        const out: T[] = [];
+        let to: string | undefined;
+        for (let page = 0; page < 30; page++) {
+          const r = await api<{ items: T[] }>(path, {
+            token: tok,
+            query: { limit: "200", ...(to ? { to } : {}) },
+          });
+          if (r.items.length === 0) break;
+          const last = r.items[r.items.length - 1];
+          if (!last) break;
+          out.push(...r.items);
+          const oldest = new Date(`${last.dateKey}T00:00:00.000Z`);
+          to = new Date(oldest.getTime() - 86_400_000).toISOString().slice(0, 10);
+        }
+        return out.reverse(); // charts want oldest-first
+      };
+      const [sRows, wRows] = await Promise.all([
+        fetchDateKeyedAll<SleepRow>("/sleeps"),
+        fetchDateKeyedAll<DailyWellnessRow>("/wellness"),
+      ]);
+      setSleep(sRows);
+      setWellness(wRows);
     } catch (e) {
       setError(String(e));
       if (String(e).includes("401") || String(e).includes("Unauthorized")) {
@@ -349,6 +448,29 @@ export default function App() {
         <Card label="Body fat" value={asStr(latest?.bodyFatPct, "%")} />
         <Card label="Visceral fat" value={asStr(latest?.visceralFatLevel)} />
         <Card label="Muscle mass" value={asStr(latest?.skeletalMuscleMassKg, " kg")} />
+        <Card
+          label="Last night"
+          value={
+            sleep.find((s) => s.totalSleepS !== null) ? (
+              <>
+                {((sleep.find((s) => s.totalSleepS !== null)!.totalSleepS ?? 0) / 3600).toFixed(1)} h
+                {sleep.find((s) => s.sleepScore !== null)?.sleepScore !== undefined
+                  ? ` · score ${sleep.find((s) => s.sleepScore !== null)!.sleepScore}`
+                  : ""}
+              </>
+            ) : (
+              "no sleep data"
+            )
+          }
+        />
+        <Card
+          label="Yesterday steps"
+          value={wellness.find((w) => w.steps !== null) ? wellness.find((w) => w.steps !== null)!.steps?.toLocaleString() : "no steps"}
+        />
+        <Card
+          label="Resting HR"
+          value={wellness.find((w) => w.restingHr !== null) ? `${wellness.find((w) => w.restingHr !== null)!.restingHr} bpm` : "—"}
+        />
         <Card label="Activities" value={activities.length} />
         <Card label="Weigh-ins" value={measurements.length} />
       </div>
@@ -372,6 +494,69 @@ export default function App() {
             .map((m) => ({ x: new Date(m.measuredAt).getTime(), y: Number((m as unknown as Record<string, unknown>)[bodyMetric]) }))}
           color="#6e56cf"
           label={bodyMetric}
+        />
+      </section>
+
+      <section>
+        <h2>Sleep</h2>
+        <div className="metric-tabs">
+          {(
+            [
+              ["hours", "Duration (h)"],
+              ["score", "Score"],
+              ["hrv", "Night HRV"],
+              ["sleepHr", "Sleep HR"],
+              ["battery", "Battery change"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              className={`btn ghost ${sleepMetric === m ? "active" : ""}`}
+              onClick={() => setSleepMetric(m)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <LineChart
+          points={sleep
+            .filter((s) => has(SLEEP_METRIC[sleepMetric].fn(s)))
+            .map((s) => ({ x: new Date(`${s.dateKey}T00:00:00.000Z`).getTime(), y: SLEEP_METRIC[sleepMetric].fn(s)! }))}
+          color={SLEEP_METRIC[sleepMetric].color}
+          unit={SLEEP_METRIC[sleepMetric].unit}
+          label={SLEEP_METRIC[sleepMetric].label}
+        />
+      </section>
+
+      <section>
+        <h2>Daily metrics</h2>
+        <div className="metric-tabs">
+          {(
+            [
+              ["steps", "Steps"],
+              ["restingHr", "Resting HR"],
+              ["stressAvg", "Stress (avg)"],
+              ["battery", "Body battery"],
+              ["activeCal", "Active kcal"],
+              ["floors", "Floors"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              className={`btn ghost ${dailyMetric === m ? "active" : ""}`}
+              onClick={() => setDailyMetric(m)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <LineChart
+          points={wellness
+            .filter((w) => has(DAILY_METRIC[dailyMetric].fn(w)))
+            .map((w) => ({ x: new Date(`${w.dateKey}T00:00:00.000Z`).getTime(), y: DAILY_METRIC[dailyMetric].fn(w)! }))}
+          color={DAILY_METRIC[dailyMetric].color}
+          unit={DAILY_METRIC[dailyMetric].unit}
+          label={DAILY_METRIC[dailyMetric].label}
         />
       </section>
 
