@@ -190,3 +190,28 @@ VO2max, recovery time, aerobic/anaerobic training effect, normalized power,
 `training_load_peak` (also mirrored into `training_load`), avg/max HR and
 power, avg/max respiration, total calories. Source-reported HR-zone minutes
 (FIT `time_in_zone`) go to the `hr_zones_min` column, zone 1 first.
+
+## Wellness (sleep + daily metrics, 2026-11)
+
+The DI (native API) bearer ALSO answers the wellness tier. Verified live:
+
+- `/sleep-service/stats/sleep/daily/{start}/{end}` — nightly summaries,
+  **28-day max per request**. Rows: stage minutes, score, resting/avg HR,
+  respiration, HRV status/avg, body-battery change, sleep need.
+- `/sleep-service/sleep/dailySleepData?date=YYYY-MM-DD&nonSleepBufferMinutes=60`
+  — one day, full detail: nap seconds, awake counts, avg sleep stress,
+  stage subscores. Only meaningful within recent history; responses for
+  nights without a sleep record carry an all-null DTO (startTimestampGMT
+  null) — treat as "no night".
+- `/usersummary-service/v2/dailysummaries?startDate&endDate` — steps + goal +
+  distance, floors, active/resting/total calories, HR min/max/resting,
+  intensity minutes, stress avg/max, body battery min/max/latest in ONE
+  call per range.
+- The older `wellness-service/wellness/{dailySleepData|heartRates|...}`
+  endpoints mostly 404 or need the web-session JWT; only `dailyStress`
+  answered with the DI token (kept unused: dailysummaries covers it).
+
+Sync: `services/garmin-wellness.ts` runs after every Garmin activity sync
+(separate `WELLNESS` sync_logs row). Backfill starts at the oldest stored
+dateKey (first run: 2022-01-01; Garmin answers 0 rows before the first
+device sync). Recent 45 nights always get the rich dailySleepData pass.
