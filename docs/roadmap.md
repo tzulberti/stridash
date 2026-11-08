@@ -63,7 +63,9 @@ application is approved; the auth half is a swap-in.)*
       normalized power, training load, recovery) in `raw.session`,
       source-reported HR zones; verified live (200/200 activities,
       ~579k samples) — see `docs/garmin.md` FIT fidelity notes
-- [ ] Live E2E against a real account (needs a real Garmin login to run)
+- [x] Live E2E against a real account (needs a real Garmin login to run)
+- [x] Wellness ingest (2026-11): nightly sleep (stages, score, HRV, naps) +
+      daily steps/floors/calories/HR/stress/body battery — see `docs/garmin.md`
 - [ ] Weight / body composition ingest (Garmin Index or any scale synced to
       Garmin)
 - [ ] Blood pressure ingest
