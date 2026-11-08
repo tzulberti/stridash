@@ -98,8 +98,10 @@ export async function syncGarminConnection(env: Env, connection: ConnectionLike)
     });
     const knownIds = new Set(known.map((s) => s.sourceActivityId));
 
-    let stalePageStreak = 0;
-    const NEW_PAGE_SCAN_LIMIT = 10; // Garmin pages of 20 → up to 200 on first sync
+    // Garmin pages of 20; a years-deep account needs a few thousand rows of
+    // headroom (each page costs ~1 list request; FIT downloads only happen for
+    // fresh ids, so rerun sweeps re-paging the list are cheap thanks to dedup)
+    const NEW_PAGE_SCAN_LIMIT = Number(process.env.GARMIN_SYNC_MAX_PAGES ?? 150);
     for (let page = 0; page < NEW_PAGE_SCAN_LIMIT; page++) {
       let rows: GarminActivityRow[];
       try {
@@ -112,12 +114,10 @@ export async function syncGarminConnection(env: Env, connection: ConnectionLike)
       }
       if (!rows.length) break;
 
-      let freshCount = 0;
       for (const row of rows) {
         result.itemsPulled++;
         const id = String(row.activityId);
         if (knownIds.has(id)) continue;
-        freshCount++;
         try {
           await ingestActivity(bearer, connection, row);
           result.itemsCreated++;
@@ -128,12 +128,9 @@ export async function syncGarminConnection(env: Env, connection: ConnectionLike)
         }
       }
 
-      if (freshCount === 0) {
-        stalePageStreak++;
-        if (stalePageStreak >= 2) break;
-      } else {
-        stalePageStreak = 0;
-      }
+      // Stale pages (already-ingested ids) are expected on reruns and deep
+      // backfills — Garmin's list is newest-first, so pages long before the
+      // account's oldest activity can be stale. Only an EMPTY page means done.
     }
   } catch (err) {
     const detail =
