@@ -18,9 +18,10 @@ const TOKEN_KEY = "stridash.accessToken";
 
 async function api<T>(
   path: string,
-  opts: { method?: string; body?: unknown; token?: string | null } = {},
+  opts: { method?: string; body?: unknown; token?: string | null; query?: Record<string, string> } = {},
 ): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const qs = opts.query ? `?${new URLSearchParams(opts.query).toString()}` : "";
+  const res = await fetch(`/api${path}${qs}`, {
     method: opts.method ?? "GET",
     headers: {
       ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}),
@@ -257,14 +258,27 @@ export default function App() {
     setError(null);
     try {
       // measurements newest-first already; charts want oldest-first
-      const [conns, meas, acts] = await Promise.all([
+      const [conns, meas] = await Promise.all([
         api<{ items: ConnectionRow[] }>("/connections", { token: tok }),
         api<{ items: Measurement[] }>("/measurements", { token: tok, body: undefined }),
-        api<{ items: Activity[] }>("/activities", { token: tok }),
       ]);
       setConnections(conns.items);
       setMeasurements(meas.items);
-      setActivities(acts.items);
+
+      // activities paginate server-side (max 100/page, cursor) — pull all
+      // pages so the feed and the stat card cover the full history
+      const acts: Activity[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < 50; page++) {
+        const r = await api<{ items: Activity[]; nextCursor: string | null }>("/activities", {
+          token: tok,
+          query: { limit: "100", ...(cursor ? { cursor } : {}) },
+        });
+        acts.push(...r.items);
+        if (!r.nextCursor) break;
+        cursor = r.nextCursor;
+      }
+      setActivities(acts);
     } catch (e) {
       setError(String(e));
       if (String(e).includes("401") || String(e).includes("Unauthorized")) {
@@ -371,7 +385,7 @@ export default function App() {
             </tr>
           </thead>
           <tbody>
-            {activities.slice(0, 50).map((a) => (
+            {activities.map((a) => (
               <tr key={a.id}>
                 <td>{TYPE_EMOJI[a.type] ?? "⌚"}</td>
                 <td>{fmtDate(a.startTime)}</td>
