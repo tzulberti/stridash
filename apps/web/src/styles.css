@@ -75,3 +75,17 @@ footer { margin-top: 48px; color: var(--muted); font-size: 12px; text-align: cen
 .empty { color: var(--muted); font-style: italic; }
 .metric-tabs { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
 .detail section { max-width: 100%; }
+
+/* remember-me checkbox on the login card */
+.remember-me {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-2, #9aa4b2);
+  cursor: pointer;
+  user-select: none;
+}
+.remember-me input {
+  accent-color: #6e56cf;
+}

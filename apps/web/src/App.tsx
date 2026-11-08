@@ -15,21 +15,97 @@ import type {
 // ─── API client ──────────────────────────────────────────────────────────────
 
 const TOKEN_KEY = "stridash.accessToken";
+const REFRESH_KEY = "stridash.refreshToken";
+
+/** "Remember me" puts both tokens in localStorage (survives the browser);
+ * unchecked keeps them in sessionStorage (dies with the tab). */
+const TOKEN_STORES = [localStorage, sessionStorage] as const;
+
+function readToken(): string | null {
+  for (const s of TOKEN_STORES) {
+    const v = s.getItem(TOKEN_KEY);
+    if (v) return v;
+  }
+  return null;
+}
+
+function saveTokens(accessToken: string, refreshToken: string, remember: boolean): void {
+  for (const s of TOKEN_STORES) {
+    s.removeItem(TOKEN_KEY);
+    s.removeItem(REFRESH_KEY);
+  }
+  const store = remember ? localStorage : sessionStorage;
+  store.setItem(TOKEN_KEY, accessToken);
+  store.setItem(REFRESH_KEY, refreshToken);
+}
+
+function clearTokens(): void {
+  for (const s of TOKEN_STORES) {
+    s.removeItem(TOKEN_KEY);
+    s.removeItem(REFRESH_KEY);
+  }
+}
+
+/** Login decides the store; a refresh rotates in place in whichever store was
+ * selected, so "remember" = tokens live in localStorage. */
+let onTokenChanged: (t: string) => void = () => {};
+function remembering(): boolean {
+  return !!(localStorage.getItem(REFRESH_KEY) || localStorage.getItem(TOKEN_KEY));
+}
+
+/** Try to mint a fresh pair from the stored refresh token (false once dead). */
+let refreshInflight: Promise<boolean> | null = null;
+async function tryRefresh(): Promise<boolean> {
+  refreshInflight ??= (async () => {
+    const rt = sessionStorage.getItem(REFRESH_KEY) ?? localStorage.getItem(REFRESH_KEY);
+    if (!rt) return false;
+    try {
+      const res = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: rt }),
+      });
+      if (!res.ok) {
+        clearTokens();
+        return false;
+      }
+      const j = (await res.json()) as { accessToken: string; refreshToken: string };
+      saveTokens(j.accessToken, j.refreshToken, remembering());
+      onTokenChanged(j.accessToken);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInflight = null;
+    }
+  })();
+  return refreshInflight;
+}
 
 async function api<T>(
   path: string,
   opts: { method?: string; body?: unknown; token?: string | null; query?: Record<string, string> } = {},
 ): Promise<T> {
   const qs = opts.query ? `?${new URLSearchParams(opts.query).toString()}` : "";
-  const res = await fetch(`/api${path}${qs}`, {
-    method: opts.method ?? "GET",
-    headers: {
-      ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-    },
-    ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
-  });
+  const call = (tok: string | null | undefined) =>
+    fetch(`/api${path}${qs}`, {
+      method: opts.method ?? "GET",
+      headers: {
+        ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
+      },
+      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+    });
+  const res = await (opts.token ? call(opts.token) : call(readToken()));
   const json = (await res.json().catch(() => null)) as T & { error?: string; detail?: unknown };
+  // A 401 mid-dashboard usually means the 15-minute access token ran out —
+  // refresh once and replay before surfacing an error.
+  if (res.status === 401 && !path.startsWith("/auth/") && (await tryRefresh())) {
+    const retry = await call(readToken());
+    const json2 = (await retry.json().catch(() => null)) as T & { error?: string; detail?: unknown };
+    if (retry.ok) return json2;
+    throw new Error(`${json2?.error ?? retry.statusText}`);
+  }
   if (!res.ok) {
     const detail = typeof json?.detail === "string" ? ` — ${json.detail}` : "";
     throw new Error(`${json?.error ?? res.statusText}${detail}`);
@@ -310,7 +386,7 @@ const DAILY_METRIC: Record<
 };
 
 export default function App() {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  const [token, setToken] = useState<string | null>(() => readToken());
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -324,6 +400,7 @@ export default function App() {
   const [bodyMetric, setBodyMetric] = useState<"weightKg" | "bodyFatPct" | "visceralFatLevel" | "skeletalMusclePct">("weightKg");
   const [sleepMetric, setSleepMetric] = useState<"hours" | "score" | "hrv" | "sleepHr" | "battery">("hours");
   const [dailyMetric, setDailyMetric] = useState<"steps" | "restingHr" | "stressAvg" | "battery" | "activeCal" | "floors">("steps");
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async (tok: string) => {
@@ -381,7 +458,7 @@ export default function App() {
     } catch (e) {
       setError(String(e));
       if (String(e).includes("401") || String(e).includes("Unauthorized")) {
-        localStorage.removeItem(TOKEN_KEY);
+        clearTokens();
         setToken(null);
       }
     } finally {
@@ -390,6 +467,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    onTokenChanged = setToken;
+  }, [token, load]);
+  useEffect(() => {
     if (token) void load(token);
   }, [token, load]);
 
@@ -397,11 +477,11 @@ export default function App() {
     e.preventDefault();
     setError(null);
     try {
-      const r = await api<{ accessToken: string; refreshToken?: string }>("/auth/login", {
+      const r = await api<{ accessToken: string; refreshToken: string }>("/auth/login", {
         method: "POST",
         body: { email, password },
       });
-      localStorage.setItem(TOKEN_KEY, r.accessToken);
+      saveTokens(r.accessToken, r.refreshToken, rememberMe);
       setToken(r.accessToken);
     } catch (err) {
       setError(String(err));
@@ -416,6 +496,10 @@ export default function App() {
           <p>One dashboard for every stride.</p>
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="email" />
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="password" />
+          <label className="remember-me">
+            <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+            <span>remember me on this device</span>
+          </label>
           <button className="btn" type="submit">Sign in</button>
           {error && <p className="error">{error}</p>}
         </form>
@@ -438,7 +522,7 @@ export default function App() {
           ))}
           {connections.length === 0 && <span className="pill">no connections yet — connect a provider via the API/CLI</span>}
         </div>
-        <button className="btn ghost" onClick={() => { localStorage.removeItem(TOKEN_KEY); setToken(null); }}>sign out</button>
+        <button className="btn ghost" onClick={() => { clearTokens(); setToken(null); }}>sign out</button>
       </header>
 
       {error && <p className="error">{error}</p>}
