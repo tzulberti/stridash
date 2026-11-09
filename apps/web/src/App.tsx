@@ -358,6 +358,139 @@ function hrZoneThresholds(hrs: number[], zoneMinutes: number[] | null): number[]
   return thresholds.some((t) => Number.isFinite(t)) ? thresholds : null;
 }
 
+// ─── Per-km splits (activity page table) ─────────────────────────────────────
+
+interface KmSplit {
+  /** 1-based window number; the short tail row is numbered -1 */
+  km: number;
+  label: string;
+  distanceM: number;
+  timeS: number;
+  /** seconds per km inside this window */
+  paceSec: number | null;
+  avgHr: number | null;
+  /** meters climbed inside this window (needs the altitude stream) */
+  elevM: number | null;
+}
+
+/** first sample index with distance ≥ d (distance stream is ~monotonic) */
+function kmBisect(dist: number[], d: number): number {
+  let lo = 0;
+  let hi = dist.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if ((dist[mid] ?? 0) < d) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** split table for one activity: one row per full km (plus the partial tail),
+ * timing derived from the distance↔time streams, averages from the sample rows */
+function buildKmSplits(
+  dist: number[],
+  ts: number[],
+  hr: number[] | undefined,
+  alt: number[] | undefined,
+): KmSplit[] | null {
+  const n = Math.min(dist.length, ts.length);
+  if (n < 2) return null;
+  const base = dist[0] ?? 0;
+  const total = (dist[n - 1] ?? 0) - base;
+  if (total < 1000) return null;
+
+  /** time recorded at distance d — linear interp between bracketing samples */
+  const timeAt = (d: number): number => {
+    const i = kmBisect(dist, d);
+    const a = Math.min(Math.max(i, 1), n - 1);
+    const d0 = dist[a - 1] ?? 0;
+    const d1 = dist[a] ?? 0;
+    if (d1 <= d0) return ts[a] ?? 0;
+    const f = Math.min(1, Math.max(0, (d - d0) / (d1 - d0)));
+    return (ts[a - 1] ?? 0) + f * ((ts[a] ?? 0) - (ts[a - 1] ?? 0));
+  };
+
+  const rows: KmSplit[] = [];
+  const fullKms = Math.floor(total / 1000);
+  for (let k = 1; k <= fullKms; k++) {
+    const dStart = base + 1000 * (k - 1);
+    const dEnd = base + 1000 * k;
+    const i0 = kmBisect(dist, dStart);
+    const i1 = Math.max(kmBisect(dist, dEnd), i0 + 1);
+    // ts is in MILLISECONDS — convert to seconds for the table
+    const timeS = Math.max(0, (timeAt(dEnd) - timeAt(dStart)) / 1000);
+    rows.push({
+      km: k,
+      label: String(k),
+      distanceM: dEnd - dStart,
+      timeS,
+      paceSec: timeS / ((dEnd - dStart) / 1000),
+      avgHr: windowAvg(hr, i0, i1, 30),
+      elevM: alt ? windowElevGain(alt, i0, i1) : null,
+    });
+  }
+  // a ≥50 m tail is worth a speed-up read of the finish line
+  if (total - 1000 * fullKms >= 50) {
+    const dStart = base + 1000 * fullKms;
+    const i0 = kmBisect(dist, dStart);
+    const i1 = n;
+    const distM = (dist[n - 1] ?? 0) - dStart;
+    const timeS = Math.max(0, ((ts[n - 1] ?? 0) - timeAt(dStart)) / 1000);
+    rows.push({
+      km: -1,
+      label: `last (${(distM / 1000).toFixed(2)} km)`,
+      distanceM: distM,
+      timeS,
+      paceSec: distM > 0 ? timeS / (distM / 1000) : null,
+      avgHr: windowAvg(hr, i0, i1, 30),
+      elevM: alt ? windowElevGain(alt, i0, i1) : null,
+    });
+  }
+  return rows;
+}
+
+/** mean of arr[j] for j in [i0, i1), skipping dead strap values (< min) */
+function windowAvg(arr: number[] | undefined, i0: number, i1: number, min: number): number | null {
+  if (!arr?.length) return null;
+  let sum = 0;
+  let count = 0;
+  for (let j = i0; j < i1 && j < arr.length; j++) {
+    const v = arr[j];
+    if (v !== undefined && v >= min) {
+      sum += v;
+      count++;
+    }
+  }
+  return count ? sum / count : null;
+}
+
+/** meters climbed between samples j−1→j for j in [i0, i1) */
+function windowElevGain(alt: number[], i0: number, i1: number): number {
+  let gain = 0;
+  const lo = Math.max(1, i0);
+  for (let j = lo; j < i1 && j < alt.length; j++) {
+    const d = (alt[j] ?? 0) - (alt[j - 1] ?? 0);
+    if (d > 0) gain += d;
+  }
+  return gain;
+}
+
+function fmtPace(sec: number | null): string {
+  if (sec == null || !Number.isFinite(sec)) return "—";
+  const t = Math.round(sec);
+  const m = Math.floor(t / 60);
+  const s = t % 60;
+  return `${m}:${String(s).padStart(2, "0")} /km`;
+}
+
+function fmtSplitTime(s: number): string {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = Math.round(s % 60);
+  const pad = (v: number): string => String(v).padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(ss)}` : `${m}:${pad(ss)}`;
+}
+
 // ─── Shared bits ─────────────────────────────────────────────────────────────
 
 function fmtKm(m: number | null | undefined): string {
@@ -500,6 +633,16 @@ function ActivityDetail({
 
   const hasDistance = (rows?.[0]?.series.distanceM?.length ?? 0) >= 2;
 
+  // per-km split table (needs a distance stream ≥ 1 km)
+  const splits = useMemo(() => {
+    const s = rows?.[0]?.series;
+    if (!s) return null;
+    const dist = s.distanceM;
+    const ts = s.timeMs ?? [];
+    if (!dist || dist.length < 2 || ts.length !== dist.length) return null;
+    return buildKmSplits(dist, ts, s.hrBpm, s.altitudeM);
+  }, [rows]);
+
   if (error) return <p className="error">{error}</p>;
   if (!act) return <p>loading…</p>;
 
@@ -533,6 +676,28 @@ function ActivityDetail({
         {act.indoor ? <Card label="Mode" value="indoor" /> : null}
       </div>
       {error && <p className="error">{error}</p>}
+
+      {splits ? (
+        <section>
+          <h3>Per-kilometer splits</h3>
+          <table className="list splits">
+            <thead>
+              <tr><th>km</th><th>time</th><th>pace</th><th>avg HR</th><th>elev ▲</th></tr>
+            </thead>
+            <tbody>
+              {splits.map((s) => (
+                <tr key={s.label}>
+                  <td>{s.label}</td>
+                  <td>{fmtSplitTime(s.timeS)}</td>
+                  <td>{fmtPace(s.paceSec)}</td>
+                  <td>{s.avgHr != null ? `${Math.round(s.avgHr)} bpm` : "—"}</td>
+                  <td>{s.elevM != null ? `${Math.round(s.elevM)} m` : null}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
 
       {rows === null && !error ? <p>loading series…</p> : null}
       {charts.map((c) => (
