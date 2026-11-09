@@ -291,3 +291,29 @@ footer { margin-top: 48px; color: var(--muted); font-size: 12px; text-align: cen
 .table-scroll table {
   min-width: max-content;
 }
+
+/* force-sync button inside each connection pill */
+.pill-sync {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  margin-left: 0.25rem;
+  padding: 0 0.15rem;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.pill-sync:disabled {
+  opacity: 0.4;
+  cursor: progress;
+}
+.pill.syncing {
+  opacity: 0.85;
+}
+@keyframes pill-spin {
+  to { transform: rotate(360deg); }
+}
+.pill.syncing .pill-sync {
+  display: inline-block;
+  animation: pill-spin 1s linear infinite;
+}

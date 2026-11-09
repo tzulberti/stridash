@@ -1098,6 +1098,7 @@ export default function App() {
   const [dailyMetric, setDailyMetric] = useState<DailyMetricKey>(BOOT_URL.daily);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
 
   const load = useCallback(async (tok: string) => {
     setLoading(true);
@@ -1243,6 +1244,22 @@ export default function App() {
     setRoute({ name: "dashboard" });
   }
 
+  /** force-sync one connection; one at a time so a slow Garmin history scan
+   * doesn't hammer providers in parallel */
+  async function syncConnection(id: string): Promise<void> {
+    if (!token || syncingId) return;
+    setSyncingId(id);
+    try {
+      await api(`/connections/${id}/sync`, { method: "POST", token });
+      // pull the fresh rows + lastSyncedAt into the dashboard
+      await load(token);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSyncingId(null);
+    }
+  }
+
   // every filter change rewrites the query string, so copying the URL shares
   // the exact dashboard view (range + selected chart metrics). Skipped on the
   // activity route so deep links to /activity/<id> keep their path.
@@ -1301,8 +1318,19 @@ export default function App() {
       <h1>🦾 Stridash</h1>
       <div className="sources">
         {connections.map((c) => (
-          <span key={c.id} className={`pill ${c.status.toLowerCase()}`}>
+          <span key={c.id} className={`pill ${c.status.toLowerCase()} ${syncingId === c.id ? "syncing" : ""}`}>
             {c.provider.toLowerCase()} · {c.status.toLowerCase()}{c.lastSyncedAt ? ` · ${fmtDate(c.lastSyncedAt)}` : ""}
+            {syncingId === c.id ? " — syncing…" : ""}
+            <button
+              type="button"
+              className="pill-sync"
+              onClick={() => void syncConnection(c.id)}
+              disabled={syncingId != null}
+              aria-label={`force sync ${c.provider}`}
+              title={`force sync ${c.provider.toLowerCase()}`}
+            >
+              ↻
+            </button>
           </span>
         ))}
         {connections.length === 0 && <span className="pill">no connections yet — connect a provider via the API/CLI</span>}
