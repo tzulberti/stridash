@@ -117,6 +117,38 @@ async function api<T>(
 
 type Point = { x: number; y: number };
 
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function fmtDay(ms: number): string {
+  const d = new Date(ms);
+  return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+}
+
+function fmtTick(ms: number, spanDays: number): string {
+  const d = new Date(ms);
+  if (spanDays >= 545) return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  if (spanDays >= 60) return `${MONTHS_SHORT[d.getUTCMonth()]} '${String(d.getUTCFullYear() % 100)}`;
+  return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+/** readable number for tick marks + tooltips */
+function fmtVal(v: number): string {
+  const a = Math.abs(v);
+  return v.toLocaleString(undefined, { maximumFractionDigits: a < 10 ? 2 : a < 1000 ? 1 : 0 });
+}
+
+/** ~count "nice" ticks (1/2/5×10ⁿ steps) covering [min, max] */
+function niceTicks(min: number, max: number, count: number): number[] {
+  if (min === max) return [min];
+  const raw = (max - min) / count;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const norm = raw / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  const ticks: number[] = [];
+  for (let i = Math.ceil(min / step); i <= Math.floor(max / step); i++) ticks.push(i * step);
+  return ticks;
+}
+
 function LineChart({
   points,
   color,
@@ -130,34 +162,106 @@ function LineChart({
   label?: string;
   unit?: string;
 }) {
+  // hover index — declared before the early return so hook counts stay stable
+  const [hover, setHover] = useState<number | null>(null);
   if (points.length < 2) return <div className="empty">not enough data</div>;
+
   const W = 900;
   const H = height;
-  const pad = 24;
+  const padL = 52;
+  const padR = 14;
+  const padT = 14;
+  const padB = 42; // room for the date ticks + "date" x-axis title
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
   const xs = points.map((p) => p.x);
   const ys = points.map((p) => p.y);
   const x0 = Math.min(...xs), x1 = Math.max(...xs);
   const y0 = Math.min(...ys), y1 = Math.max(...ys);
   const spanX = Math.max(1e-9, x1 - x0);
   const spanY = Math.max(1e-9, y1 - y0);
+  const spanDays = spanX / 86_400_000;
   const toXY = (p: Point): [number, number] => [
-    pad + ((p.x - x0) / spanX) * (W - 2 * pad),
-    H - pad - ((p.y - y0) / spanY) * (H - 2 * pad),
+    padL + ((p.x - x0) / spanX) * plotW,
+    padT + (1 - (p.y - y0) / spanY) * plotH,
   ];
   const path = points.map((p, i) => {
     const [x, y] = toXY(p);
     return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(" ");
-  const minY = 0;
+
+  const yTicks = niceTicks(y0, y1, 4);
+  const xTickCount = Math.max(2, Math.round(plotW / 170));
+  const xTicks = Array.from({ length: xTickCount }, (_, i) => x0 + (spanX * i) / (xTickCount - 1));
+
+  // nearest point by pixel distance along the time axis (viewBox units)
+  const svgMove = (e: React.MouseEvent<SVGSVGElement>): void => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * W;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      if (!p) continue;
+      const d = Math.abs(toXY(p)[0] - mx);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    setHover(best);
+  };
+
+  const hp = hover !== null ? points[hover] : undefined;
+  const [hx, hy] = hp ? toXY(hp) : [0, 0];
+  const tipW = 128;
+  const tipH = 36;
+  const tipX = hx + 10 + tipW > W - padR ? hx - tipW - 10 : hx + 10;
+  const tipY = Math.min(Math.max(hy - tipH - 10, padT), H - padB - tipH);
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label={label}>
-      <text x={pad} y={16} className="chart-max">{Number(y1.toFixed(1))}{unit}</text>
-      <text x={pad} y={H - 6} className="chart-min">{Number(Math.max(minY, y0) === 0 ? y0.toFixed(1) : y0.toFixed(1))}{unit}</text>
+    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label={label} onMouseMove={svgMove} onMouseLeave={() => setHover(null)}>
+      {/* horizontal grid + Y tick labels */}
+      {yTicks.map((t) => {
+        const y = padT + (1 - (t - y0) / spanY) * plotH;
+        return (
+          <g key={`y${t}`}>
+            <line x1={padL} x2={W - padR} y1={y} y2={y} className="chart-grid" />
+            <text x={padL - 6} y={y + 3.5} textAnchor="end" className="chart-axis">{fmtVal(t)}</text>
+          </g>
+        );
+      })}
+      {/* X tick labels */}
+      {xTicks.map((t) => (
+        <text key={`x${t}`} x={padL + ((t - x0) / spanX) * plotW} y={H - padB + 16} textAnchor="middle" className="chart-axis">
+          {fmtTick(t, spanDays)}
+        </text>
+      ))}
+      {/* axis titles */}
+      {label && (
+        <text transform={`rotate(-90 13 ${padT + plotH / 2})`} x={13} y={padT + plotH / 2} textAnchor="middle" className="chart-axis-title">
+          {label}
+        </text>
+      )}
+      <text x={W - padR} y={H - 6} textAnchor="end" className="chart-axis-title">date</text>
       <path d={path} fill="none" stroke={color} strokeWidth={1.75} />
       {points.length <= 200 && points.map((p, i) => {
         const [x, y] = toXY(p);
         return <circle key={i} cx={x} cy={y} r={PointsRadius(points.length)} fill={color} />;
       })}
+      {/* hover: crosshair, highlighted point, tooltip with date + value */}
+      {hp && (
+        <g>
+          <line x1={hx} x2={hx} y1={padT} y2={H - padB} className="chart-cross" />
+          <circle cx={hx} cy={hy} r={PointsRadius(points.length) + 2.5} fill={color} stroke="#14171f" strokeWidth={1.5} />
+          <g transform={`translate(${tipX},${tipY})`}>
+            <rect width={tipW} height={tipH} rx={6} className="chart-tip" />
+            <text x={8} y={14} className="chart-tip-date">{fmtDay(hp.x)}</text>
+            <text x={8} y={28} className="chart-tip-val">{fmtVal(hp.y)}{unit}</text>
+          </g>
+        </g>
+      )}
     </svg>
   );
 }
@@ -501,6 +605,17 @@ const has = (v: unknown): boolean => v !== null && v !== undefined;
 const asStr = (v: unknown, suffix = ""): string | null =>
   has(v) ? `${String(v)}${suffix}` : null;
 
+// ⟵ body-composition chart channel descriptors
+const BODY_METRIC: Record<
+  "weightKg" | "bodyFatPct" | "visceralFatLevel" | "skeletalMusclePct",
+  { label: string; unit: string }
+> = {
+  weightKg: { label: "Weight", unit: " kg" },
+  bodyFatPct: { label: "Body fat", unit: "%" },
+  visceralFatLevel: { label: "Visceral fat level", unit: "" },
+  skeletalMusclePct: { label: "Skeletal muscle", unit: "%" },
+};
+
 // ⟵ sleep + daily-metric chart channel descriptors
 const SLEEP_METRIC: Record<
   "hours" | "score" | "hrv" | "sleepHr" | "battery",
@@ -800,7 +915,7 @@ export default function App() {
               className={`btn ghost ${bodyMetric === m ? "active" : ""}`}
               onClick={() => setBodyMetric(m)}
             >
-              {m}
+              {BODY_METRIC[m].label}
             </button>
           ))}
         </div>
@@ -809,7 +924,8 @@ export default function App() {
             .filter((m) => has((m as unknown as Record<string, unknown>)[bodyMetric]))
             .map((m) => ({ x: new Date(m.measuredAt).getTime(), y: Number((m as unknown as Record<string, unknown>)[bodyMetric]) }))}
           color="#6e56cf"
-          label={bodyMetric}
+          label={BODY_METRIC[bodyMetric].label}
+          unit={BODY_METRIC[bodyMetric].unit}
         />
       </section>
 

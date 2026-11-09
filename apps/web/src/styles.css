@@ -43,7 +43,13 @@ footer { margin-top: 48px; color: var(--muted); font-size: 12px; text-align: cen
 .card-value { font-size: 20px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
 
 .chart { width: 100%; height: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
-.chart-min, .chart-max { fill: var(--muted); font-size: 11px; }
+.chart-grid { stroke: #232833; stroke-width: 1; }
+.chart-axis { fill: var(--muted); font-size: 11px; }
+.chart-axis-title { fill: #c9cfd9; font-size: 12px; font-weight: 600; }
+.chart-cross { stroke: #6e56cf; stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-tip { fill: #10131a; stroke: #2a2f3a; }
+.chart-tip-date { fill: var(--muted); font-size: 10px; }
+.chart-tip-val { fill: #e6e9ef; font-size: 12px; font-weight: 600; }
 
 .list { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; font-variant-numeric: tabular-nums; }
 .list th, .list td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
