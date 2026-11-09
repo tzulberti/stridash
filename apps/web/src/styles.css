@@ -283,3 +283,11 @@ footer { margin-top: 48px; color: var(--muted); font-size: 12px; text-align: cen
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+/* wide per-km splits table scrolls horizontally on narrow screens */
+.table-scroll {
+  overflow-x: auto;
+}
+.table-scroll table {
+  min-width: max-content;
+}

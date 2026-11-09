@@ -368,7 +368,19 @@ interface KmSplit {
   timeS: number;
   /** seconds per km inside this window */
   paceSec: number | null;
+  /** fastest sample pace in the window (seconds per km), Garmin-style "best pace" */
+  bestPaceSec: number | null;
   avgHr: number | null;
+  maxHr: number | null;
+  avgCadence: number | null;
+  avgSpeedMs: number | null;
+  avgPowerW: number | null;
+  avgStepM: number | null;
+  /** vertical oscillation, cm */
+  avgVoCm: number | null;
+  avgVertRatioPct: number | null;
+  /** ground contact as % of stride cycle (we store the % form, not ms) */
+  avgGctPct: number | null;
   /** meters climbed inside this window (needs the altitude stream) */
   elevM: number | null;
 }
@@ -385,14 +397,26 @@ function kmBisect(dist: number[], d: number): number {
   return lo;
 }
 
+type KmSplitsSeries = {
+  distanceM?: number[];
+  timeMs?: number[];
+  hrBpm?: number[];
+  cadenceRpm?: number[];
+  speedMs?: number[];
+  powerW?: number[];
+  stepLengthM?: number[];
+  verticalOscillationM?: number[];
+  verticalRatioPct?: number[];
+  stanceTimePct?: number[];
+  altitudeM?: number[];
+};
+
 /** split table for one activity: one row per full km (plus the partial tail),
- * timing derived from the distance↔time streams, averages from the sample rows */
-function buildKmSplits(
-  dist: number[],
-  ts: number[],
-  hr: number[] | undefined,
-  alt: number[] | undefined,
-): KmSplit[] | null {
+ * every column an in-window aggregate of a stored stream (Garmin-style laps) */
+function buildKmSplits(s: KmSplitsSeries): KmSplit[] | null {
+  const dist = s.distanceM;
+  const ts = s.timeMs;
+  if (!dist || !ts) return null;
   const n = Math.min(dist.length, ts.length);
   if (n < 2) return null;
   const base = dist[0] ?? 0;
@@ -412,56 +436,70 @@ function buildKmSplits(
 
   const rows: KmSplit[] = [];
   const fullKms = Math.floor(total / 1000);
+  const push = (k: number, label: string, dStart: number, dEnd: number, i0: number, i1: number, headTimeS: number): void => {
+    const distanceM = dEnd - dStart;
+    const paceSec = distanceM > 0 ? headTimeS / (distanceM / 1000) : null;
+    const bestSpeed = windowStat(s.speedMs, i0, i1, 0.01, "max");
+    const voM = windowStat(s.verticalOscillationM, i0, i1, 0.001, "avg");
+    rows.push({
+      km: k,
+      label,
+      distanceM,
+      timeS: headTimeS,
+      paceSec,
+      bestPaceSec: bestSpeed ? 1000 / bestSpeed : null,
+      avgHr: windowStat(s.hrBpm, i0, i1, 30, "avg"),
+      maxHr: windowStat(s.hrBpm, i0, i1, 30, "max"),
+      avgCadence: windowStat(s.cadenceRpm, i0, i1, 1, "avg"),
+      avgSpeedMs: windowStat(s.speedMs, i0, i1, 0, "avg"),
+      avgPowerW: windowStat(s.powerW, i0, i1, 1, "avg"),
+      avgStepM: windowStat(s.stepLengthM, i0, i1, 0.01, "avg"),
+      avgVoCm: voM == null ? null : voM * 100,
+      avgVertRatioPct: windowStat(s.verticalRatioPct, i0, i1, 0.1, "avg"),
+      avgGctPct: windowStat(s.stanceTimePct, i0, i1, 1, "avg"),
+      elevM: s.altitudeM ? windowElevGain(s.altitudeM, i0, i1) : null,
+    });
+  };
   for (let k = 1; k <= fullKms; k++) {
     const dStart = base + 1000 * (k - 1);
     const dEnd = base + 1000 * k;
     const i0 = kmBisect(dist, dStart);
     const i1 = Math.max(kmBisect(dist, dEnd), i0 + 1);
     // ts is in MILLISECONDS — convert to seconds for the table
-    const timeS = Math.max(0, (timeAt(dEnd) - timeAt(dStart)) / 1000);
-    rows.push({
-      km: k,
-      label: String(k),
-      distanceM: dEnd - dStart,
-      timeS,
-      paceSec: timeS / ((dEnd - dStart) / 1000),
-      avgHr: windowAvg(hr, i0, i1, 30),
-      elevM: alt ? windowElevGain(alt, i0, i1) : null,
-    });
+    push(k, String(k), dStart, dEnd, i0, i1, Math.max(0, (timeAt(dEnd) - timeAt(dStart)) / 1000));
   }
   // a ≥50 m tail is worth a speed-up read of the finish line
   if (total - 1000 * fullKms >= 50) {
     const dStart = base + 1000 * fullKms;
     const i0 = kmBisect(dist, dStart);
-    const i1 = n;
-    const distM = (dist[n - 1] ?? 0) - dStart;
-    const timeS = Math.max(0, ((ts[n - 1] ?? 0) - timeAt(dStart)) / 1000);
-    rows.push({
-      km: -1,
-      label: `last (${(distM / 1000).toFixed(2)} km)`,
-      distanceM: distM,
-      timeS,
-      paceSec: distM > 0 ? timeS / (distM / 1000) : null,
-      avgHr: windowAvg(hr, i0, i1, 30),
-      elevM: alt ? windowElevGain(alt, i0, i1) : null,
-    });
+    const dEnd = dist[n - 1] ?? dStart;
+    push(-1, `last (${((dEnd - dStart) / 1000).toFixed(2)} km)`, dStart, dEnd, i0, n, Math.max(0, ((ts[n - 1] ?? 0) - timeAt(dStart)) / 1000));
   }
   return rows;
 }
 
-/** mean of arr[j] for j in [i0, i1), skipping dead strap values (< min) */
-function windowAvg(arr: number[] | undefined, i0: number, i1: number, min: number): number | null {
+/** avg or max of arr[j] for j in [i0, i1), skipping values below the filter
+ * (strap dropouts, standing-time zeros on the form channels) */
+function windowStat(
+  arr: number[] | undefined,
+  i0: number,
+  i1: number,
+  min: number,
+  mode: "avg" | "max",
+): number | null {
   if (!arr?.length) return null;
   let sum = 0;
   let count = 0;
+  let best: number | null = null;
   for (let j = i0; j < i1 && j < arr.length; j++) {
     const v = arr[j];
-    if (v !== undefined && v >= min) {
-      sum += v;
-      count++;
-    }
+    if (v === undefined || v < min) continue;
+    sum += v;
+    count++;
+    if (best === null || v > best) best = v;
   }
-  return count ? sum / count : null;
+  if (!count || best === null) return null;
+  return mode === "avg" ? sum / count : best;
 }
 
 /** meters climbed between samples j−1→j for j in [i0, i1) */
@@ -637,11 +675,32 @@ function ActivityDetail({
   const splits = useMemo(() => {
     const s = rows?.[0]?.series;
     if (!s) return null;
-    const dist = s.distanceM;
-    const ts = s.timeMs ?? [];
-    if (!dist || dist.length < 2 || ts.length !== dist.length) return null;
-    return buildKmSplits(dist, ts, s.hrBpm, s.altitudeM);
+    return buildKmSplits(s);
   }, [rows]);
+
+  // columns render only when some row actually has the metric, so each sport
+  // gets the columns its data supports (Garmin-style laps)
+  const splitCols = useMemo(() => {
+    const rs = splits ?? [];
+    const has = (pick: (r: KmSplit) => number | null): boolean => rs.some((r) => pick(r) != null);
+    const cols: Array<{ key: string; head: string; cell: (r: KmSplit) => string | null }> = [
+      { key: "km", head: "km", cell: (r) => r.label },
+      { key: "time", head: "time", cell: (r) => fmtSplitTime(r.timeS) },
+    ];
+    if (has((r) => r.bestPaceSec)) cols.push({ key: "bp", head: "best pace", cell: (r) => fmtPace(r.bestPaceSec) });
+    if (has((r) => r.paceSec)) cols.push({ key: "pace", head: "pace", cell: (r) => fmtPace(r.paceSec) });
+    if (has((r) => r.avgHr)) cols.push({ key: "hr", head: "avg HR", cell: (r) => (r.avgHr != null ? `${Math.round(r.avgHr)} bpm` : null) });
+    if (has((r) => r.maxHr)) cols.push({ key: "hrm", head: "max HR", cell: (r) => (r.maxHr != null ? `${Math.round(r.maxHr)} bpm` : null) });
+    if (has((r) => r.avgCadence)) cols.push({ key: "cad", head: "cadence", cell: (r) => (r.avgCadence != null ? `${Math.round(r.avgCadence)}` : null) });
+    if (has((r) => r.avgSpeedMs)) cols.push({ key: "spd", head: "speed", cell: (r) => (r.avgSpeedMs != null ? `${(r.avgSpeedMs * 3.6).toFixed(1)} km/h` : null) });
+    if (has((r) => r.avgPowerW)) cols.push({ key: "pw", head: "power", cell: (r) => (r.avgPowerW != null ? `${Math.round(r.avgPowerW)} W` : null) });
+    if (has((r) => r.avgStepM)) cols.push({ key: "step", head: "step (m)", cell: (r) => (r.avgStepM != null ? r.avgStepM.toFixed(2) : null) });
+    if (has((r) => r.avgVoCm)) cols.push({ key: "vo", head: "vert osc (cm)", cell: (r) => (r.avgVoCm != null ? r.avgVoCm.toFixed(1) : null) });
+    if (has((r) => r.avgVertRatioPct)) cols.push({ key: "vr", head: "vert ratio (%)", cell: (r) => (r.avgVertRatioPct != null ? r.avgVertRatioPct.toFixed(1) : null) });
+    if (has((r) => r.avgGctPct)) cols.push({ key: "gct", head: "GCT (%)", cell: (r) => (r.avgGctPct != null ? r.avgGctPct.toFixed(1) : null) });
+    if (has((r) => r.elevM)) cols.push({ key: "el", head: "elev ▲", cell: (r) => (r.elevM != null ? `${Math.round(r.elevM)} m` : null) });
+    return cols;
+  }, [splits]);
 
   if (error) return <p className="error">{error}</p>;
   if (!act) return <p>loading…</p>;
@@ -677,25 +736,25 @@ function ActivityDetail({
       </div>
       {error && <p className="error">{error}</p>}
 
-      {splits ? (
+      {splits && splitCols.length > 2 ? (
         <section>
           <h3>Per-kilometer splits</h3>
-          <table className="list splits">
-            <thead>
-              <tr><th>km</th><th>time</th><th>pace</th><th>avg HR</th><th>elev ▲</th></tr>
-            </thead>
-            <tbody>
-              {splits.map((s) => (
-                <tr key={s.label}>
-                  <td>{s.label}</td>
-                  <td>{fmtSplitTime(s.timeS)}</td>
-                  <td>{fmtPace(s.paceSec)}</td>
-                  <td>{s.avgHr != null ? `${Math.round(s.avgHr)} bpm` : "—"}</td>
-                  <td>{s.elevM != null ? `${Math.round(s.elevM)} m` : null}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="list splits">
+              <thead>
+                <tr>{splitCols.map((c) => <th key={c.key}>{c.head}</th>)}</tr>
+              </thead>
+              <tbody>
+                {splits.map((s) => (
+                  <tr key={s.label}>
+                    {splitCols.map((c) => (
+                      <td key={c.key}>{c.cell(s) ?? null}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       ) : null}
 
