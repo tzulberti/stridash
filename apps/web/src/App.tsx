@@ -322,7 +322,7 @@ function LineChart({
           <circle cx={hx} cy={hy} r={PointsRadius(points.length) + 2.5} fill={zoneOf ? zoneColor(zoneOf(hp.y)) : color} stroke="#14171f" strokeWidth={1.5} />
           <g transform={`translate(${tipX},${tipY})`}>
             <rect width={tipW} height={tipH} rx={6} className="chart-tip" />
-            <text x={8} y={14} className="chart-tip-date">{isDist ? fmtKm(hp.x) : spanDays < 1.5 ? `${fmtDay(hp.x)} · ${fmtElapsed(hp.x - x0)}` : fmtDay(hp.x)}</text>
+            <text x={8} y={14} className="chart-tip-date">{isDist ? fmtKm(hp.x) : spanDays < 1.5 ? fmtElapsed(hp.x - x0) : fmtDay(hp.x)}</text>
             <text x={8} y={28} className="chart-tip-val">{fmtVal(hp.y)}{unit}{zoneOf ? ` · Z${zoneOf(hp.y) + 1}` : ""}</text>
           </g>
         </g>
