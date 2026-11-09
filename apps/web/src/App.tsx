@@ -640,6 +640,33 @@ const DAILY_METRIC: Record<
   floors: { fn: (w) => (w.floorsAsc !== null ? w.floorsAsc : null), color: "#0091ff", unit: "", label: "Floors ascended" },
 };
 
+// ─── URL state (every filter keeps the link shareable) ───────────────────────
+
+type BodyMetricKey = "weightKg" | "bodyFatPct" | "visceralFatLevel" | "skeletalMusclePct";
+type SleepMetricKey = "hours" | "score" | "hrv" | "sleepHr" | "battery";
+type DailyMetricKey = "steps" | "restingHr" | "stressAvg" | "battery" | "activeCal" | "floors";
+
+function keyOf<T extends string>(allowed: readonly string[], v: string | null, fallback: T): T {
+  // T is anchored by `fallback`; `v` passes only when it's a known member
+  return allowed.includes(v ?? "") ? (v as T) : fallback;
+}
+
+/** Filters the page boots with — parsed once from ?from&to&body&sleep&daily.
+ * Missing/invalid params fall back to the 7-day window + default metrics. */
+const BOOT_URL = (() => {
+  const q = new URLSearchParams(window.location.search);
+  const iso = (v: string | null): string | undefined => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+  return {
+    fromDate:
+      iso(q.get("from")) ??
+      new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10),
+    toDate: iso(q.get("to")) ?? new Date().toISOString().slice(0, 10),
+    body: keyOf(Object.keys(BODY_METRIC), q.get("body"), "weightKg"),
+    sleep: keyOf(Object.keys(SLEEP_METRIC), q.get("sleep"), "hours"),
+    daily: keyOf(Object.keys(DAILY_METRIC), q.get("daily"), "steps"),
+  };
+})();
+
 export default function App() {
   const [token, setToken] = useState<string | null>(() => readToken());
   const [email, setEmail] = useState("");
@@ -652,9 +679,9 @@ export default function App() {
   const [sleep, setSleep] = useState<SleepRow[]>([]);
   const [wellness, setWellness] = useState<DailyWellnessRow[]>([]);
   const [detail, setDetail] = useState<Activity | null>(null);
-  const [bodyMetric, setBodyMetric] = useState<"weightKg" | "bodyFatPct" | "visceralFatLevel" | "skeletalMusclePct">("weightKg");
-  const [sleepMetric, setSleepMetric] = useState<"hours" | "score" | "hrv" | "sleepHr" | "battery">("hours");
-  const [dailyMetric, setDailyMetric] = useState<"steps" | "restingHr" | "stressAvg" | "battery" | "activeCal" | "floors">("steps");
+  const [bodyMetric, setBodyMetric] = useState<BodyMetricKey>(BOOT_URL.body);
+  const [sleepMetric, setSleepMetric] = useState<SleepMetricKey>(BOOT_URL.sleep);
+  const [dailyMetric, setDailyMetric] = useState<DailyMetricKey>(BOOT_URL.daily);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
 
@@ -745,9 +772,9 @@ export default function App() {
 
   // hooks MUST run unconditionally: this is above the login early-return or
   // the hook order changes between renders ("more hooks than before" crash)
-  // default window = the last 7 days (UTC day keys, matching the presets)
-  const [fromDate, setFromDate] = useState<string>(() => new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10));
-  const [toDate, setToDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  // default window + metrics come from the URL (shareable filter links)
+  const [fromDate, setFromDate] = useState<string>(BOOT_URL.fromDate);
+  const [toDate, setToDate] = useState<string>(BOOT_URL.toDate);
 
   const range = useMemo(() => ({
     from: fromDate ? new Date(`${fromDate}T00:00:00.000Z`).getTime() : null,
@@ -785,6 +812,19 @@ export default function App() {
     setToDate(today);
     setFromDate(new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10));
   }
+
+  // every filter change rewrites the query string, so copying the URL shares
+  // the exact dashboard view (range + selected chart metrics)
+  useEffect(() => {
+    const q = new URLSearchParams();
+    if (fromDate) q.set("from", fromDate);
+    if (toDate) q.set("to", toDate);
+    if (bodyMetric !== "weightKg") q.set("body", bodyMetric);
+    if (sleepMetric !== "hours") q.set("sleep", sleepMetric);
+    if (dailyMetric !== "steps") q.set("daily", dailyMetric);
+    const s = q.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${s ? `?${s}` : ""}${window.location.hash}`);
+  }, [fromDate, toDate, bodyMetric, sleepMetric, dailyMetric]);
 
   const weighIns = useMemo(() => [...measurements].sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime()), [measurements]);
 
