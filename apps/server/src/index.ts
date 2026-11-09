@@ -18,8 +18,15 @@ type TypedHono = Hono<AppContext>;
 
 // ─── Public ──────────────────────────────────────────────────────────────────
 
+const BOOTED_AT = new Date();
+
 app.get("/api/health", (c) =>
-  c.json({ status: "ok" as const, version: env.STRIDASH_VERSION }),
+  c.json({
+    status: "ok" as const,
+    version: env.STRIDASH_VERSION,
+    // boot time makes a stale process (serving old code) obvious
+    startedAt: BOOTED_AT.toISOString(),
+  }),
 );
 
 app.route("/api/auth", authRoutes(env));
