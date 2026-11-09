@@ -89,3 +89,43 @@ footer { margin-top: 48px; color: var(--muted); font-size: 12px; text-align: cen
 .remember-me input {
   accent-color: #6e56cf;
 }
+
+/* date-range filter bar */
+.range-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #2a2f3a;
+  border-radius: 8px;
+  background: #171a21;
+}
+.range-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #9aa4b2;
+}
+.range-sep {
+  color: #9aa4b2;
+  font-size: 0.85rem;
+}
+.range-bar input[type="date"] {
+  background: #10131a;
+  color: #e6e9ef;
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+}
+.range-bar input[type="date"]:focus {
+  outline: 1px solid #6e56cf;
+  border-color: #6e56cf;
+}
+.btn.small {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+}

@@ -490,8 +490,64 @@ export default function App() {
 
   // hooks MUST run unconditionally: this is above the login early-return or
   // the hook order changes between renders ("more hooks than before" crash)
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
+
+  const range = useMemo(() => ({
+    from: fromDate ? new Date(`${fromDate}T00:00:00.000Z`).getTime() : null,
+    to: toDate ? new Date(`${toDate}T23:59:59.999Z`).getTime() : null,
+  }), [fromDate, toDate]);
+
+  /** true when a timestamp (ms or ISO string) falls inside [from, to]; empty
+   * bounds mean "no limit on that side". */
+  const inRange = useCallback((ts: number | string | null | undefined): boolean => {
+    if (ts === null || ts === undefined) return false;
+    const t = typeof ts === "number" ? ts : new Date(ts).getTime();
+    if (!Number.isFinite(t)) return false;
+    return (range.from === null || t >= range.from) && (range.to === null || t <= range.to);
+  }, [range]);
+
+  /** preset chips: exact-match highlight (from = today − days, to = today);
+   * null = "all", undefined = custom dates don't map to a preset */
+  const activePreset = useMemo((): number | null | undefined => {
+    if (!fromDate && !toDate) return null; // "all"
+    const today = new Date().toISOString().slice(0, 10);
+    if (toDate !== today) return undefined; // custom range
+    for (const d of [7, 30, 90, 365]) {
+      if (fromDate === new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10)) return d;
+    }
+    return undefined;
+  }, [fromDate, toDate]);
+
+  function applyPreset(days: number | null): void {
+    if (days === null) {
+      setFromDate("");
+      setToDate("");
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    setToDate(today);
+    setFromDate(new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10));
+  }
+
   const weighIns = useMemo(() => [...measurements].sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime()), [measurements]);
-  const latest = measurements[0];
+
+  // everything on the page is driven by the filtered arrays
+  const weighInsIn = useMemo(() => weighIns.filter((m) => inRange(m.measuredAt)), [weighIns, inRange]);
+  const sleepIn = useMemo(() => sleep.filter((s) => inRange(`${s.dateKey}T00:00:00.000Z`)), [sleep, inRange]);
+  const wellnessIn = useMemo(() => wellness.filter((w) => inRange(`${w.dateKey}T00:00:00.000Z`)), [wellness, inRange]);
+  const activitiesIn = useMemo(() => activities.filter((a) => inRange(a.startTime)), [activities, inRange]);
+  const measurementsIn = useMemo(() => measurements.filter((m) => inRange(m.measuredAt)), [measurements, inRange]);
+
+  // newest row in range for the headline cards (arrays are oldest-first)
+  const latest = weighInsIn[weighInsIn.length - 1];
+  const lastSleep = useMemo(
+    () => [...sleepIn].reverse().find((s) => s.totalSleepS !== null),
+    [sleepIn],
+  );
+  const lastWellness = useMemo(() => [...wellnessIn].reverse(), [wellnessIn]);
+  const latestWellness = lastWellness.find((w) => w.steps !== null);
+  const latestRestingHr = lastWellness.find((w) => w.restingHr !== null);
 
   if (!token) {
     return (
@@ -529,36 +585,71 @@ export default function App() {
 
       {error && <p className="error">{error}</p>}
 
+      <div className="range-bar">
+        <span className="range-label">range</span>
+        {[7, 30, 90, 365].map((d) => (
+          <button
+            key={d}
+            className={`btn ghost small ${activePreset === d ? "active" : ""}`}
+            onClick={() => applyPreset(d)}
+          >
+            {d === 365 ? "1y" : `${d}d`}
+          </button>
+        ))}
+        <button
+          className={`btn ghost small ${activePreset === null ? "active" : ""}`}
+          onClick={() => applyPreset(null)}
+        >
+          all
+        </button>
+        <input
+          type="date"
+          value={fromDate}
+          max={toDate || undefined}
+          onChange={(e) => setFromDate(e.target.value)}
+          aria-label="from date"
+        />
+        <span className="range-sep">→</span>
+        <input
+          type="date"
+          value={toDate}
+          min={fromDate || undefined}
+          onChange={(e) => setToDate(e.target.value)}
+          aria-label="to date"
+        />
+        {(fromDate || toDate) && (
+          <button className="btn ghost small" onClick={() => applyPreset(null)}>clear</button>
+        )}
+      </div>
+
       <div className="cards">
         <Card label="Latest weight" value={asStr(latest?.weightKg, " kg") ?? "no weigh-in yet"} />
         <Card label="Body fat" value={asStr(latest?.bodyFatPct, "%")} />
         <Card label="Visceral fat" value={asStr(latest?.visceralFatLevel)} />
         <Card label="Muscle mass" value={asStr(latest?.skeletalMuscleMassKg, " kg")} />
         <Card
-          label="Last night"
+          label="Latest sleep"
           value={
-            sleep.find((s) => s.totalSleepS !== null) ? (
+            lastSleep ? (
               <>
-                {((sleep.find((s) => s.totalSleepS !== null)!.totalSleepS ?? 0) / 3600).toFixed(1)} h
-                {sleep.find((s) => s.sleepScore !== null)?.sleepScore !== undefined
-                  ? ` · score ${sleep.find((s) => s.sleepScore !== null)!.sleepScore}`
-                  : ""}
+                {((lastSleep.totalSleepS ?? 0) / 3600).toFixed(1)} h
+                {lastSleep.sleepScore !== null ? ` · score ${lastSleep.sleepScore}` : ""}
               </>
             ) : (
-              "no sleep data"
+              "no sleep in range"
             )
           }
         />
         <Card
-          label="Yesterday steps"
-          value={wellness.find((w) => w.steps !== null) ? wellness.find((w) => w.steps !== null)!.steps?.toLocaleString() : "no steps"}
+          label="Latest steps"
+          value={latestWellness ? latestWellness.steps?.toLocaleString() : "no steps in range"}
         />
         <Card
           label="Resting HR"
-          value={wellness.find((w) => w.restingHr !== null) ? `${wellness.find((w) => w.restingHr !== null)!.restingHr} bpm` : "—"}
+          value={latestRestingHr?.restingHr != null ? `${latestRestingHr.restingHr} bpm` : "—"}
         />
-        <Card label="Activities" value={activities.length} />
-        <Card label="Weigh-ins" value={measurements.length} />
+        <Card label="Activities" value={activitiesIn.length} />
+        <Card label="Weigh-ins" value={measurementsIn.length} />
       </div>
 
       <section>
@@ -575,7 +666,7 @@ export default function App() {
           ))}
         </div>
         <LineChart
-          points={weighIns
+          points={weighInsIn
             .filter((m) => has((m as unknown as Record<string, unknown>)[bodyMetric]))
             .map((m) => ({ x: new Date(m.measuredAt).getTime(), y: Number((m as unknown as Record<string, unknown>)[bodyMetric]) }))}
           color="#6e56cf"
@@ -605,7 +696,7 @@ export default function App() {
           ))}
         </div>
         <LineChart
-          points={sleep
+          points={sleepIn
             .filter((s) => has(SLEEP_METRIC[sleepMetric].fn(s)))
             .map((s) => ({ x: new Date(`${s.dateKey}T00:00:00.000Z`).getTime(), y: SLEEP_METRIC[sleepMetric].fn(s)! }))}
           color={SLEEP_METRIC[sleepMetric].color}
@@ -637,7 +728,7 @@ export default function App() {
           ))}
         </div>
         <LineChart
-          points={wellness
+          points={wellnessIn
             .filter((w) => has(DAILY_METRIC[dailyMetric].fn(w)))
             .map((w) => ({ x: new Date(`${w.dateKey}T00:00:00.000Z`).getTime(), y: DAILY_METRIC[dailyMetric].fn(w)! }))}
           color={DAILY_METRIC[dailyMetric].color}
@@ -648,7 +739,7 @@ export default function App() {
 
       <section>
         <h2>Activities</h2>
-        {activities.length === 0 && <p className="empty">No activities synced yet.</p>}
+        {activitiesIn.length === 0 && <p className="empty">No activities in range.</p>}
         <table className="list">
           <thead>
             <tr>
@@ -656,7 +747,7 @@ export default function App() {
             </tr>
           </thead>
           <tbody>
-            {activities.map((a) => (
+            {activitiesIn.map((a) => (
               <tr key={a.id}>
                 <td>{TYPE_EMOJI[a.type] ?? "⌚"}</td>
                 <td>{fmtDate(a.startTime)}</td>
