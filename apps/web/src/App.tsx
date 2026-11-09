@@ -488,6 +488,11 @@ export default function App() {
     }
   }
 
+  // hooks MUST run unconditionally: this is above the login early-return or
+  // the hook order changes between renders ("more hooks than before" crash)
+  const weighIns = useMemo(() => [...measurements].sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime()), [measurements]);
+  const latest = measurements[0];
+
   if (!token) {
     return (
       <main className="login-page">
@@ -506,9 +511,6 @@ export default function App() {
       </main>
     );
   }
-
-  const weighIns = useMemo(() => [...measurements].sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime()), [measurements]);
-  const latest = measurements[0];
 
   return (
     <main>
