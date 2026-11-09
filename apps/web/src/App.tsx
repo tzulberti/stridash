@@ -124,14 +124,19 @@ function fmtDay(ms: number): string {
   return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
-function fmtClock(ms: number): string {
-  const d = new Date(ms);
-  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+/** elapsed since the activity start: 0:30 for sub-hour runs, 1:02:33 after */
+function fmtElapsed(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const hh = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  const pad = (v: number): string => String(v).padStart(2, "0");
+  return hh ? `${hh}:${pad(mm)}:${pad(ss)}` : `${mm}:${pad(ss)}`;
 }
 
-function fmtTick(ms: number, spanDays: number): string {
+function fmtTick(ms: number, spanDays: number, x0: number): string {
   const d = new Date(ms);
-  if (spanDays < 1.5) return fmtClock(ms); // activity-length spans: time of day
+  if (spanDays < 1.5) return fmtElapsed(ms - x0); // activity-length spans: elapsed since start
   if (spanDays >= 545) return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
   if (spanDays >= 60) return `${MONTHS_SHORT[d.getUTCMonth()]} '${String(d.getUTCFullYear() % 100)}`;
   return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
@@ -281,7 +286,7 @@ function LineChart({
       {/* X tick labels */}
       {xTicks.map((t) => (
         <text key={`x${t}`} x={padL + ((t - x0) / spanX) * plotW} y={H - padB + 16} textAnchor="middle" className="chart-axis">
-          {fmtTick(t, spanDays)}
+          {fmtTick(t, spanDays, x0)}
         </text>
       ))}
       {/* axis titles */}
@@ -290,7 +295,7 @@ function LineChart({
           {label}
         </text>
       )}
-      <text x={W - padR} y={H - 6} textAnchor="end" className="chart-axis-title">date</text>
+      <text x={W - padR} y={H - 6} textAnchor="end" className="chart-axis-title">{spanDays < 1.5 ? "elapsed" : "date"}</text>
       {zonePaths
         ? zonePaths.map((zp) => <path key={zp.z} d={zp.d} fill="none" stroke={zp.fill} strokeWidth={1.75} />)
         : <path d={path} fill="none" stroke={color} strokeWidth={1.75} />}
@@ -305,7 +310,7 @@ function LineChart({
           <circle cx={hx} cy={hy} r={PointsRadius(points.length) + 2.5} fill={zoneOf ? zoneColor(zoneOf(hp.y)) : color} stroke="#14171f" strokeWidth={1.5} />
           <g transform={`translate(${tipX},${tipY})`}>
             <rect width={tipW} height={tipH} rx={6} className="chart-tip" />
-            <text x={8} y={14} className="chart-tip-date">{spanDays < 1.5 ? `${fmtDay(hp.x)} · ${fmtClock(hp.x)}` : fmtDay(hp.x)}</text>
+            <text x={8} y={14} className="chart-tip-date">{spanDays < 1.5 ? `${fmtDay(hp.x)} · ${fmtElapsed(hp.x - x0)}` : fmtDay(hp.x)}</text>
             <text x={8} y={28} className="chart-tip-val">{fmtVal(hp.y)}{unit}{zoneOf ? ` · Z${zoneOf(hp.y) + 1}` : ""}</text>
           </g>
         </g>
