@@ -6,7 +6,7 @@
  * activities list + one-activity drill-down with GPS/HR/power series.
  */
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import type {
   Measurement,
   Activity,
@@ -357,6 +357,146 @@ function Card({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+// ─── Calendar date picker (no deps — a small month-grid popover) ─────────────
+
+const DP_MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const DP_WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+
+/** Midnight-UTC of the 1st of the month containing `d` (day keys are UTC; the
+ * server data + presets use toISOString().slice(0,10) everywhere). */
+function dpMonthStart(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+function dpIso(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function DatePicker({
+  value,
+  onChange,
+  placeholder,
+  min,
+  max,
+}: {
+  value: string; // YYYY-MM-DD, "" = unset
+  onChange: (iso: string) => void;
+  placeholder: string;
+  /** inclusive bounds as YYYY-MM-DD; days outside are not clickable */
+  min?: string;
+  max?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<Date>(() => dpMonthStart(value ? new Date(`${value}T00:00:00Z`) : new Date()));
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // click outside (or Escape) closes the popover
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const toggle = (): void => {
+    if (!open) setView(dpMonthStart(value ? new Date(`${value}T00:00:00Z`) : new Date()));
+    setOpen(!open);
+  };
+
+  // 6×7 grid covering the viewed month (Monday-first, matching DP_WEEKDAYS)
+  const firstWeekday = (view.getUTCDay() + 6) % 7; // Sun=0 → Mon=0
+  const gridStart = new Date(view.getTime() - firstWeekday * 86_400_000);
+  const cells: Date[] = Array.from({ length: 42 }, (_, i) => new Date(gridStart.getTime() + i * 86_400_000));
+  const todayIso = dpIso(new Date());
+
+  return (
+    <div className="dp" ref={rootRef}>
+      <button
+        type="button"
+        className={`dp-btn ${open ? "open" : ""}`}
+        onClick={toggle}
+        aria-haspopup="true"
+        aria-expanded={open}
+      >
+        <span className={`dp-value ${value ? "" : "dp-empty"}`}>{value || placeholder}</span>
+        <span className="dp-icon">📅</span>
+      </button>
+      {open && (
+        <div className="dp-pop" role="dialog" aria-label={placeholder}>
+          <div className="dp-head">
+            <button type="button" className="dp-nav" onClick={() => setView(dpMonthStart(new Date(view.getTime() - 15 * 86_400_000)))} aria-label="previous month">‹</button>
+            <span className="dp-month">{DP_MONTHS[view.getUTCMonth()]} {view.getUTCFullYear()}</span>
+            <button type="button" className="dp-nav" onClick={() => setView(dpMonthStart(new Date(view.getTime() + 31 * 86_400_000)))} aria-label="next month">›</button>
+          </div>
+          <div className="dp-grid">
+            {DP_WEEKDAYS.map((w) => (
+              <span key={w} className="dp-wd">{w}</span>
+            ))}
+            {cells.map((d) => {
+              const iso = dpIso(d);
+              const outOfMonth = d.getUTCMonth() !== view.getUTCMonth();
+              const disabled = (min !== undefined && iso < min) || (max !== undefined && iso > max);
+              const cls = [
+                "dp-day",
+                outOfMonth ? "dp-out" : "",
+                iso === value ? "sel" : "",
+                iso === todayIso ? "today" : "",
+                disabled ? "disabled" : "",
+              ].filter(Boolean).join(" ");
+              return (
+                <button
+                  key={iso}
+                  type="button"
+                  className={cls}
+                  disabled={disabled}
+                  onClick={() => {
+                    onChange(iso);
+                    setOpen(false);
+                  }}
+                >
+                  {d.getUTCDate()}
+                </button>
+              );
+            })}
+          </div>
+          <div className="dp-foot">
+            <button
+              type="button"
+              className="dp-clear"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+              disabled={value === ""}
+            >
+              clear
+            </button>
+            <button
+              type="button"
+              className="dp-clear"
+              onClick={() => {
+                onChange(todayIso);
+                setOpen(false);
+              }}
+            >
+              today
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const has = (v: unknown): boolean => v !== null && v !== undefined;
 const asStr = (v: unknown, suffix = ""): string | null =>
   has(v) ? `${String(v)}${suffix}` : null;
@@ -490,8 +630,9 @@ export default function App() {
 
   // hooks MUST run unconditionally: this is above the login early-return or
   // the hook order changes between renders ("more hooks than before" crash)
-  const [fromDate, setFromDate] = useState<string>("");
-  const [toDate, setToDate] = useState<string>("");
+  // default window = the last 7 days (UTC day keys, matching the presets)
+  const [fromDate, setFromDate] = useState<string>(() => new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10));
+  const [toDate, setToDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
   const range = useMemo(() => ({
     from: fromDate ? new Date(`${fromDate}T00:00:00.000Z`).getTime() : null,
@@ -602,20 +743,18 @@ export default function App() {
         >
           all
         </button>
-        <input
-          type="date"
+        <DatePicker
           value={fromDate}
+          onChange={setFromDate}
+          placeholder="from date"
           max={toDate || undefined}
-          onChange={(e) => setFromDate(e.target.value)}
-          aria-label="from date"
         />
         <span className="range-sep">→</span>
-        <input
-          type="date"
+        <DatePicker
           value={toDate}
+          onChange={setToDate}
+          placeholder="to date"
           min={fromDate || undefined}
-          onChange={(e) => setToDate(e.target.value)}
-          aria-label="to date"
         />
         {(fromDate || toDate) && (
           <button className="btn ghost small" onClick={() => applyPreset(null)}>clear</button>
