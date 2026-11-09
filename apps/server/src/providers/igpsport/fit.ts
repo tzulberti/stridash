@@ -126,6 +126,11 @@ function num(v: unknown): number | undefined {
 }
 function hrZones(arr: unknown): number[] | undefined {
   if (!Array.isArray(arr) || !arr.length) return undefined;
-  const out = arr.map((v) => num(v)).filter((v): v is number => v !== undefined);
+  // FIT `time_in_hr_zone` is SECONDS; the storage contract (hrZonesMin) is
+  // minutes — round to one decimal so 4020.716 s → 67.0 min
+  const out = arr
+    .map((v) => num(v))
+    .filter((v): v is number => v !== undefined)
+    .map((v) => Math.round((v / 60) * 10) / 10);
   return out.length ? out : undefined;
 }
