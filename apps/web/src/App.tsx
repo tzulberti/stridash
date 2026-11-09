@@ -171,6 +171,7 @@ function LineChart({
   label,
   unit,
   zoneThresholds,
+  xMode = "time",
 }: {
   points: Point[];
   color: string;
@@ -180,6 +181,8 @@ function LineChart({
   /** lower bpm bound of zones 2..n (ascending, Infinity allowed) — when set
    * the line is drawn segment-by-segment in the zone colors */
   zoneThresholds?: number[] | null;
+  /** which X axis: elapsed time ("time", default) or distance in meters */
+  xMode?: "time" | "distance";
 }) {
   // hover index — declared before the early return so hook counts stay stable
   const [hover, setHover] = useState<number | null>(null);
@@ -211,8 +214,15 @@ function LineChart({
   }).join(" ");
 
   const yTicks = niceTicks(y0, y1, 4);
+  // distance mode ticks live in km space (nice numbers), plotted back in meters
+  const isDist = xMode === "distance";
   const xTickCount = Math.max(2, Math.round(plotW / 170));
-  const xTicks = Array.from({ length: xTickCount }, (_, i) => x0 + (spanX * i) / (xTickCount - 1));
+  const xTickMarks = isDist
+    ? niceTicks(x0 / 1000, x1 / 1000, Math.max(3, Math.round(plotW / 160))).map((km) => ({ x: km * 1000, label: fmtVal(km) }))
+    : Array.from({ length: xTickCount }, (_, i) => {
+        const t = x0 + (spanX * i) / (xTickCount - 1);
+        return { x: t, label: fmtTick(t, spanDays, x0) };
+      });
 
   // nearest point by pixel distance along the time axis (viewBox units)
   const svgMove = (e: React.MouseEvent<SVGSVGElement>): void => {
@@ -284,9 +294,9 @@ function LineChart({
         );
       })}
       {/* X tick labels */}
-      {xTicks.map((t) => (
-        <text key={`x${t}`} x={padL + ((t - x0) / spanX) * plotW} y={H - padB + 16} textAnchor="middle" className="chart-axis">
-          {fmtTick(t, spanDays, x0)}
+      {xTickMarks.map((t) => (
+        <text key={`x${t.x}`} x={padL + ((t.x - x0) / spanX) * plotW} y={H - padB + 16} textAnchor="middle" className="chart-axis">
+          {t.label}
         </text>
       ))}
       {/* axis titles */}
@@ -295,7 +305,9 @@ function LineChart({
           {label}
         </text>
       )}
-      <text x={W - padR} y={H - 6} textAnchor="end" className="chart-axis-title">{spanDays < 1.5 ? "elapsed" : "date"}</text>
+      <text x={W - padR} y={H - 6} textAnchor="end" className="chart-axis-title">
+        {isDist ? "distance (km)" : spanDays < 1.5 ? "elapsed" : "date"}
+      </text>
       {zonePaths
         ? zonePaths.map((zp) => <path key={zp.z} d={zp.d} fill="none" stroke={zp.fill} strokeWidth={1.75} />)
         : <path d={path} fill="none" stroke={color} strokeWidth={1.75} />}
@@ -310,7 +322,7 @@ function LineChart({
           <circle cx={hx} cy={hy} r={PointsRadius(points.length) + 2.5} fill={zoneOf ? zoneColor(zoneOf(hp.y)) : color} stroke="#14171f" strokeWidth={1.5} />
           <g transform={`translate(${tipX},${tipY})`}>
             <rect width={tipW} height={tipH} rx={6} className="chart-tip" />
-            <text x={8} y={14} className="chart-tip-date">{spanDays < 1.5 ? `${fmtDay(hp.x)} · ${fmtElapsed(hp.x - x0)}` : fmtDay(hp.x)}</text>
+            <text x={8} y={14} className="chart-tip-date">{isDist ? fmtKm(hp.x) : spanDays < 1.5 ? `${fmtDay(hp.x)} · ${fmtElapsed(hp.x - x0)}` : fmtDay(hp.x)}</text>
             <text x={8} y={28} className="chart-tip-val">{fmtVal(hp.y)}{unit}{zoneOf ? ` · Z${zoneOf(hp.y) + 1}` : ""}</text>
           </g>
         </g>
@@ -425,6 +437,17 @@ function ActivityDetail({
   const [act, setAct] = useState<Activity | null>(preview);
   const [rows, setRows] = useState<ActivitySeriesRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** shared X axis for the stream charts: elapsed time (default) or distance */
+  const [xAxis, setXAxis] = useState<"time" | "distance">(() => new URLSearchParams(window.location.search).get("x") === "distance" ? "distance" : "time");
+
+  // keep the choice in the URL so axis-shared activity links match the view
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (xAxis === "distance") q.set("x", "distance");
+    else q.delete("x");
+    const s = q.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${s ? `?${s}` : ""}`);
+  }, [xAxis]);
 
   useEffect(() => {
     let alive = true;
@@ -450,12 +473,15 @@ function ActivityDetail({
   }, [id, token, preview]);
 
   // streams come back as labeled numeric arrays aligned with timeMs — plot
-  // against the real sample clock so the axes show time-of-day; the HR chart
-  // gets zone coloring derived from the stored per-zone minutes
+  // against the real sample clock so the axes show elapsed time; distance
+  // mode plots them against the distance stream instead. The HR chart gets
+  // zone coloring derived from the stored per-zone minutes
   const charts = useMemo(() => {
     const s = rows?.[0]?.series;
     const ts = s?.timeMs ?? [];
     if (!s || ts.length < 2) return [];
+    const dist = s.distanceM ?? [];
+    const byDistance = xAxis === "distance" && dist.length === ts.length;
     const out: Array<{ key: string; title: string; color: string; points: Point[]; unit: string; zones: number[] | null }> = [];
     for (const [key, title, color, unit] of SERIES_CHANNELS) {
       const vals = (s as Record<string, number[] | undefined>)[key];
@@ -466,11 +492,13 @@ function ActivityDetail({
         color,
         unit,
         zones: key === "hrBpm" ? hrZoneThresholds(vals, act?.hrZonesMin ?? null) : null,
-        points: vals.map((v, i) => ({ x: ts[i] ?? i, y: v })),
+        points: vals.map((v, i) => ({ x: byDistance && dist[i] !== undefined ? dist[i] : ts[i] ?? i, y: v })),
       });
     }
     return out;
-  }, [rows, act]);
+  }, [rows, act, xAxis]);
+
+  const hasDistance = (rows?.[0]?.series.distanceM?.length ?? 0) >= 2;
 
   if (error) return <p className="error">{error}</p>;
   if (!act) return <p>loading…</p>;
@@ -479,6 +507,16 @@ function ActivityDetail({
     <div>
       <button className="btn" onClick={onBack}>← back to dashboard</button>
       <h2>{TYPE_EMOJI[act.type] ?? "⌚"} {act.headline}</h2>
+      <div className="metric-tabs">
+        <button className={`btn ghost ${xAxis === "time" ? "active" : ""}`} onClick={() => setXAxis("time")}>time</button>
+        <button
+          className={`btn ghost ${xAxis === "distance" ? "active" : ""}`}
+          disabled={!hasDistance}
+          onClick={() => setXAxis("distance")}
+        >
+          distance
+        </button>
+      </div>
       <div className="cards">
         <Card label="Start" value={fmtDate(act.startTime)} />
         <Card label="Distance" value={fmtKm(act.distanceM)} />
@@ -500,7 +538,7 @@ function ActivityDetail({
       {charts.map((c) => (
         <section key={c.key}>
           <h3>{c.title}</h3>
-          <LineChart points={c.points} color={c.color} label={c.title} unit={c.unit} zoneThresholds={c.zones} />
+          <LineChart points={c.points} color={c.color} label={c.title} unit={c.unit} zoneThresholds={c.zones} xMode={xAxis === "distance" && hasDistance ? "distance" : "time"} />
           {c.key === "hrBpm" && c.zones ? (
             <div className="zone-legend">
               {Array.from({ length: c.zones.length + 1 }, (_, i) => (
