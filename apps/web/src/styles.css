@@ -256,3 +256,24 @@ footer { margin-top: 48px; color: var(--muted); font-size: 12px; text-align: cen
   padding: 0.25rem 0.6rem;
   font-size: 0.8rem;
 }
+
+/* HR-zone color legend under the heart-rate chart */
+.zone-legend {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0.4rem 0 0.2rem;
+  font-size: 0.72rem;
+  color: var(--muted, #9aa4b2);
+}
+.zone-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.zone-sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}

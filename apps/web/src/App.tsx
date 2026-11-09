@@ -155,18 +155,26 @@ function niceTicks(min: number, max: number, count: number): number[] {
   return ticks;
 }
 
+/** display colors for HR intensity zones (1 grey, 2 blue, 3 green, 4 yellow,
+ * 5+ red) */
+const ZONE_COLORS = ["#9aa4b2", "#3e8ef7", "#30a46c", "#d29922", "#e5484d", "#e5484d", "#e5484d", "#e5484d"];
+
 function LineChart({
   points,
   color,
   height = 200,
   label,
   unit,
+  zoneThresholds,
 }: {
   points: Point[];
   color: string;
   height?: number;
   label?: string;
   unit?: string;
+  /** lower bpm bound of zones 2..n (ascending, Infinity allowed) — when set
+   * the line is drawn segment-by-segment in the zone colors */
+  zoneThresholds?: number[] | null;
 }) {
   // hover index — declared before the early return so hook counts stay stable
   const [hover, setHover] = useState<number | null>(null);
@@ -226,6 +234,38 @@ function LineChart({
   const tipX = hx + 10 + tipW > W - padR ? hx - tipW - 10 : hx + 10;
   const tipY = Math.min(Math.max(hy - tipH - 10, padT), H - padB - tipH);
 
+  /** zone of a bpm value: 0-based (0 = Z1); only when thresholds are given */
+  const zoneOf = zoneThresholds
+    ? (y: number): number => {
+        let k = 0;
+        while (k < zoneThresholds.length && y >= (zoneThresholds[k] ?? Infinity)) k++;
+        return k;
+      }
+    : null;
+  const zoneColor = (z: number): string => ZONE_COLORS[Math.min(z, ZONE_COLORS.length - 1)] ?? color;
+
+  // zoned line: each sample-span drawn in the zone color of its midpoint,
+  // batched into one path per zone
+  const zonePaths = zoneOf
+    ? (() => {
+        const byZone = new Map<number, string[]>();
+        for (let i = 1; i < points.length; i++) {
+          const a = points[i - 1];
+          const b = points[i];
+          if (!a || !b) continue;
+          const [ax, ay] = toXY(a);
+          const [bx, by] = toXY(b);
+          const z = zoneOf((a.y + b.y) / 2);
+          const arr = byZone.get(z) ?? [];
+          arr.push(`M${ax.toFixed(1)},${ay.toFixed(1)} L${bx.toFixed(1)},${by.toFixed(1)}`);
+          byZone.set(z, arr);
+        }
+        return [...byZone.entries()]
+          .map(([z, parts]) => ({ z, d: parts.join(" "), fill: zoneColor(z) }))
+          .sort((p, q) => p.z - q.z);
+      })()
+    : null;
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label={label} onMouseMove={svgMove} onMouseLeave={() => setHover(null)}>
       {/* horizontal grid + Y tick labels */}
@@ -251,20 +291,22 @@ function LineChart({
         </text>
       )}
       <text x={W - padR} y={H - 6} textAnchor="end" className="chart-axis-title">date</text>
-      <path d={path} fill="none" stroke={color} strokeWidth={1.75} />
+      {zonePaths
+        ? zonePaths.map((zp) => <path key={zp.z} d={zp.d} fill="none" stroke={zp.fill} strokeWidth={1.75} />)
+        : <path d={path} fill="none" stroke={color} strokeWidth={1.75} />}
       {points.length <= 200 && points.map((p, i) => {
         const [x, y] = toXY(p);
-        return <circle key={i} cx={x} cy={y} r={PointsRadius(points.length)} fill={color} />;
+        return <circle key={i} cx={x} cy={y} r={PointsRadius(points.length)} fill={zoneOf ? zoneColor(zoneOf(p.y)) : color} />;
       })}
       {/* hover: crosshair, highlighted point, tooltip with date + value */}
       {hp && (
         <g>
           <line x1={hx} x2={hx} y1={padT} y2={H - padB} className="chart-cross" />
-          <circle cx={hx} cy={hy} r={PointsRadius(points.length) + 2.5} fill={color} stroke="#14171f" strokeWidth={1.5} />
+          <circle cx={hx} cy={hy} r={PointsRadius(points.length) + 2.5} fill={zoneOf ? zoneColor(zoneOf(hp.y)) : color} stroke="#14171f" strokeWidth={1.5} />
           <g transform={`translate(${tipX},${tipY})`}>
             <rect width={tipW} height={tipH} rx={6} className="chart-tip" />
             <text x={8} y={14} className="chart-tip-date">{spanDays < 1.5 ? `${fmtDay(hp.x)} · ${fmtClock(hp.x)}` : fmtDay(hp.x)}</text>
-            <text x={8} y={28} className="chart-tip-val">{fmtVal(hp.y)}{unit}</text>
+            <text x={8} y={28} className="chart-tip-val">{fmtVal(hp.y)}{unit}{zoneOf ? ` · Z${zoneOf(hp.y) + 1}` : ""}</text>
           </g>
         </g>
       )}
@@ -276,6 +318,27 @@ function PointsRadius(n: number): number {
   if (n > 80) return 1.5;
   if (n > 30) return 2.5;
   return 3.5;
+}
+
+/** HR-zone bpm boundaries recovered from the series + the stored per-zone
+ * minutes: FIT samples arrive ~time-uniform, so the bpm under which exactly
+ * Σ(minutes of zones 1..k-1) of time sits is zone k's lower bound.
+ * Returns the lower bounds of zones 2..n; Infinity for zones no sample ever
+ * reaches (zero higher-zone minutes) so their color can't swallow lower ones. */
+function hrZoneThresholds(hrs: number[], zoneMinutes: number[] | null): number[] | null {
+  if (!zoneMinutes?.length || hrs.length < 10) return null;
+  const total = zoneMinutes.reduce((s, m) => s + m, 0);
+  if (total <= 0) return null;
+  const sorted = [...hrs].sort((a, b) => a - b);
+  const n = sorted.length;
+  const thresholds: number[] = [];
+  let below = 0; // accumulated minutes of zones 1..k-1 (below the boundary)
+  for (let k = 2; k <= zoneMinutes.length; k++) {
+    below += zoneMinutes[k - 2] ?? 0;
+    const r = Math.ceil((below / total) * n);
+    thresholds.push(r >= n ? Infinity : (sorted[Math.min(r, n - 1)] ?? Infinity));
+  }
+  return thresholds.some((t) => Number.isFinite(t)) ? thresholds : null;
 }
 
 // ─── Shared bits ─────────────────────────────────────────────────────────────
@@ -382,19 +445,27 @@ function ActivityDetail({
   }, [id, token, preview]);
 
   // streams come back as labeled numeric arrays aligned with timeMs — plot
-  // against the real sample clock so the axes show time-of-day
+  // against the real sample clock so the axes show time-of-day; the HR chart
+  // gets zone coloring derived from the stored per-zone minutes
   const charts = useMemo(() => {
     const s = rows?.[0]?.series;
     const ts = s?.timeMs ?? [];
     if (!s || ts.length < 2) return [];
-    const out: Array<{ key: string; title: string; color: string; points: Point[]; unit: string }> = [];
+    const out: Array<{ key: string; title: string; color: string; points: Point[]; unit: string; zones: number[] | null }> = [];
     for (const [key, title, color, unit] of SERIES_CHANNELS) {
       const vals = (s as Record<string, number[] | undefined>)[key];
       if (!vals?.length) continue;
-      out.push({ key, title, color, points: vals.map((v, i) => ({ x: ts[i] ?? i, y: v })), unit });
+      out.push({
+        key,
+        title,
+        color,
+        unit,
+        zones: key === "hrBpm" ? hrZoneThresholds(vals, act?.hrZonesMin ?? null) : null,
+        points: vals.map((v, i) => ({ x: ts[i] ?? i, y: v })),
+      });
     }
     return out;
-  }, [rows]);
+  }, [rows, act]);
 
   if (error) return <p className="error">{error}</p>;
   if (!act) return <p>loading…</p>;
@@ -424,7 +495,17 @@ function ActivityDetail({
       {charts.map((c) => (
         <section key={c.key}>
           <h3>{c.title}</h3>
-          <LineChart points={c.points} color={c.color} label={c.title} unit={c.unit} />
+          <LineChart points={c.points} color={c.color} label={c.title} unit={c.unit} zoneThresholds={c.zones} />
+          {c.key === "hrBpm" && c.zones ? (
+            <div className="zone-legend">
+              {Array.from({ length: c.zones.length + 1 }, (_, i) => (
+                <span key={i} className="zone-item">
+                  <span className="zone-sw" style={{ background: ZONE_COLORS[Math.min(i, ZONE_COLORS.length - 1)] }} />
+                  Z{i + 1}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </section>
       ))}
       {rows !== null && charts.length === 0 && !error ? (
