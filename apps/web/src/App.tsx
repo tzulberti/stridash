@@ -124,8 +124,14 @@ function fmtDay(ms: number): string {
   return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
+function fmtClock(ms: number): string {
+  const d = new Date(ms);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
+
 function fmtTick(ms: number, spanDays: number): string {
   const d = new Date(ms);
+  if (spanDays < 1.5) return fmtClock(ms); // activity-length spans: time of day
   if (spanDays >= 545) return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
   if (spanDays >= 60) return `${MONTHS_SHORT[d.getUTCMonth()]} '${String(d.getUTCFullYear() % 100)}`;
   return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
@@ -257,7 +263,7 @@ function LineChart({
           <circle cx={hx} cy={hy} r={PointsRadius(points.length) + 2.5} fill={color} stroke="#14171f" strokeWidth={1.5} />
           <g transform={`translate(${tipX},${tipY})`}>
             <rect width={tipW} height={tipH} rx={6} className="chart-tip" />
-            <text x={8} y={14} className="chart-tip-date">{fmtDay(hp.x)}</text>
+            <text x={8} y={14} className="chart-tip-date">{spanDays < 1.5 ? `${fmtDay(hp.x)} · ${fmtClock(hp.x)}` : fmtDay(hp.x)}</text>
             <text x={8} y={28} className="chart-tip-val">{fmtVal(hp.y)}{unit}</text>
           </g>
         </g>
@@ -295,9 +301,9 @@ const TYPE_EMOJI: Record<string, string> = {
   HIKE: "🥾", SWIM: "🏊", WORKOUT: "🏋️", OTHER: "⌚",
 };
 
-// ─── Activity detail (drill-down) ────────────────────────────────────────────
+// ─── Activity page (/activity/<id> — every scrap of info for one activity) ───
 
-interface ActivitySeriesPoint {
+interface ActivitySeriesRow {
   provider: string;
   sampleCount: number;
   series: {
@@ -320,79 +326,128 @@ interface ActivitySeriesPoint {
   };
 }
 
+/** labeled stream charts for the activity page, in display order */
+const SERIES_CHANNELS: Array<[string, string, string, string]> = [
+  ["speedMs", "Speed", "#30a46c", " m/s"],
+  ["hrBpm", "Heart rate", "#e5484d", " bpm"],
+  ["powerW", "Power", "#6e56cf", " W"],
+  ["cadenceRpm", "Cadence", "#0091ff", " rpm"],
+  ["altitudeM", "Altitude", "#b8860b", " m"],
+  ["respirationRate", "Respiration", "#d6409f", " br/min"],
+  ["staminaPct", "Stamina", "#d29922", " %"],
+  ["stepLengthM", "Step length", "#80a9a0", " m"],
+  ["verticalOscillationM", "Vertical oscillation", "#9c6ade", " m"],
+  ["stanceTimePct", "Ground contact %", "#bf7f26", " %"],
+  ["verticalRatioPct", "Vertical ratio", "#bf7f26", " %"],
+];
+
 function ActivityDetail({
-  activity,
+  id,
   token,
+  preview,
   onBack,
 }: {
-  activity: Activity;
+  id: string;
   token: string;
+  /** summary row known from the dashboard list — instant header on click; a
+   * deep-linked URL has none and just starts with the fetch */
+  preview: Activity | null;
   onBack: () => void;
 }) {
-  const [series, setSeries] = useState<ActivitySeriesPoint[] | null>(null);
+  const [act, setAct] = useState<Activity | null>(preview);
+  const [rows, setRows] = useState<ActivitySeriesRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    api<{ items: Array<Activity & { series: ActivitySeriesPoint[] }> }>(
-      `/activities/${activity.id}`,
+    setRows(null);
+    setError(null);
+    setAct(preview);
+    api<{ items: Array<Activity & { series: ActivitySeriesRow[] }> }>(
+      `/activities/${id}`,
       { token },
     )
-      .then((r) => { if (alive) setSeries(r.items[0]?.series ?? []); })
+      .then((r) => {
+        if (!alive) return;
+        const item = r.items[0];
+        if (!item) {
+          setError("activity not found");
+          return;
+        }
+        setAct(item);
+        setRows(item.series);
+      })
       .catch((e) => { if (alive) setError(String(e)); });
     return () => { alive = false; };
-  }, [activity.id, token]);
+  }, [id, token, preview]);
 
+  // streams come back as labeled numeric arrays aligned with timeMs — plot
+  // against the real sample clock so the axes show time-of-day
   const charts = useMemo(() => {
-    const out: Array<{ title: string; color: string; points: Point[]; unit: string }> = [];
-    const s = series?.[0]?.series ?? {};
-    const ts = s.timeMs ?? [];
-    if (ts.length < 2) return out;
-    const push = (key: string, title: string, color: string, unit: string) => {
+    const s = rows?.[0]?.series;
+    const ts = s?.timeMs ?? [];
+    if (!s || ts.length < 2) return [];
+    const out: Array<{ key: string; title: string; color: string; points: Point[]; unit: string }> = [];
+    for (const [key, title, color, unit] of SERIES_CHANNELS) {
       const vals = (s as Record<string, number[] | undefined>)[key];
-      if (!vals?.length) return;
-      // series stores only the samples where a channel exists — align by index
-      out.push({ title, color, points: vals.map((v, i) => ({ x: i, y: v })), unit });
-    };
-    push("hrBpm", "Heart rate", "#e5484d", "");
-    push("powerW", "Power", "#6e56cf", " W");
-    push("speedMs", "Speed (m/s)", "#30a46c", "");
-    push("cadenceRpm", "Cadence", "#0091ff", "");
-    push("altitudeM", "Altitude", "#b8860b", "");
-    push("respirationRate", "Respiration (br/min)", "#d6409f", "");
-    push("staminaPct", "Stamina (%)", "#d29922", " %");
-    push("stepLengthM", "Step length (m)", "#80a9a0", " m");
-    push("verticalOscillationM", "Vertical oscillation (m)", "#9c6ade", " m");
-    push("stanceTimePct", "Ground contact (% of stride)", "#bf7f26", " %");
-    push("verticalRatioPct", "Vertical ratio (%)", "#bf7f26", " %");
+      if (!vals?.length) continue;
+      out.push({ key, title, color, points: vals.map((v, i) => ({ x: ts[i] ?? i, y: v })), unit });
+    }
     return out;
-  }, [series]);
+  }, [rows]);
+
+  if (error) return <p className="error">{error}</p>;
+  if (!act) return <p>loading…</p>;
 
   return (
     <div>
-      <button className="btn" onClick={onBack}>← back</button>
-      <h2>{TYPE_EMOJI[activity.type] ?? "⌚"} {activity.headline}</h2>
+      <button className="btn" onClick={onBack}>← back to dashboard</button>
+      <h2>{TYPE_EMOJI[act.type] ?? "⌚"} {act.headline}</h2>
       <div className="cards">
-        <Card label="Start" value={fmtDate(activity.startTime)} />
-        <Card label="Distance" value={fmtKm(activity.distanceM)} />
-        <Card label="Duration" value={fmtMin(activity.durationS)} />
-        <Card label="Moving" value={fmtMin(activity.movingTimeS)} />
-        <Card label="Avg / max HR" value={has(activity.avgHr) || has(activity.maxHr) ? `${activity.avgHr ?? "—"} / ${activity.maxHr ?? "—"} bpm` : "—"} />
-        <Card label="Avg / max power" value={has(activity.avgPowerW) || has(activity.maxPowerW) ? `${activity.avgPowerW ?? "—"} / ${activity.maxPowerW ?? "—"} W` : "—"} />
-        <Card label="Calories" value={asStr(activity.caloriesKcal, " kcal")} />
-        {activity.indoor ? <Card label="Mode" value="indoor" /> : null}
+        <Card label="Start" value={fmtDate(act.startTime)} />
+        <Card label="Distance" value={fmtKm(act.distanceM)} />
+        <Card label="Duration" value={fmtMin(act.durationS)} />
+        <Card label="Moving" value={fmtMin(act.movingTimeS)} />
+        <Card label="Avg / max HR" value={has(act.avgHr) || has(act.maxHr) ? `${act.avgHr ?? "—"} / ${act.maxHr ?? "—"} bpm` : "—"} />
+        <Card label="Avg / max power" value={has(act.avgPowerW) || has(act.maxPowerW) ? `${act.avgPowerW ?? "—"} / ${act.maxPowerW ?? "—"} W` : "—"} />
+        <Card label="Avg / max speed" value={has(act.avgSpeedMs) || has(act.maxSpeedMs) ? `${fmtSpeed(act.avgSpeedMs)} / ${fmtSpeed(act.maxSpeedMs)}` : "—"} />
+        <Card label="Avg / max cadence" value={has(act.avgCadence) || has(act.maxCadence) ? `${act.avgCadence ?? "—"} / ${act.maxCadence ?? "—"} rpm` : "—"} />
+        <Card label="Ascent / descent" value={has(act.totalAscentM) || has(act.totalDescentM) ? `${act.totalAscentM ?? "—"} / ${act.totalDescentM ?? "—"} m` : "—"} />
+        <Card label="Elev high / low" value={has(act.elevationHighM) || has(act.elevationLowM) ? `${act.elevationLowM ?? "—"} / ${act.elevationHighM ?? "—"} m` : "—"} />
+        <Card label="Calories" value={asStr(act.caloriesKcal, " kcal")} />
+        {act.trainingLoad != null ? <Card label="Training load" value={String(act.trainingLoad)} /> : null}
+        {act.indoor ? <Card label="Mode" value="indoor" /> : null}
       </div>
       {error && <p className="error">{error}</p>}
-      {series === null ? <p>loading series…</p> : (
-        charts.length
-          ? charts.map((c) => (
-            <section key={c.title}>
-              <h3>{c.title}</h3>
-              <LineChart points={c.points} color={c.color} label={c.title} unit={c.unit} />
-            </section>
-          ))
-          : !error ? <p className="empty">No time series stored for this activity.</p> : null
-      )}
+
+      {rows === null && !error ? <p>loading series…</p> : null}
+      {charts.map((c) => (
+        <section key={c.key}>
+          <h3>{c.title}</h3>
+          <LineChart points={c.points} color={c.color} label={c.title} unit={c.unit} />
+        </section>
+      ))}
+      {rows !== null && charts.length === 0 && !error ? (
+        <p className="empty">No time series stored for this activity.</p>
+      ) : null}
+
+      {act.hrZonesMin?.length ? (
+        <section>
+          <h3>Heart-rate zones</h3>
+          <table className="list">
+            <thead>
+              <tr><th>zone</th><th>minutes</th></tr>
+            </thead>
+            <tbody>
+              {act.hrZonesMin.map((min, i) => (
+                <tr key={i}><td>{i + 1}</td><td>{min} min</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+
+      {act.notes ? <section><h3>Notes</h3><p>{act.notes}</p></section> : null}
     </div>
   );
 }
@@ -667,6 +722,17 @@ const BOOT_URL = (() => {
   };
 })();
 
+// ─── Client routing — the activity page lives at /activity/<id> ──────────────
+
+type Route = { name: "dashboard" } | { name: "activity"; id: string };
+
+/** parse the current location; anything not /activity/<id> is the dashboard */
+function parseRoute(): Route {
+  const m = /^\/activity\/([^/?#]+)/.exec(window.location.pathname);
+  const id = m?.[1];
+  return id ? { name: "activity", id } : { name: "dashboard" };
+}
+
 export default function App() {
   const [token, setToken] = useState<string | null>(() => readToken());
   const [email, setEmail] = useState("");
@@ -678,7 +744,7 @@ export default function App() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [sleep, setSleep] = useState<SleepRow[]>([]);
   const [wellness, setWellness] = useState<DailyWellnessRow[]>([]);
-  const [detail, setDetail] = useState<Activity | null>(null);
+  const [route, setRoute] = useState<Route>(parseRoute);
   const [bodyMetric, setBodyMetric] = useState<BodyMetricKey>(BOOT_URL.body);
   const [sleepMetric, setSleepMetric] = useState<SleepMetricKey>(BOOT_URL.sleep);
   const [dailyMetric, setDailyMetric] = useState<DailyMetricKey>(BOOT_URL.daily);
@@ -754,6 +820,12 @@ export default function App() {
   useEffect(() => {
     if (token) void load(token);
   }, [token, load]);
+  // browser back/forward between the dashboard and activity pages
+  useEffect(() => {
+    const onPop = () => setRoute(parseRoute());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
@@ -813,9 +885,21 @@ export default function App() {
     setFromDate(new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10));
   }
 
+  function openActivity(id: string): void {
+    window.history.pushState(null, "", `/activity/${id}`);
+    setRoute({ name: "activity", id });
+  }
+  // the query string is rewritten by the filter-sync effect once we're back
+  function goHome(): void {
+    window.history.pushState(null, "", "/");
+    setRoute({ name: "dashboard" });
+  }
+
   // every filter change rewrites the query string, so copying the URL shares
-  // the exact dashboard view (range + selected chart metrics)
+  // the exact dashboard view (range + selected chart metrics). Skipped on the
+  // activity route so deep links to /activity/<id> keep their path.
   useEffect(() => {
+    if (route.name !== "dashboard") return;
     const q = new URLSearchParams();
     if (fromDate) q.set("from", fromDate);
     if (toDate) q.set("to", toDate);
@@ -824,7 +908,7 @@ export default function App() {
     if (dailyMetric !== "steps") q.set("daily", dailyMetric);
     const s = q.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${s ? `?${s}` : ""}${window.location.hash}`);
-  }, [fromDate, toDate, bodyMetric, sleepMetric, dailyMetric]);
+  }, [route, fromDate, toDate, bodyMetric, sleepMetric, dailyMetric]);
 
   const weighIns = useMemo(() => [...measurements].sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime()), [measurements]);
 
@@ -864,20 +948,42 @@ export default function App() {
     );
   }
 
+  const header = (
+    <header>
+      <h1>🦾 Stridash</h1>
+      <div className="sources">
+        {connections.map((c) => (
+          <span key={c.id} className={`pill ${c.status.toLowerCase()}`}>
+            {c.provider.toLowerCase()} · {c.status.toLowerCase()}{c.lastSyncedAt ? ` · ${fmtDate(c.lastSyncedAt)}` : ""}
+          </span>
+        ))}
+        {connections.length === 0 && <span className="pill">no connections yet — connect a provider via the API/CLI</span>}
+      </div>
+      <button className="btn ghost" onClick={() => { clearTokens(); setToken(null); }}>sign out</button>
+    </header>
+  );
+  const footer = <footer>Stridash · all data read from your own Stridash instance</footer>;
+
+  // the activity page is its own URL: /activity/<id>, shareable like the filters
+  if (route.name === "activity") {
+    return (
+      <main>
+        {header}
+        <ActivityDetail
+          id={route.id}
+          token={token ?? ""}
+          preview={activities.find((a) => a.id === route.id) ?? null}
+          onBack={goHome}
+        />
+        {loading && <p>Loading…</p>}
+        {footer}
+      </main>
+    );
+  }
+
   return (
     <main>
-      <header>
-        <h1>🦾 Stridash</h1>
-        <div className="sources">
-          {connections.map((c) => (
-            <span key={c.id} className={`pill ${c.status.toLowerCase()}`}>
-              {c.provider.toLowerCase()} · {c.status.toLowerCase()}{c.lastSyncedAt ? ` · ${fmtDate(c.lastSyncedAt)}` : ""}
-            </span>
-          ))}
-          {connections.length === 0 && <span className="pill">no connections yet — connect a provider via the API/CLI</span>}
-        </div>
-        <button className="btn ghost" onClick={() => { clearTokens(); setToken(null); }}>sign out</button>
-      </header>
+      {header}
 
       {error && <p className="error">{error}</p>}
 
@@ -1052,18 +1158,12 @@ export default function App() {
                 <td>{fmtSpeed(a.avgSpeedMs)}</td>
                 <td>{a.avgHr ?? "—"}</td>
                 <td>{a.avgPowerW ?? "—"}{has(a.avgPowerW) ? " W" : ""}</td>
-                <td><a href="#" onClick={(e) => { e.preventDefault(); setDetail(a); }}>details</a></td>
+                <td><a href={`/activity/${a.id}`} onClick={(e) => { e.preventDefault(); openActivity(a.id); }}>details</a></td>
               </tr>
             ))}
           </tbody>
         </table>
       </section>
-
-      {detail && (
-        <section className="detail">
-          <ActivityDetail activity={detail} token={token} onBack={() => setDetail(null)} />
-        </section>
-      )}
 
       {loading && <p>Loading…</p>}
       <footer>Stridash · all data read from your own Stridash instance</footer>
