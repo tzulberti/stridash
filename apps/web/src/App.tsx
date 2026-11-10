@@ -889,8 +889,9 @@ const PROVIDER_LABEL: Record<string, string> = {
   OMRON: "Omron",
   IGPSPORT: "iGPSPORT",
   GARMIN: "Garmin",
+  ZWIFT: "Zwift",
 };
-type ProviderKey = "omron" | "igpsport" | "garmin";
+type ProviderKey = "omron" | "igpsport" | "garmin" | "zwift";
 
 type ConnectResponseJson = {
   mfaRequired?: boolean;
@@ -945,7 +946,9 @@ function ConnectionsSection(props: {
           ? { provider: "OMRON", identifier, password, country }
           : provider === "igpsport"
             ? { provider: "IGPSPORT", username: identifier, password, region: "intl" }
-            : { provider: "GARMIN", email: identifier, password };
+            : provider === "zwift"
+              ? { provider: "ZWIFT", username: identifier, password }
+              : { provider: "GARMIN", email: identifier, password };
       const res = await api<ConnectResponseJson>("/connections", { method: "POST", body, token });
       if (res.mfaRequired) {
         setMfa({ id: res.connection?.id ?? "", method: res.method ?? "code" });
@@ -1063,6 +1066,7 @@ function ConnectionsSection(props: {
           <option value="omron">Omron — body scale / blood pressure (KRD-703T and friends)</option>
           <option value="igpsport">iGPSPORT — rides</option>
           <option value="garmin">Garmin — activities, sleep, daily metrics</option>
+          <option value="zwift">Zwift — indoor rides and runs (virtual)</option>
         </select>
         <input
           value={identifier}

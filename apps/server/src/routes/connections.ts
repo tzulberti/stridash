@@ -24,6 +24,8 @@ import { decryptToken } from "../crypto.js";
 import { redactProviderDetail } from "../redact.js";
 import { syncIgpSportConnection } from "../services/igpsport-sync.js";
 import { syncOmronConnection } from "../services/omron-sync.js";
+import { syncZwiftConnection } from "../services/zwift-sync.js";
+import { ZwiftClient, ZwiftError, zwiftSignIn } from "../providers/zwift/client.js";
 import type { Env } from "../env.js";
 
 const omronConnectSchema = z.object({
@@ -48,6 +50,16 @@ const igpsportConnectSchema = z.object({
   region: z.enum(["intl", "cn"]).default("intl"),
 });
 
+const zwiftConnectSchema = z.object({
+  provider: z.literal("ZWIFT"),
+  /** Zwift account identifier — the rider's email. */
+  username: z.string().min(1),
+  /** Account password — verified once via the password grant, never stored.
+   * Sessions live on via the ROTATING refresh-token grant ("Zwift Game
+   * Client" client_id must match the token audience). */
+  password: z.string().min(1),
+});
+
 const garminConnectSchema = z.object({
   provider: z.literal("GARMIN"),
   /** Garmin account email (the SSO `username` field). */
@@ -68,14 +80,15 @@ const garminMfaSchema = z.object({
  * rethrow into the global 500 handler so real bugs keep their stack trace. */
 async function syncFailure(c: Context, err: unknown, connectionId: string, provider: string): Promise<Response> {
   const name = provider.toLowerCase();
-  const detail = err instanceof OmronConnectError || err instanceof IgpSportError
+  const detail = err instanceof OmronConnectError || err instanceof IgpSportError || err instanceof ZwiftError
     ? err.detail
     : err instanceof GarminError
       ? err.detail
       : undefined;
-  if (err instanceof OmronConnectError || err instanceof IgpSportError || err instanceof GarminError) {
+  if (err instanceof OmronConnectError || err instanceof IgpSportError || err instanceof ZwiftError || err instanceof GarminError) {
     const httpStatus = err instanceof GarminError ? undefined : err.status;
-    const credentialsRejected = err instanceof GarminError && err.kind === "CREDENTIALS";
+    const credentialsRejected = err instanceof GarminError && err.kind === "CREDENTIALS"
+      || err instanceof ZwiftError && err.kind === "CREDENTIALS";
     // providers sometimes echo the credentials they just rejected — redact
     // them before the detail reaches the client or the sync-log writer
     const safeDetail = redactProviderDetail(detail);
@@ -135,6 +148,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     const body = await c.req.json().catch(() => null);
     if (body?.provider === "IGPSPORT") return connectIgpSport(c, env, igpsportConnectSchema.safeParse(body));
     if (body?.provider === "GARMIN") return connectGarmin(c, env, garminConnectSchema.safeParse(body));
+    if (body?.provider === "ZWIFT") return connectZwift(c, env, zwiftConnectSchema.safeParse(body));
     const parsed = omronConnectSchema.safeParse(body);
     if (!parsed.success) {
       return c.json({ error: "Invalid body", detail: parsed.error.flatten().fieldErrors }, 400);
@@ -276,6 +290,84 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         refreshTokenEnc: encryptToken(password, env.STRIDASH_ENC_KEY),
         tokenExpiresAt: expiresAt,
         config: { igpsport: { region, username } } as never,
+      },
+      select: {
+        id: true,
+        provider: true,
+        providerUserId: true,
+        status: true,
+        scopes: true,
+        config: true,
+        lastSyncedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return c.json(connection, 201);
+  }
+
+  /**
+   * Zwift connect: one password-grant handshake, then the athlete id is
+   * read from /api/profiles/me. The password is used once (never stored);
+   * the returned REFRESH token carries every future session, rotating on
+   * each use.
+   */
+  async function connectZwift(c: Context, env: Env, parsed: ReturnType<typeof zwiftConnectSchema.safeParse>) {
+    if (!parsed.success) {
+      return c.json({ error: "Invalid body", detail: parsed.error.flatten().fieldErrors }, 400);
+    }
+    const { username, password } = parsed.data;
+
+    // password grant — Zwift answers bad credentials with 400/401 invalid_grant
+    const tokens = await zwiftSignIn(username, password).catch((err: unknown) => {
+      if (err instanceof ZwiftError) {
+        return c.json(
+          {
+            error: `Zwift login failed — ${err.message}`,
+            kind: err.kind,
+            providerDetail: redactProviderDetail(err.detail),
+          },
+          err.kind === "CREDENTIALS" ? 401 : 502,
+        );
+      }
+      throw err;
+    });
+    if (!("accessToken" in tokens)) return tokens; // the guard above returned a c.json response
+
+    const bootstrap = new ZwiftClient("").withAccessToken(tokens.accessToken);
+    let providerUserId = username;
+    try {
+      const me = await bootstrap.getMe();
+      if (me.id != null) providerUserId = String(me.id);
+    } catch {
+      // identity endpoint is best-effort; the connector falls back to the username
+    }
+
+    const connection = await prisma.connection.upsert({
+      where: {
+        userId_provider_providerUserId: {
+          userId: c.get("userId"),
+          provider: "ZWIFT",
+          providerUserId,
+        },
+      },
+      create: {
+        userId: c.get("userId"),
+        provider: "ZWIFT",
+        providerUserId,
+        status: "ACTIVE",
+        accessTokenEnc: encryptToken(tokens.accessToken, env.STRIDASH_ENC_KEY),
+        refreshTokenEnc: tokens.refreshToken ? encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY) : null,
+        tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
+        scopes: ["activities"],
+        config: { zwift: { username } } as never,
+      },
+      update: {
+        status: "ACTIVE",
+        accessTokenEnc: encryptToken(tokens.accessToken, env.STRIDASH_ENC_KEY),
+        refreshTokenEnc: tokens.refreshToken ? encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY) : null,
+        tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
+        config: { zwift: { username } } as never,
       },
       select: {
         id: true,
@@ -520,11 +612,15 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       where: { id, userId: c.get("userId") },
     });
     if (!connection) return c.json({ error: "Not found" }, 404);
-    if (connection.provider !== "OMRON" && connection.provider !== "IGPSPORT" && connection.provider !== "GARMIN") {
+    if (connection.provider !== "OMRON" && connection.provider !== "IGPSPORT" && connection.provider !== "GARMIN" && connection.provider !== "ZWIFT") {
       return c.json({ error: "Provider does not support sync yet" }, 501);
     }
 
     try {
+      if (connection.provider === "ZWIFT") {
+        const result = await syncZwiftConnection(env, connection);
+        return c.json({ result });
+      }
       if (connection.provider === "IGPSPORT") {
         const result = await syncIgpSportConnection(env, connection);
         return c.json({ result });
