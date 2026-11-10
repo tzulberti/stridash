@@ -86,6 +86,8 @@ export function activityHeadline(row: IgpSportActivityRow): string {
  */
 export interface ActivityInput {
   headline: string;
+  /// virtual-platform workout identity (Zwift names workouts "Zwift - <name>")
+  workoutName: string | null;
   type: ActivityType;
   startTime: Date;
   durationS: number;
@@ -205,6 +207,7 @@ export function fitToActivity(
 
   const activity: ActivityInput = {
     headline: activityHeadline(row),
+    workoutName: null,
     type: exerciseTypeToActivity(row.exerciseType),
     startTime,
     durationS: durationS || (typeof row.totalMovingTime === "number" ? row.totalMovingTime : 0)

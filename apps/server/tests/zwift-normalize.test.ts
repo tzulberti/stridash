@@ -50,6 +50,8 @@ describe("mapZwiftActivityRow", () => {
     expect(input!.avgCadence).toBe(87);
     expect(input!.totalAscentM).toBe(312.5);
     expect(input!.caloriesKcal).toBe(453);
+    // free rides have no workout name
+    expect(input!.workoutName).toBeNull();
     // Zwift is always indoor
     expect(input!.indoor).toBe(true);
     expect(input!.raw).toMatchObject({ provider: "ZWIFT" });
@@ -60,6 +62,28 @@ describe("mapZwiftActivityRow", () => {
     expect(input).toBeTruthy();
     expect(input!.headline).toBe("Zwift cycling");
     expect(input!.durationS).toBe(0);
+    expect(input!.workoutName).toBeNull();
+  });
+
+  it("extracts the workout name from the 'Zwift - <workout>' convention", () => {
+    const input = mapZwiftActivityRow({
+      sport: "CYCLING",
+      name: "Zwift - Half an Hour of Relaxation",
+      startDate: "2026-11-08T18:00:00.000Z",
+    });
+    expect(input).toBeTruthy();
+    expect(input!.headline).toBe("Zwift - Half an Hour of Relaxation");
+    expect(input!.workoutName).toBe("Half an Hour of Relaxation");
+  });
+
+  it("keeps a bare 'Zwift - ' prefix headline without an empty workout name", () => {
+    const input = mapZwiftActivityRow({
+      sport: "CYCLING",
+      name: "Zwift - ",
+      startDate: "2026-11-08T18:00:00.000Z",
+    });
+    expect(input).toBeTruthy();
+    expect(input!.workoutName).toBeNull();
   });
 
   it("returns null without a usable start date", () => {

@@ -155,6 +155,7 @@ async function upsertZwiftActivity(
     data: {
       userId: connection.userId,
       headline: activity.headline,
+      workoutName: activity.workoutName,
       type: activity.type,
       startTime: activity.startTime,
       durationS: activity.durationS,

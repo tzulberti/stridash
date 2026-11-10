@@ -248,6 +248,9 @@ model Activity {
   id           String       @id @db.Uuid @default(uuid(7))
   userId       String       @db.Uuid @map("user_id")
   headline     String
+  /// Zwift workout identity ("Zwift - <workout>"), null for free rides and
+  /// other providers
+  workoutName  String?      @map("workout_name")
   type         ActivityType
   /// Dedup key component — see docs/data-model.md
   startTime    DateTime     @map("start_time") @db.Timestamptz(6)

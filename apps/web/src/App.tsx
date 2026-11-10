@@ -732,6 +732,7 @@ function ActivityDetail({
     <div>
       <button className="btn" onClick={onBack}>← back to dashboard</button>
       <h2>{TYPE_EMOJI[act.type] ?? "⌚"} {act.headline}</h2>
+      {act.workoutName && <p className="conn-sub">workout: {act.workoutName}</p>}
       <div className="metric-tabs">
         <button className={`btn ghost ${xAxis === "time" ? "active" : ""}`} onClick={() => setXAxis("time")}>time</button>
         <button
@@ -1873,7 +1874,7 @@ export default function App() {
         <table className="list">
           <thead>
             <tr>
-              <th></th><th>when</th><th>type</th><th>provider</th><th>distance</th><th>time</th><th>avg speed</th><th>HR</th><th>power</th><th></th>
+              <th></th><th>when</th><th>type</th><th>provider</th><th>workout</th><th>distance</th><th>time</th><th>avg speed</th><th>HR</th><th>power</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -1883,6 +1884,7 @@ export default function App() {
                 <td>{fmtDate(a.startTime)}</td>
                 <td>{a.type}</td>
                 <td>{(a.providers ?? []).map((p) => p.toLowerCase()).join(", ")}</td>
+                <td>{a.workoutName ?? "—"}</td>
                 <td>{fmtKm(a.distanceM)}</td>
                 <td>{fmtMin(a.durationS)}</td>
                 <td>{fmtSpeed(a.avgSpeedMs)}</td>

@@ -34,8 +34,12 @@ export function mapZwiftActivityRow(act: ZwiftActivity): ActivityInput | null {
     ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000))
     : 0;
   const sport = act.sport ?? "";
+  const headline = act.name?.trim() || `Zwift ${sport.toLowerCase() || "activity"}`;
   return {
-    headline: act.name?.trim() || `Zwift ${sport.toLowerCase() || "activity"}`,
+    headline,
+    // Zwift's workout-activity naming convention is "Zwift - <workout name>"
+    // ("Half an Hour of Relaxation"); free rides / worlds get other headlines
+    workoutName: headline.startsWith("Zwift - ") ? headline.slice("Zwift - ".length) || null : null,
     type: mapZwiftType(sport),
     startTime: start,
     durationS,

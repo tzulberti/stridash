@@ -112,6 +112,8 @@ export interface Activity {
   id: string;
   userId: string;
   headline: string;
+  /** workout identity for virtual platforms (Zwift "Zwift - <workout>"); null otherwise */
+  workoutName?: string | null;
   type: ActivityType;
   startTime: string; // ISO datetime — dedup key component
   durationS: number;

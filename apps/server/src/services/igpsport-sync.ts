@@ -50,6 +50,7 @@ function toActivityCreate(userId: string, connectionId: string, input: ActivityI
   return {
     userId,
     headline: input.headline,
+    workoutName: input.workoutName,
     type: input.type,
     startTime: input.startTime,
     durationS: input.durationS,
@@ -250,6 +251,7 @@ async function ingestRide(
     : new Date(0);
   const activity: ActivityInput = {
     headline: row.title ?? row.name ?? "iGPSPORT ride",
+    workoutName: null,
     type: row.exerciseType === 0 ? "RIDE" : "OTHER",
     startTime,
     durationS: row.totalMovingTime ?? row.recordTime ?? 0,
