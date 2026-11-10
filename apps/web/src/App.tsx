@@ -1255,6 +1255,9 @@ export default function App() {
       await load(token);
     } catch (err) {
       setError(String(err));
+      // rejected credentials flip the connection to ERROR server-side —
+      // reload so the pill shows red instead of a stale ACTIVE state
+      await load(token).catch(() => undefined);
     } finally {
       setSyncingId(null);
     }

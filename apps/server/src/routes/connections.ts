@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireUserId } from "../auth.js";
@@ -20,6 +21,7 @@ import { verifyToken, getProfile } from "../providers/garmin/api.js";
 import { syncGarminConnection } from "../services/garmin-sync.js";
 import { syncGarminWellness } from "../services/garmin-wellness.js";
 import { decryptToken } from "../crypto.js";
+import { redactProviderDetail } from "../redact.js";
 import { syncIgpSportConnection } from "../services/igpsport-sync.js";
 import { syncOmronConnection } from "../services/omron-sync.js";
 import type { Env } from "../env.js";
@@ -59,6 +61,42 @@ const garminMfaSchema = z.object({
   /** Verification code from the second-factor channel (email/SMS/TOTP). */
   code: z.string().min(1).max(12),
 });
+
+/** Turn a provider sync throw into an actionable response: rejected credentials
+ * (401/403) mark the connection ERROR and ask for a reconnect, while other known
+ * provider failures answer with the provider's own message. Unknown throws
+ * rethrow into the global 500 handler so real bugs keep their stack trace. */
+async function syncFailure(c: Context, err: unknown, connectionId: string, provider: string): Promise<Response> {
+  const name = provider.toLowerCase();
+  const detail = err instanceof OmronConnectError || err instanceof IgpSportError
+    ? err.detail
+    : err instanceof GarminError
+      ? err.detail
+      : undefined;
+  if (err instanceof OmronConnectError || err instanceof IgpSportError || err instanceof GarminError) {
+    const httpStatus = err instanceof GarminError ? undefined : err.status;
+    const credentialsRejected = err instanceof GarminError && err.kind === "CREDENTIALS";
+    // providers sometimes echo the credentials they just rejected — redact
+    // them before the detail reaches the client or the sync-log writer
+    const safeDetail = redactProviderDetail(detail);
+    if (httpStatus === 401 || httpStatus === 403 || credentialsRejected) {
+      await prisma.connection
+        .update({ where: { id: connectionId }, data: { status: "ERROR" } })
+        .catch(() => undefined); // the response below still tells the user
+      return c.json({
+        error: `${name} rejected the stored token — reconnect the account (POST /connections) and delete this connection`,
+        provider: name,
+        providerDetail: safeDetail,
+      }, 502);
+    }
+    return c.json({
+      error: `${name} sync failed — ${err.message}`,
+      provider: name,
+      providerDetail: safeDetail,
+    }, 502);
+  }
+  throw err;
+}
 
 export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   const routes = new Hono<{ Variables: { userId: string } }>();
@@ -486,24 +524,28 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       return c.json({ error: "Provider does not support sync yet" }, 501);
     }
 
-    if (connection.provider === "IGPSPORT") {
-      const result = await syncIgpSportConnection(env, connection);
-      return c.json({ result });
-    }
-    if (connection.provider === "GARMIN") {
-      const result = await syncGarminConnection(env, connection);
-      // sleep/daily-metrics pass runs below the activities so one tap syncs
-      // both; a wellness failure doesn't invalidate the activities result
-      let wellness: Awaited<ReturnType<typeof syncGarminWellness>> | undefined;
-      try {
-        wellness = await syncGarminWellness(env, connection);
-      } catch (err) {
-        console.error("[garmin] wellness sync failed:", err);
+    try {
+      if (connection.provider === "IGPSPORT") {
+        const result = await syncIgpSportConnection(env, connection);
+        return c.json({ result });
       }
-      return c.json({ result, wellness });
+      if (connection.provider === "GARMIN") {
+        const result = await syncGarminConnection(env, connection);
+        // sleep/daily-metrics pass runs below the activities so one tap syncs
+        // both; a wellness failure doesn't invalidate the activities result
+        let wellness: Awaited<ReturnType<typeof syncGarminWellness>> | undefined;
+        try {
+          wellness = await syncGarminWellness(env, connection);
+        } catch (err) {
+          console.error("[garmin] wellness sync failed:", err);
+        }
+        return c.json({ result, wellness });
+      }
+      const result = await syncOmronConnection(env, connection);
+      return c.json({ result });
+    } catch (err) {
+      return syncFailure(c, err, id, connection.provider);
     }
-    const result = await syncOmronConnection(env, connection);
-    return c.json({ result });
   });
 
   // ── Sync history ───────────────────────────────────────────────────────────
