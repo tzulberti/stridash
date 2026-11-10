@@ -70,6 +70,8 @@ export interface ZwiftActivity {
   name?: string;
   startDate?: string;
   endDate?: string;
+  /** Zwift detail rows carry elapsed — identical to endDate−startDate */
+  movingTimeInMs?: number;
   distanceInMeters?: number;
   avgSpeedInMetersPerSecond?: number;
   maxSpeedInMetersPerSecond?: number;
@@ -78,6 +80,7 @@ export interface ZwiftActivity {
   avgWatts?: number;
   maxWatts?: number;
   avgCadenceInRotationsPerMinute?: number;
+  maxCadenceInRotationsPerMinute?: number;
   totalElevationInMeters?: number;
   calories?: number;
   fitnessData?: { fullDataUrl?: string };

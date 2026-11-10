@@ -81,8 +81,13 @@ streams would invite nonsense on any geo feature.
   race-results endpoints not covered by this connector).
 - **No HR-zone time / training load**: Zwift reports neither; both stay null
   (web trainingLoad / hr zone tables degrade gracefully).
-- **max cadence / moving time**: not fielded by Zwift even on the detail
-  payload; null.
+
+## Known quirks
+
+- **IDs exceed the safe integer range** (`> 2^53`) — always use the `id_str` /
+  `activityId_str` string fields; the numeric `id`/`activityId`
+  doubles lose precision silently on `JSON.parse` and produce 404s (this bit
+  the first stream ingest — fixed via `activityId: string` plumbing).
 - Plan the force-sync tap right after finishing a Zwift session — the stream
   URL is the same one the Zwift web site graphs, and has historically stayed
   fetchable for older activities, but treat sample availability empirically.

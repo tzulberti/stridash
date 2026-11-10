@@ -39,7 +39,7 @@ export function mapZwiftActivityRow(act: ZwiftActivity): ActivityInput | null {
     type: mapZwiftType(sport),
     startTime: start,
     durationS,
-    movingTimeS: null, // Zwift reports elapsed only
+    movingTimeS: act.movingTimeInMs != null ? Math.round(act.movingTimeInMs / 1000) : null,
     distanceM: act.distanceInMeters ?? null,
     avgSpeedMs: act.avgSpeedInMetersPerSecond ?? null,
     maxSpeedMs: act.maxSpeedInMetersPerSecond ?? null,
@@ -52,7 +52,7 @@ export function mapZwiftActivityRow(act: ZwiftActivity): ActivityInput | null {
     avgPowerW: act.avgWatts != null ? Math.round(act.avgWatts) : null,
     maxPowerW: act.maxWatts != null ? Math.round(act.maxWatts) : null,
     avgCadence: act.avgCadenceInRotationsPerMinute != null ? Math.round(act.avgCadenceInRotationsPerMinute) : null,
-    maxCadence: null,
+    maxCadence: act.maxCadenceInRotationsPerMinute != null ? Math.round(act.maxCadenceInRotationsPerMinute) : null,
     // Zwift's calorie figure is mechanical-work-like (≈1:1 with kJ); stored as
     // kcal which is the same order of magnitude
     caloriesKcal: act.calories != null ? Math.round(act.calories) : null,

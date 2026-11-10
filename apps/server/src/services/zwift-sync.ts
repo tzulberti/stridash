@@ -90,17 +90,36 @@ async function zwiftRefreshWithPersist(env: Env, connection: ConnectionLike, ref
   return tokens;
 }
 
-/** Fetch the URL (resolved against the API base) and map it to Stridash series. */
-async function fetchSeries(client: ZwiftClient, act: ZwiftActivity): Promise<ZwiftSeries | null> {
+/** Fetch the URL (resolved against the API base) and map it to Stridash series.
+ * activityId MUST be the exact-precision id_str: these ids exceed Number's
+ * safe range, and a rounded-off numeric id 404s server-side. */
+async function fetchSeries(client: ZwiftClient, activityId: string, act: ZwiftActivity): Promise<ZwiftSeries | null> {
   let fullDataUrl = act.fitnessData?.fullDataUrl;
-  if (!fullDataUrl && act.id != null) {
+  if (!fullDataUrl) {
     // the list row often omits it — the detail version carries it
-    const detail = await client.getActivityDetail(String(act.id));
+    const detail = await client.getActivityDetail(activityId);
     fullDataUrl = detail.fitnessData?.fullDataUrl;
   }
   if (!fullDataUrl) return null;
   const raw = await client.getFitnessData(fullDataUrl);
   return toZwiftSeries(raw);
+}
+
+/** Persist (or replace) an activity's ZWIFT series row. */
+async function storeSeries(activityId: string, series: ZwiftSeries): Promise<void> {
+  await prisma.activityDataPoint.upsert({
+    where: { activityId_provider: { activityId, provider: "ZWIFT" } },
+    create: {
+      activityId,
+      provider: "ZWIFT",
+      sampleCount: series.timeMs.length,
+      series: series as unknown as Prisma.InputJsonValue,
+    },
+    update: {
+      sampleCount: series.timeMs.length,
+      series: series as unknown as Prisma.InputJsonValue,
+    },
+  });
 }
 
 /** Upsert one activity row (+ series + source registration). Dedup mirrors
@@ -168,19 +187,7 @@ async function upsertZwiftActivity(
   });
 
   if (series) {
-    await prisma.activityDataPoint.upsert({
-      where: { activityId_provider: { activityId: created.id, provider: "ZWIFT" } },
-      create: {
-        activityId: created.id,
-        provider: "ZWIFT",
-        sampleCount: series.timeMs.length,
-        series: series as unknown as Prisma.InputJsonValue,
-      },
-      update: {
-        sampleCount: series.timeMs.length,
-        series: series as unknown as Prisma.InputJsonValue,
-      },
-    });
+    await storeSeries(created.id, series);
   }
   return "created";
 }
@@ -234,8 +241,11 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
           if (!activity) throw new ZwiftError("CONNECTION", `activity ${externalId} has no usable start date`);
           let series: ZwiftSeries | null = null;
           try {
-            series = await fetchSeries(client, row);
+            series = await fetchSeries(client, externalId, row);
           } catch (err) {
+            // stream hiccups must be visible in the sync result, not silent
+            result.status = "PARTIAL";
+            result.failedActivities.push(externalId);
             console.error(`[zwift] streams unavailable for ${externalId} — summary only`, err);
           }
           await upsertZwiftActivity(connection, externalId, activity, series);
@@ -252,6 +262,36 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
         if (stalePageStreak >= 2) break; // everything further back is known
       } else {
         stalePageStreak = 0;
+      }
+    }
+
+    // Upgrade pass: activities registered by this connection that still have
+    // NO Zwift series (stream hiccup during ingest, or the earlier
+    // precision bug that queried a rounded-off id) get their streams now.
+    // Bounded per pass so one force-sync tap never hammers the API.
+    const upgradeable = await prisma.activitySource.findMany({
+      where: {
+        connectionId: connection.id,
+        activity: { dataPoints: { none: { provider: "ZWIFT" } } },
+      },
+      select: { activityId: true, sourceActivityId: true },
+      orderBy: { sourceUpdatedAt: "desc" },
+      take: 50,
+    });
+    for (const s of upgradeable) {
+      try {
+        const detail = await client.getActivityDetail(s.sourceActivityId);
+        const url = detail.fitnessData?.fullDataUrl;
+        if (!url) continue; // upstream keeps it summary-only
+        const series = toZwiftSeries(await client.getFitnessData(url));
+        if (series) {
+          await storeSeries(s.activityId, series);
+          result.itemsUpdated++;
+        }
+      } catch (err) {
+        result.status = "PARTIAL";
+        result.failedActivities.push(s.sourceActivityId);
+        console.error(`[zwift] streams upgrade failed for ${s.sourceActivityId}:`, err);
       }
     }
   } catch (err) {
