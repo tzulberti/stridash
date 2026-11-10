@@ -47,7 +47,7 @@ Ingested endpoints:
 |---|---|
 | `GET /api/profiles/me` | athlete id (= `providerUserId`) at connect time |
 | `GET /api/profiles/{athleteId}/activities?start={offset}&limit={n}` | activity list (summary fields, newest first) |
-| `GET /api/activities/{id}?fetchSnapshots=true` | detail; adds `fitnessData.fullDataUrl` when absent from the list row |
+| `GET /api/activities/{id}?fetchSnapshots=true` | detail — the list row lacks `fitnessData`, heart-rate fields, and more; the whole payload is kept in `activities.detail_raw` |
 | `GET {fitnessData.fullDataUrl}` | per-second sample arrays |
 
 ## Data mapping

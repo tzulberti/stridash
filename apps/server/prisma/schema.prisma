@@ -284,6 +284,10 @@ model Activity {
   gearId       String?      @db.Uuid @map("gear_id")
   notes        String?
   raw          Json?
+  /// provider detail-endpoint payload as-received (e.g. Zwift's
+  /// /api/activities/:id); null for providers with no richer endpoint than
+  /// the list row (iGPSPORT's FIT already lives in the series table)
+  detailRaw    Json?        @map("detail_raw")
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 

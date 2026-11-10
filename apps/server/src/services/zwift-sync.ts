@@ -122,6 +122,7 @@ async function upsertZwiftActivity(
   externalId: string,
   activity: ActivityInput,
   series: ZwiftSeries | null,
+  detail: ZwiftActivity | null,
 ): Promise<"created" | "updated"> {
   const dup = await prisma.activity.findFirst({
     where: {
@@ -169,6 +170,8 @@ async function upsertZwiftActivity(
       caloriesKcal: activity.caloriesKcal,
       indoor: activity.indoor,
       raw: activity.raw as unknown as Prisma.InputJsonValue,
+      // full detail-endpoint payload, as-received (see detail_raw column)
+      detailRaw: detail ? (detail as unknown as Prisma.InputJsonValue) : undefined,
     },
     select: { id: true },
   });
@@ -233,12 +236,14 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
           const activity = mapZwiftActivityRow(row);
           if (!activity) throw new ZwiftError("CONNECTION", `activity ${externalId} has no usable start date`);
           let series: ZwiftSeries | null = null;
+          let detail: ZwiftActivity | null = null;
           try {
             // The list row lacks BOTH fitnessData (stream URL) and the
-            // heart-rate fields — the detail payload is needed for both.
-            // activityId MUST be the exact-precision id_str: these ids exceed
-            // Number's safe range and a rounded-off numeric id 404s.
-            const detail = await client.getActivityDetail(externalId);
+            // heart-rate fields — the detail payload is needed for both,
+            // and it is stored whole in detail_raw. activityId MUST be the
+            // exact-precision id_str: these ids exceed Number's safe range
+            // and a rounded-off numeric id 404s.
+            detail = await client.getActivityDetail(externalId);
             Object.assign(activity, detailScalars(detail));
             series = detail.fitnessData?.fullDataUrl
               ? toZwiftSeries(await client.getFitnessData(detail.fitnessData.fullDataUrl))
@@ -249,7 +254,7 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
             result.failedActivities.push(externalId);
             console.error(`[zwift] ingest incomplete for ${externalId} — summary only`, err);
           }
-          await upsertZwiftActivity(connection, externalId, activity, series);
+          await upsertZwiftActivity(connection, externalId, activity, series, detail);
           result.itemsCreated++;
         } catch (err) {
           result.status = "PARTIAL";
@@ -267,11 +272,13 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
     }
 
     // Upgrade pass: rows left incomplete by earlier ingest bugs get a second
-    // chance — no ZWIFT series (stream hiccup / precision bug) and/or summary
-    // scalars from list rows that lack heart rate. Both heal from one detail
-    // call and are self-limiting: series rows satisfy the `none` filter, and
-    // the scalar heal writes moving_time_s (the marker for scalar eligibility,
-    // null only on legacy rows — list rows always carried moving time).
+    // chance — no ZWIFT series (stream hiccup / precision bug), summary
+    // scalars from list rows that lack heart rate, or no stored detail
+    // payload. Heals come from one detail call and are self-limiting: series
+    // rows satisfy the `none` filter, the scalar heal writes moving_time_s
+    // (the scalar-eligibility marker, null only on legacy rows), and the
+    // detail heal writes detail_raw. Zwift-owned rows only, so dedup owners
+    // from other providers keep their authoritative payload untouched.
     // Bounded per pass so one force-sync tap never hammers the API.
     const upgradeable = await prisma.activitySource.findMany({
       where: {
@@ -279,12 +286,25 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
         OR: [
           { activity: { dataPoints: { none: { provider: "ZWIFT" } } } },
           { activity: { movingTimeS: null } },
+          {
+            activity: {
+              // never stored a detail payload yet
+              detailRaw: { equals: Prisma.DbNull },
+              raw: { path: ["provider"], equals: "ZWIFT" },
+            },
+          },
         ],
       },
       select: {
         activityId: true,
         sourceActivityId: true,
-        activity: { select: { dataPoints: { where: { provider: "ZWIFT" }, select: { id: true } } } },
+        activity: {
+          select: {
+            movingTimeS: true,
+            detailRaw: true,
+            dataPoints: { where: { provider: "ZWIFT" }, select: { id: true } },
+          },
+        },
       },
       orderBy: { sourceUpdatedAt: "desc" },
       take: 50,
@@ -293,8 +313,15 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
       try {
         const detail = await client.getActivityDetail(s.sourceActivityId);
         let healed = false;
+        if (s.activity.detailRaw == null) {
+          await prisma.activity.update({
+            where: { id: s.activityId },
+            data: { detailRaw: detail as unknown as Prisma.InputJsonValue },
+          });
+          healed = true;
+        }
         const scalars = detailScalars(detail);
-        if (Object.keys(scalars).length) {
+        if (Object.keys(scalars).length && s.activity.movingTimeS === null) {
           // detail scalars are ints-or-absent — always valid update input
           await prisma.activity.update({
             where: { id: s.activityId },

@@ -138,6 +138,9 @@ export interface Activity {
   trainingLoad: number | null;
   /** providers that delivered this row (a length-2 list = same ride arrived twice) */
   providers?: string[];
+  /** provider detail-endpoint payload as-received (Zwift carries ~45 fields
+   * beyond the list row); absent where no detail endpoint exists */
+  detailRaw?: unknown;
   indoor: boolean;
   gearId: string | null;
   notes: string | null;
