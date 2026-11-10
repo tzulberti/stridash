@@ -532,48 +532,11 @@ function windowElevGain(alt: number[], i0: number, i1: number): number {
   return gain;
 }
 
-function fmtPace(sec: number | null): string {
-  if (sec == null || !Number.isFinite(sec)) return "—";
-  const t = Math.round(sec);
-  const m = Math.floor(t / 60);
-  const s = t % 60;
-  return `${m}:${String(s).padStart(2, "0")} /km`;
-}
+// (fmtPace / fmtSplitTime moved to lib/format.ts)
 
-function fmtSplitTime(s: number): string {
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = Math.round(s % 60);
-  const pad = (v: number): string => String(v).padStart(2, "0");
-  return h ? `${h}:${pad(m)}:${pad(ss)}` : `${m}:${pad(ss)}`;
-}
+// ─── Shared bits — pure display helpers live in lib/format.ts ────────────────
 
-// ─── Shared bits ─────────────────────────────────────────────────────────────
-
-function fmtKm(m: number | null | undefined): string {
-  return m == null ? "—" : `${(m / 1000).toFixed(2)} km`;
-}
-function fmtMin(s: number | null | undefined): string {
-  if (s == null) return "—";
-  const h = Math.floor(s / 3600);
-  const m = Math.round((s % 3600) / 60);
-  return h ? `${h}h ${m}m` : `${m}m`;
-}
-function fmtSpeed(ms: number | null | undefined): string {
-  return ms == null ? "—" : `${((ms * 3600) / 1000).toFixed(1)} km/h`;
-}
-function fmtDate(iso: string | undefined): string {
-  return iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
-}
-
-const TYPE_EMOJI: Record<string, string> = {
-  RUN: "🏃", RIDE: "🚴", VIRTUAL_RIDE: "🚴", WALK: "🚶",
-  HIKE: "🥾", SWIM: "🏊", WORKOUT: "🏋️", OTHER: "⌚",
-};
-
-/** canonical feed-filter lists; the dropdowns only show values actually in range */
-const FEED_TYPES = ["RUN", "RIDE", "VIRTUAL_RIDE", "WALK", "HIKE", "SWIM", "WORKOUT", "OTHER"] as const;
-const FEED_PROVIDERS = ["GARMIN", "ZWIFT", "IGPSPORT", "STRAVA", "OMRON"] as const;
+import { fmtKm, fmtMin, fmtSpeed, fmtPace, fmtSplitTime, fmtDate, TYPE_EMOJI, FEED_TYPES, FEED_PROVIDERS, keyOf, pick, isoDate, parseRoute, type Route } from "./lib/format";
 
 // ─── Activity page (/activity/<id> — every scrap of info for one activity) ───
 
@@ -1320,23 +1283,15 @@ type BodyMetricKey = "weightKg" | "bodyFatPct" | "visceralFatLevel" | "skeletalM
 type SleepMetricKey = "hours" | "score" | "hrv" | "sleepHr" | "battery";
 type DailyMetricKey = "steps" | "restingHr" | "stressAvg" | "battery" | "activeCal" | "floors";
 
-function keyOf<T extends string>(allowed: readonly string[], v: string | null, fallback: T): T {
-  // T is anchored by `fallback`; `v` passes only when it's a known member
-  return allowed.includes(v ?? "") ? (v as T) : fallback;
-}
-
 /** Filters the page boots with — parsed once from ?from&to&body&sleep&daily.
  * Missing/invalid params fall back to the 7-day window + default metrics. */
 const BOOT_URL = (() => {
   const q = new URLSearchParams(window.location.search);
-  const iso = (v: string | null): string | undefined => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
-  const pick = <T extends string>(allowed: readonly T[], v: string | null): T | "" =>
-    (allowed as readonly string[]).includes(v ?? "") ? (v as T) : "";
   return {
     fromDate:
-      iso(q.get("from")) ??
+      isoDate(q.get("from")) ??
       new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10),
-    toDate: iso(q.get("to")) ?? new Date().toISOString().slice(0, 10),
+    toDate: isoDate(q.get("to")) ?? new Date().toISOString().slice(0, 10),
     body: keyOf(Object.keys(BODY_METRIC), q.get("body"), "weightKg"),
     sleep: keyOf(Object.keys(SLEEP_METRIC), q.get("sleep"), "hours"),
     daily: keyOf(Object.keys(DAILY_METRIC), q.get("daily"), "steps"),
@@ -1345,19 +1300,7 @@ const BOOT_URL = (() => {
   };
 })();
 
-// ─── Client routing — the activity page lives at /activity/<id> ──────────────
-
-type Route = { name: "dashboard" } | { name: "activity"; id: string } | { name: "connections" };
-
-/** parse the current location; /connections is its own page, anything not
- * /activity/<id> or /connections is the dashboard */
-function parseRoute(): Route {
-  const p = window.location.pathname;
-  if (/^\/connections\/?$/.test(p)) return { name: "connections" };
-  const m = /^\/activity\/([^/?#]+)/.exec(p);
-  const id = m?.[1];
-  return id ? { name: "activity", id } : { name: "dashboard" };
-}
+// (Route type + parseRoute moved to lib/format.ts)
 
 export default function App() {
   const [token, setToken] = useState<string | null>(() => readToken());
@@ -1370,7 +1313,7 @@ export default function App() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [sleep, setSleep] = useState<SleepRow[]>([]);
   const [wellness, setWellness] = useState<DailyWellnessRow[]>([]);
-  const [route, setRoute] = useState<Route>(parseRoute);
+  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
   const [bodyMetric, setBodyMetric] = useState<BodyMetricKey>(BOOT_URL.body);
   const [sleepMetric, setSleepMetric] = useState<SleepMetricKey>(BOOT_URL.sleep);
   const [dailyMetric, setDailyMetric] = useState<DailyMetricKey>(BOOT_URL.daily);
@@ -1452,7 +1395,7 @@ export default function App() {
   }, [token, load]);
   // browser back/forward between the dashboard and activity pages
   useEffect(() => {
-    const onPop = () => setRoute(parseRoute());
+    const onPop = () => setRoute(parseRoute(window.location.pathname));
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);

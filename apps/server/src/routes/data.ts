@@ -46,7 +46,8 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
       },
       orderBy: { startTime: "desc" },
       take: q.data.limit,
-      ...(q.data.cursor ? { cursor: { id: q.data.cursor } } : {}),
+      // cursor semantics: without skip the cursor row itself is re-served
+      ...(q.data.cursor ? { cursor: { id: q.data.cursor }, skip: 1 } : {}),
     });
 
     // which providers delivered each row (for the feed's provider filter);
@@ -148,7 +149,8 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
       },
       orderBy: { measuredAt: "desc" },
       take: q.data.limit,
-      ...(q.data.cursor ? { cursor: { id: q.data.cursor } } : {}),
+      // cursor semantics: without skip the cursor row itself is re-served
+      ...(q.data.cursor ? { cursor: { id: q.data.cursor }, skip: 1 } : {}),
     });
 
     return c.json({
