@@ -293,27 +293,36 @@ footer { margin-top: 48px; color: var(--muted); font-size: 12px; text-align: cen
 }
 
 /* force-sync button inside each connection pill */
-.pill-sync {
-  background: transparent;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  margin-left: 0.25rem;
-  padding: 0 0.15rem;
-  font-size: 0.95rem;
-  line-height: 1;
+/* connections page */
+.pill:hover { color: var(--text); }
+.page-hint { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+.conn-list { display: grid; gap: 10px; margin: 0 0 8px; }
+.conn-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 14px;
 }
-.pill-sync:disabled {
-  opacity: 0.4;
-  cursor: progress;
+.conn-card.error { border-color: #e5484d; }
+.conn-card.pending .conn-status { color: #d29922; }
+.conn-card.error .conn-status { color: #e5484d; }
+.conn-card.revoked .conn-status { color: #e5484d; }
+.conn-card.syncing { opacity: 0.75; }
+.conn-head { display: flex; align-items: baseline; gap: 10px; }
+.conn-provider { font-weight: 600; }
+.conn-status {
+  font-size: 11px; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px;
 }
-.pill.syncing {
-  opacity: 0.85;
-}
-@keyframes pill-spin {
-  to { transform: rotate(360deg); }
-}
-.pill.syncing .pill-sync {
-  display: inline-block;
-  animation: pill-spin 1s linear infinite;
-}
+.conn-spin { color: var(--muted); font-size: 12px; }
+.conn-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.conn-msg { font-size: 13px; margin: 6px 0 0; color: var(--accent); }
+.conn-msg.err { color: #e5484d; }
+.conn-actions { display: flex; gap: 8px; margin-top: 8px; }
+.conn-confirm { display: flex; gap: 8px; align-items: center; margin-top: 8px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+.conn-form { display: grid; gap: 10px; max-width: 460px; }
+.conn-form input, .conn-form select { width: 100%; }
+.conn-field-hint { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.conn-field-hint input { width: 70px; }
+.mfa-row { display: flex; gap: 8px; align-items: end; }
+.mfa-row label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+@keyframes spin360 { to { transform: rotate(360deg); } }
+.conn-spin .spin { display: inline-block; animation: spin360 1s linear infinite; }

@@ -113,6 +113,25 @@ async function api<T>(
   return json;
 }
 
+// ─── Force-sync result → one readable line ───────────────────────────────────
+
+type SyncResponseJson = {
+  result?: { itemsCreated?: number; itemsUpdated?: number };
+  wellness?: { sleepUpserted?: number; daysUpserted?: number };
+};
+
+/** one line per connection sync: what was pulled/changed (Garmin adds the
+ * wellness pass; empty responses read as "nothing new") */
+function summarizeSync(res: SyncResponseJson): string {
+  const r = res.result;
+  const parts: string[] = [];
+  if (r?.itemsCreated) parts.push(`${r.itemsCreated} new`);
+  if (r?.itemsUpdated) parts.push(`${r.itemsUpdated} updated`);
+  if (res.wellness?.sleepUpserted) parts.push(`${res.wellness.sleepUpserted} sleep records`);
+  if (res.wellness?.daysUpserted) parts.push(`${res.wellness.daysUpserted} daily records`);
+  return parts.length ? `synced — ${parts.join(" · ")}` : "synced — nothing new";
+}
+
 // ─── Small SVG chart (no chart deps — keeps bundle light and honest) ─────────
 
 type Point = { x: number; y: number };
@@ -864,6 +883,242 @@ function Card({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+// ─── Connections page (/connections — manage + create provider links) ────────
+
+const PROVIDER_LABEL: Record<string, string> = {
+  OMRON: "Omron",
+  IGPSPORT: "iGPSPORT",
+  GARMIN: "Garmin",
+};
+type ProviderKey = "omron" | "igpsport" | "garmin";
+
+type ConnectResponseJson = {
+  mfaRequired?: boolean;
+  method?: string;
+  connection?: { id: string };
+};
+
+function ConnectionsSection(props: {
+  conn: ConnectionRow[];
+  token: string;
+  syncingId: string | null;
+  syncConnection: (id: string) => Promise<{ ok: boolean; text: string }>;
+  reload: () => void;
+  onBack: () => void;
+}) {
+  const { conn, token, syncingId, syncConnection, reload, onBack } = props;
+  // add-connection form
+  const [provider, setProvider] = useState<ProviderKey>("omron");
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [country, setCountry] = useState("AR");
+  const [connectBusy, setConnectBusy] = useState(false);
+  const [connectMsg, setConnectMsg] = useState<string | null>(null);
+  // garmin second factor: the connect call answers 202 when the code step is due
+  const [mfa, setMfa] = useState<{ id: string; method: string } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  // delete confirmation + per-card sync result lines
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [syncMsg, setSyncMsg] = useState<Record<string, string>>({});
+
+  async function runSync(id: string): Promise<void> {
+    const out = await syncConnection(id);
+    setSyncMsg((m) => ({ ...m, [id]: `${out.ok ? "" : "sync failed — "}${out.text}` }));
+  }
+
+  async function del(id: string): Promise<void> {
+    try {
+      await api(`/connections/${id}`, { method: "DELETE", token });
+      setConfirmDel(null);
+      reload();
+    } catch (err) {
+      setConnectMsg(String(err).replace(/^Error: /, ""));
+    }
+  }
+
+  async function connect(): Promise<void> {
+    setConnectBusy(true);
+    setConnectMsg(null);
+    try {
+      const body =
+        provider === "omron"
+          ? { provider: "OMRON", identifier, password, country }
+          : provider === "igpsport"
+            ? { provider: "IGPSPORT", username: identifier, password, region: "intl" }
+            : { provider: "GARMIN", email: identifier, password };
+      const res = await api<ConnectResponseJson>("/connections", { method: "POST", body, token });
+      if (res.mfaRequired) {
+        setMfa({ id: res.connection?.id ?? "", method: res.method ?? "code" });
+        setConnectMsg(`Garmin wants a second-factor code (via ${res.method ?? "your trusted device"}) — enter it below`);
+        reload(); // the pending connection shows up in the list
+        return;
+      }
+      setIdentifier("");
+      setPassword("");
+      setMfa(null);
+      setConnectMsg(`${PROVIDER_LABEL[provider.toUpperCase()] ?? provider} connected — data flows in on the next sync`);
+      reload();
+    } catch (err) {
+      setConnectMsg(String(err).replace(/^Error: /, ""));
+    } finally {
+      setConnectBusy(false);
+    }
+  }
+
+  async function verifyMfa(): Promise<void> {
+    if (!mfa) return;
+    setConnectBusy(true);
+    setConnectMsg(null);
+    try {
+      await api(`/connections/${mfa.id}/mfa`, { method: "POST", body: { code: mfaCode }, token });
+      setMfa(null);
+      setMfaCode("");
+      setConnectMsg("Garmin connected — data flows in on the next sync");
+      reload();
+    } catch (err) {
+      setConnectMsg(String(err).replace(/^Error: /, ""));
+    } finally {
+      setConnectBusy(false);
+    }
+  }
+
+  const identifierLabel = provider === "omron" ? "Omron email or username" : provider === "igpsport" ? "iGPSPORT username" : "Garmin email";
+
+  return (
+    <section className="connections-page">
+      <button type="button" className="btn ghost small" onClick={onBack}>← dashboard</button>
+
+      <h2>Connections</h2>
+      <p className="page-hint">
+        Each link is stored server-side — providers are synced by your Stridash instance, never from a browser.
+      </p>
+
+      <div className="conn-list">
+        {conn.map((c) => {
+          const busy = syncingId === c.id;
+          return (
+            <div key={c.id} className={`conn-card ${c.status.toLowerCase()} ${busy ? "syncing" : ""}`}>
+              <div className="conn-head">
+                <span className="conn-provider">{PROVIDER_LABEL[c.provider] ?? c.provider}</span>
+                <span className="conn-status">{c.status.toLowerCase()}</span>
+                {busy && (
+                  <span className="conn-spin">
+                    <span className="spin">↻</span> syncing…
+                  </span>
+                )}
+              </div>
+              <div className="conn-sub">{c.providerUserId || "—"}</div>
+              <div className="conn-sub">last sync {c.lastSyncedAt ? fmtDate(c.lastSyncedAt) : "never"}</div>
+              {(() => {
+                const msg = syncMsg[c.id];
+                return msg ? <p className={msg.startsWith("sync failed") ? "conn-msg err" : "conn-msg"}>{msg}</p> : null;
+              })()}
+              {c.status === "ERROR" && (
+                <p className="conn-msg err">the stored token was rejected by the provider — delete and reconnect below</p>
+              )}
+              {c.status === "REVOKED" && (
+                <p className="conn-msg err">this link was deleted — re-add the account in the form below (pulled data is kept)</p>
+              )}
+              <div className="conn-actions">
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => void runSync(c.id)}
+                  disabled={syncingId != null || c.status === "PENDING" || c.status === "REVOKED"}
+                  title={c.status === "PENDING" ? "awaiting MFA — finish the connect form first" : "sync this provider now"}
+                >
+                  ↻ sync now
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost small danger"
+                  onClick={() => setConfirmDel(confirmDel === c.id ? null : c.id)}
+                  disabled={busy}
+                >
+                  delete
+                </button>
+              </div>
+              {confirmDel === c.id && (
+                <div className="conn-confirm">
+                  <span>delete this connection? data already pulled stays.</span>
+                  <button type="button" className="btn ghost small danger" onClick={() => void del(c.id)}>yes, delete</button>
+                  <button type="button" className="btn ghost small" onClick={() => setConfirmDel(null)}>keep it</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {conn.length === 0 && <p className="conn-sub">no providers linked yet — add the first one below.</p>}
+      </div>
+
+      <h2>Add a connection</h2>
+      <form
+        className="conn-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void connect();
+        }}
+      >
+        <select value={provider} onChange={(e) => { setProvider(e.target.value as ProviderKey); setMfa(null); setConnectMsg(null); }}>
+          <option value="omron">Omron — body scale / blood pressure (KRD-703T and friends)</option>
+          <option value="igpsport">iGPSPORT — rides</option>
+          <option value="garmin">Garmin — activities, sleep, daily metrics</option>
+        </select>
+        <input
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
+          placeholder={identifierLabel}
+          autoComplete="off"
+          required
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="password (verified, never stored in clear)"
+          autoComplete="off"
+          required
+        />
+        {provider === "omron" && (
+          <label className="conn-field-hint">
+            Omron Connect country code (where the account lives)
+            <input
+              value={country}
+              onChange={(e) => setCountry(e.target.value.toUpperCase().slice(0, 2))}
+              placeholder="AR"
+              size={4}
+              maxLength={2}
+              required
+            />
+          </label>
+        )}
+        <button className="btn" type="submit" disabled={connectBusy}>
+          {connectBusy ? "connecting…" : "connect"}
+        </button>
+        {mfa && (
+          <div className="mfa-row">
+            <label>
+              {mfa.method} code
+              <input value={mfaCode} onChange={(e) => setMfaCode(e.target.value)} inputMode="numeric" placeholder="123456" />
+            </label>
+            <button
+              className="btn"
+              type="button"
+              onClick={async () => {
+                await verifyMfa();
+              }}
+              disabled={connectBusy || !mfaCode.trim()}
+            >
+              verify
+            </button>
+          </div>
+        )}
+        {connectMsg && <p className={/failed|rejected|invalid|error/i.test(connectMsg) ? "conn-msg err" : "conn-msg"}>{connectMsg}</p>}
+      </form>
+    </section>
+  );
+}
+
 // ─── Calendar date picker (no deps — a small month-grid popover) ─────────────
 
 const DP_MONTHS = [
@@ -1072,11 +1327,14 @@ const BOOT_URL = (() => {
 
 // ─── Client routing — the activity page lives at /activity/<id> ──────────────
 
-type Route = { name: "dashboard" } | { name: "activity"; id: string };
+type Route = { name: "dashboard" } | { name: "activity"; id: string } | { name: "connections" };
 
-/** parse the current location; anything not /activity/<id> is the dashboard */
+/** parse the current location; /connections is its own page, anything not
+ * /activity/<id> or /connections is the dashboard */
 function parseRoute(): Route {
-  const m = /^\/activity\/([^/?#]+)/.exec(window.location.pathname);
+  const p = window.location.pathname;
+  if (/^\/connections\/?$/.test(p)) return { name: "connections" };
+  const m = /^\/activity\/([^/?#]+)/.exec(p);
   const id = m?.[1];
   return id ? { name: "activity", id } : { name: "dashboard" };
 }
@@ -1243,21 +1501,28 @@ export default function App() {
     window.history.pushState(null, "", "/");
     setRoute({ name: "dashboard" });
   }
+  function openConnections(): void {
+    window.history.pushState(null, "", "/connections");
+    setRoute({ name: "connections" });
+  }
 
   /** force-sync one connection; one at a time so a slow Garmin history scan
-   * doesn't hammer providers in parallel */
-  async function syncConnection(id: string): Promise<void> {
-    if (!token || syncingId) return;
+   * doesn't hammer providers in parallel. Returns what happened so the
+   * connections page can show it on the card that was tapped. */
+  async function syncConnection(id: string): Promise<{ ok: boolean; text: string }> {
+    if (!token || syncingId) return { ok: false, text: "another sync is already running" };
     setSyncingId(id);
     try {
-      await api(`/connections/${id}/sync`, { method: "POST", token });
+      const res = await api<SyncResponseJson>(`/connections/${id}/sync`, { method: "POST", token });
       // pull the fresh rows + lastSyncedAt into the dashboard
       await load(token);
+      return { ok: true, text: summarizeSync(res) };
     } catch (err) {
-      setError(String(err));
       // rejected credentials flip the connection to ERROR server-side —
-      // reload so the pill shows red instead of a stale ACTIVE state
+      // reload so the card/pill shows red instead of a stale ACTIVE state
       await load(token).catch(() => undefined);
+      const msg = err instanceof Error ? err.message.replace(/^Error: /, "") : String(err);
+      return { ok: false, text: msg };
     } finally {
       setSyncingId(null);
     }
@@ -1321,22 +1586,21 @@ export default function App() {
       <h1>🦾 Stridash</h1>
       <div className="sources">
         {connections.map((c) => (
-          <span key={c.id} className={`pill ${c.status.toLowerCase()} ${syncingId === c.id ? "syncing" : ""}`}>
+          <a
+            key={c.id}
+            className={`pill ${c.status.toLowerCase()}`}
+            href="/connections"
+            title="manage connections"
+            onClick={(e) => { e.preventDefault(); openConnections(); }}
+          >
             {c.provider.toLowerCase()} · {c.status.toLowerCase()}{c.lastSyncedAt ? ` · ${fmtDate(c.lastSyncedAt)}` : ""}
-            {syncingId === c.id ? " — syncing…" : ""}
-            <button
-              type="button"
-              className="pill-sync"
-              onClick={() => void syncConnection(c.id)}
-              disabled={syncingId != null}
-              aria-label={`force sync ${c.provider}`}
-              title={`force sync ${c.provider.toLowerCase()}`}
-            >
-              ↻
-            </button>
-          </span>
+          </a>
         ))}
-        {connections.length === 0 && <span className="pill">no connections yet — connect a provider via the API/CLI</span>}
+        {connections.length === 0 && (
+          <a className="pill" href="/connections" onClick={(e) => { e.preventDefault(); openConnections(); }}>
+            no connections yet — add one on the connections page
+          </a>
+        )}
       </div>
       <button className="btn ghost" onClick={() => { clearTokens(); setToken(null); }}>sign out</button>
     </header>
@@ -1352,6 +1616,26 @@ export default function App() {
           id={route.id}
           token={token ?? ""}
           preview={activities.find((a) => a.id === route.id) ?? null}
+          onBack={goHome}
+        />
+        {loading && <p>Loading…</p>}
+        {footer}
+      </main>
+    );
+  }
+
+  // the connections page is its own URL: /connections
+  if (route.name === "connections") {
+    return (
+      <main>
+        {header}
+        {error && <p className="error">{error}</p>}
+        <ConnectionsSection
+          conn={connections}
+          token={token}
+          syncingId={syncingId}
+          syncConnection={syncConnection}
+          reload={() => { void load(token); }}
           onBack={goHome}
         />
         {loading && <p>Loading…</p>}
