@@ -26,6 +26,22 @@ export function mapZwiftType(sport?: string): ActivityType {
 
 // ─── Summary rows ────────────────────────────────────────────────────────────
 
+/** Summary scalars the LIST row lacks but the DETAIL payload carries
+ * (heart rate, max power/cadence, moving time). Applied over the list-mapped
+ * input at ingest and used to heal legacy summary-only rows. */
+export function detailScalars(act: ZwiftActivity): Partial<ActivityInput> {
+  const patch: Partial<ActivityInput> = {};
+  if (act.movingTimeInMs != null) patch.movingTimeS = Math.round(act.movingTimeInMs / 1000);
+  // 0 bpm = no monitor connected that session; store absent, not zero
+  if (act.avgHeartRate != null && act.avgHeartRate > 0) patch.avgHr = Math.round(act.avgHeartRate);
+  if (act.maxHeartRate != null && act.maxHeartRate > 0) patch.maxHr = Math.round(act.maxHeartRate);
+  if (act.maxWatts != null) patch.maxPowerW = Math.round(act.maxWatts);
+  if (act.maxCadenceInRotationsPerMinute != null) {
+    patch.maxCadence = Math.round(act.maxCadenceInRotationsPerMinute);
+  }
+  return patch;
+}
+
 export function mapZwiftActivityRow(act: ZwiftActivity): ActivityInput | null {
   const start = act.startDate ? new Date(act.startDate) : null;
   const end = act.endDate ? new Date(act.endDate) : null;

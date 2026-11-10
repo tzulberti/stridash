@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { mapZwiftType, mapZwiftActivityRow, toZwiftSeries } from "../src/providers/zwift/normalize.js";
+import { mapZwiftType, mapZwiftActivityRow, detailScalars, toZwiftSeries } from "../src/providers/zwift/normalize.js";
 import type { ZwiftFitnessData } from "../src/providers/zwift/client.js";
 
 describe("mapZwiftType", () => {
@@ -12,6 +12,32 @@ describe("mapZwiftType", () => {
     expect(mapZwiftType("RUNNING")).toBe("RUN");
     expect(mapZwiftType("WEIRD_THING")).toBe("OTHER");
     expect(mapZwiftType(undefined)).toBe("OTHER");
+  });
+});
+
+describe("detailScalars", () => {
+  it("extracts the summary scalars list rows lack", () => {
+    expect(detailScalars({
+      movingTimeInMs: 5_940_000,
+      avgHeartRate: 142.6,
+      maxHeartRate: 165,
+      maxWatts: 610,
+      maxCadenceInRotationsPerMinute: 91.5,
+    })).toEqual({
+      movingTimeS: 5940,
+      avgHr: 143,
+      maxHr: 165,
+      maxPowerW: 610,
+      maxCadence: 92,
+    });
+  });
+
+  it("omits keys the payload lacks (Prisma skips undefined)", () => {
+    expect(detailScalars({})).toEqual({});
+  });
+
+  it("treats a 0 bpm reading as 'no monitor', not data", () => {
+    expect(detailScalars({ avgHeartRate: 0, maxHeartRate: 0 })).toEqual({});
   });
 });
 

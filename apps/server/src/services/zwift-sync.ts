@@ -7,9 +7,11 @@
  * The access JWT is refreshed when the stored expiry nears; both new tokens
  * are persisted after each rotation.
  *
- * Streams arrive via detail.fitnessData.fullDataUrl on the graph-carrying
- * activities; they are fetched at ingest time. Older/failed stream fetches
- * degrade to summary-only rows (same fallback as iGPSPORT's FIT path).
+ * Streams arrive via detail.fitnessData.fullDataUrl (never the list rows);
+ * they are fetched at ingest time, which also yields the summary scalars the
+ * list rows lack (heart rate, max power/cadence). Rows left summary-only or
+ * scalar-poor by an early failure/bug are upgraded by later syncs (bounded
+ * per pass). Same fallback as iGPSPORT's FIT path otherwise.
  */
 
 import { prisma } from "../db.js";
@@ -21,7 +23,12 @@ import {
   zwiftRefresh,
   type ZwiftActivity,
 } from "../providers/zwift/client.js";
-import { mapZwiftActivityRow, toZwiftSeries, type ZwiftSeries } from "../providers/zwift/normalize.js";
+import {
+  mapZwiftActivityRow,
+  detailScalars,
+  toZwiftSeries,
+  type ZwiftSeries,
+} from "../providers/zwift/normalize.js";
 import { redactProviderDetail } from "../redact.js";
 import type { ActivityInput } from "../providers/igpsport/normalize.js";
 import type { Env } from "../env.js";
@@ -88,21 +95,6 @@ async function zwiftRefreshWithPersist(env: Env, connection: ConnectionLike, ref
     },
   });
   return tokens;
-}
-
-/** Fetch the URL (resolved against the API base) and map it to Stridash series.
- * activityId MUST be the exact-precision id_str: these ids exceed Number's
- * safe range, and a rounded-off numeric id 404s server-side. */
-async function fetchSeries(client: ZwiftClient, activityId: string, act: ZwiftActivity): Promise<ZwiftSeries | null> {
-  let fullDataUrl = act.fitnessData?.fullDataUrl;
-  if (!fullDataUrl) {
-    // the list row often omits it — the detail version carries it
-    const detail = await client.getActivityDetail(activityId);
-    fullDataUrl = detail.fitnessData?.fullDataUrl;
-  }
-  if (!fullDataUrl) return null;
-  const raw = await client.getFitnessData(fullDataUrl);
-  return toZwiftSeries(raw);
 }
 
 /** Persist (or replace) an activity's ZWIFT series row. */
@@ -242,12 +234,20 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
           if (!activity) throw new ZwiftError("CONNECTION", `activity ${externalId} has no usable start date`);
           let series: ZwiftSeries | null = null;
           try {
-            series = await fetchSeries(client, externalId, row);
+            // The list row lacks BOTH fitnessData (stream URL) and the
+            // heart-rate fields — the detail payload is needed for both.
+            // activityId MUST be the exact-precision id_str: these ids exceed
+            // Number's safe range and a rounded-off numeric id 404s.
+            const detail = await client.getActivityDetail(externalId);
+            Object.assign(activity, detailScalars(detail));
+            series = detail.fitnessData?.fullDataUrl
+              ? toZwiftSeries(await client.getFitnessData(detail.fitnessData.fullDataUrl))
+              : null;
           } catch (err) {
-            // stream hiccups must be visible in the sync result, not silent
+            // stream/detail hiccups must be visible in the sync result, not silent
             result.status = "PARTIAL";
             result.failedActivities.push(externalId);
-            console.error(`[zwift] streams unavailable for ${externalId} — summary only`, err);
+            console.error(`[zwift] ingest incomplete for ${externalId} — summary only`, err);
           }
           await upsertZwiftActivity(connection, externalId, activity, series);
           result.itemsCreated++;
@@ -266,29 +266,53 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
       }
     }
 
-    // Upgrade pass: activities registered by this connection that still have
-    // NO Zwift series (stream hiccup during ingest, or the earlier
-    // precision bug that queried a rounded-off id) get their streams now.
+    // Upgrade pass: rows left incomplete by earlier ingest bugs get a second
+    // chance — no ZWIFT series (stream hiccup / precision bug) and/or summary
+    // scalars from list rows that lack heart rate. Both heal from one detail
+    // call and are self-limiting: series rows satisfy the `none` filter, and
+    // the scalar heal writes moving_time_s (the marker for scalar eligibility,
+    // null only on legacy rows — list rows always carried moving time).
     // Bounded per pass so one force-sync tap never hammers the API.
     const upgradeable = await prisma.activitySource.findMany({
       where: {
         connectionId: connection.id,
-        activity: { dataPoints: { none: { provider: "ZWIFT" } } },
+        OR: [
+          { activity: { dataPoints: { none: { provider: "ZWIFT" } } } },
+          { activity: { movingTimeS: null } },
+        ],
       },
-      select: { activityId: true, sourceActivityId: true },
+      select: {
+        activityId: true,
+        sourceActivityId: true,
+        activity: { select: { dataPoints: { where: { provider: "ZWIFT" }, select: { id: true } } } },
+      },
       orderBy: { sourceUpdatedAt: "desc" },
       take: 50,
     });
     for (const s of upgradeable) {
       try {
         const detail = await client.getActivityDetail(s.sourceActivityId);
-        const url = detail.fitnessData?.fullDataUrl;
-        if (!url) continue; // upstream keeps it summary-only
-        const series = toZwiftSeries(await client.getFitnessData(url));
-        if (series) {
-          await storeSeries(s.activityId, series);
-          result.itemsUpdated++;
+        let healed = false;
+        const scalars = detailScalars(detail);
+        if (Object.keys(scalars).length) {
+          // detail scalars are ints-or-absent — always valid update input
+          await prisma.activity.update({
+            where: { id: s.activityId },
+            data: scalars as unknown as Prisma.ActivityUpdateInput,
+          });
+          healed = true;
         }
+        if (!s.activity.dataPoints.length) {
+          const url = detail.fitnessData?.fullDataUrl;
+          if (url) {
+            const series = toZwiftSeries(await client.getFitnessData(url));
+            if (series) {
+              await storeSeries(s.activityId, series);
+              healed = true;
+            }
+          }
+        }
+        if (healed) result.itemsUpdated++;
       } catch (err) {
         result.status = "PARTIAL";
         result.failedActivities.push(s.sourceActivityId);
