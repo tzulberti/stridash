@@ -49,8 +49,25 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
       ...(q.data.cursor ? { cursor: { id: q.data.cursor } } : {}),
     });
 
+    // which providers delivered each row (for the feed's provider filter);
+    // grouped from activity_sources → connection.provider, deduped
+    const ids = items.map((a) => a.id);
+    const sources = ids.length
+      ? await prisma.activitySource.findMany({
+          where: { activityId: { in: ids } },
+          select: { activityId: true, connection: { select: { provider: true } } },
+        })
+      : [];
+    const providersBy = new Map<string, string[]>();
+    for (const s of sources) {
+      const list = providersBy.get(s.activityId) ?? [];
+      const prov = s.connection.provider;
+      if (!list.includes(prov)) list.push(prov);
+      providersBy.set(s.activityId, list);
+    }
+
     return c.json({
-      items: items.map((a) => serializeRow(a)),
+      items: items.map((a) => ({ ...serializeRow(a), providers: providersBy.get(a.id) ?? [] })),
       nextCursor: items.length === q.data.limit ? (items.at(-1)?.id ?? null) : null,
     });
   });

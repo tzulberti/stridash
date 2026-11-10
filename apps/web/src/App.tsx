@@ -571,6 +571,10 @@ const TYPE_EMOJI: Record<string, string> = {
   HIKE: "🥾", SWIM: "🏊", WORKOUT: "🏋️", OTHER: "⌚",
 };
 
+/** canonical feed-filter lists; the dropdowns only show values actually in range */
+const FEED_TYPES = ["RUN", "RIDE", "VIRTUAL_RIDE", "WALK", "HIKE", "SWIM", "WORKOUT", "OTHER"] as const;
+const FEED_PROVIDERS = ["GARMIN", "ZWIFT", "IGPSPORT", "STRAVA", "OMRON"] as const;
+
 // ─── Activity page (/activity/<id> — every scrap of info for one activity) ───
 
 interface ActivitySeriesRow {
@@ -1325,6 +1329,8 @@ function keyOf<T extends string>(allowed: readonly string[], v: string | null, f
 const BOOT_URL = (() => {
   const q = new URLSearchParams(window.location.search);
   const iso = (v: string | null): string | undefined => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+  const pick = <T extends string>(allowed: readonly T[], v: string | null): T | "" =>
+    (allowed as readonly string[]).includes(v ?? "") ? (v as T) : "";
   return {
     fromDate:
       iso(q.get("from")) ??
@@ -1333,6 +1339,8 @@ const BOOT_URL = (() => {
     body: keyOf(Object.keys(BODY_METRIC), q.get("body"), "weightKg"),
     sleep: keyOf(Object.keys(SLEEP_METRIC), q.get("sleep"), "hours"),
     daily: keyOf(Object.keys(DAILY_METRIC), q.get("daily"), "steps"),
+    feedType: pick(FEED_TYPES, q.get("type")),
+    feedProv: pick(FEED_PROVIDERS, q.get("prov")),
   };
 })();
 
@@ -1365,6 +1373,9 @@ export default function App() {
   const [bodyMetric, setBodyMetric] = useState<BodyMetricKey>(BOOT_URL.body);
   const [sleepMetric, setSleepMetric] = useState<SleepMetricKey>(BOOT_URL.sleep);
   const [dailyMetric, setDailyMetric] = useState<DailyMetricKey>(BOOT_URL.daily);
+  // activities feed filters (type + provider) — deep-linked like the range
+  const [feedType, setFeedType] = useState<string>(BOOT_URL.feedType);
+  const [feedProv, setFeedProv] = useState<string>(BOOT_URL.feedProv);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
@@ -1540,8 +1551,8 @@ export default function App() {
   }
 
   // every filter change rewrites the query string, so copying the URL shares
-  // the exact dashboard view (range + selected chart metrics). Skipped on the
-  // activity route so deep links to /activity/<id> keep their path.
+  // the exact dashboard view (range + selected chart metrics + feed filters).
+  // Skipped on the activity route so deep links to /activity/<id> keep their path.
   useEffect(() => {
     if (route.name !== "dashboard") return;
     const q = new URLSearchParams();
@@ -1550,9 +1561,11 @@ export default function App() {
     if (bodyMetric !== "weightKg") q.set("body", bodyMetric);
     if (sleepMetric !== "hours") q.set("sleep", sleepMetric);
     if (dailyMetric !== "steps") q.set("daily", dailyMetric);
+    if (feedType) q.set("type", feedType);
+    if (feedProv) q.set("prov", feedProv);
     const s = q.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${s ? `?${s}` : ""}${window.location.hash}`);
-  }, [route, fromDate, toDate, bodyMetric, sleepMetric, dailyMetric]);
+  }, [route, fromDate, toDate, bodyMetric, sleepMetric, dailyMetric, feedType, feedProv]);
 
   const weighIns = useMemo(() => [...measurements].sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime()), [measurements]);
 
@@ -1561,6 +1574,24 @@ export default function App() {
   const sleepIn = useMemo(() => sleep.filter((s) => inRange(`${s.dateKey}T00:00:00.000Z`)), [sleep, inRange]);
   const wellnessIn = useMemo(() => wellness.filter((w) => inRange(`${w.dateKey}T00:00:00.000Z`)), [wellness, inRange]);
   const activitiesIn = useMemo(() => activities.filter((a) => inRange(a.startTime)), [activities, inRange]);
+  // the feed's own filters (type / provider) sit on top of the range filter and
+  // affect the table only — the stat card keeps counting the whole range
+  const activitiesFeed = useMemo(
+    () =>
+      activitiesIn.filter(
+        (a) => (!feedType || a.type === feedType) && (!feedProv || (a.providers ?? []).includes(feedProv)),
+      ),
+    [activitiesIn, feedType, feedProv],
+  );
+  // dropdowns only offer values that exist in the current range
+  const feedTypeOptions = useMemo(
+    () => FEED_TYPES.filter((t) => activitiesIn.some((a) => a.type === t)),
+    [activitiesIn],
+  );
+  const feedProvOptions = useMemo(
+    () => FEED_PROVIDERS.filter((p) => activitiesIn.some((a) => (a.providers ?? []).includes(p))),
+    [activitiesIn],
+  );
   const measurementsIn = useMemo(() => measurements.filter((m) => inRange(m.measuredAt)), [measurements, inRange]);
 
   // newest row in range for the headline cards (arrays are oldest-first)
@@ -1814,19 +1845,44 @@ export default function App() {
 
       <section>
         <h2>Activities</h2>
-        {activitiesIn.length === 0 && <p className="empty">No activities in range.</p>}
+        <div className="feed-filters">
+          <select
+            value={feedType}
+            onChange={(e) => setFeedType(e.target.value)}
+            aria-label="filter activities by type"
+          >
+            <option value="">all types</option>
+            {feedTypeOptions.map((t) => (
+              <option key={t} value={t}>{TYPE_EMOJI[t] ?? "⌚"} {t.toLowerCase().replace("_", " ")}</option>
+            ))}
+          </select>
+          <select
+            value={feedProv}
+            onChange={(e) => setFeedProv(e.target.value)}
+            aria-label="filter activities by provider"
+          >
+            <option value="">all providers</option>
+            {feedProvOptions.map((p) => (
+              <option key={p} value={p}>{p.toLowerCase()}</option>
+            ))}
+          </select>
+        </div>
+        {activitiesFeed.length === 0 && (
+          <p className="empty">{activitiesIn.length ? "No activities match these filters." : "No activities in range."}</p>
+        )}
         <table className="list">
           <thead>
             <tr>
-              <th></th><th>when</th><th>type</th><th>distance</th><th>time</th><th>avg speed</th><th>HR</th><th>power</th><th></th>
+              <th></th><th>when</th><th>type</th><th>provider</th><th>distance</th><th>time</th><th>avg speed</th><th>HR</th><th>power</th><th></th>
             </tr>
           </thead>
           <tbody>
-            {activitiesIn.map((a) => (
+            {activitiesFeed.map((a) => (
               <tr key={a.id}>
                 <td>{TYPE_EMOJI[a.type] ?? "⌚"}</td>
                 <td>{fmtDate(a.startTime)}</td>
                 <td>{a.type}</td>
+                <td>{(a.providers ?? []).map((p) => p.toLowerCase()).join(", ")}</td>
                 <td>{fmtKm(a.distanceM)}</td>
                 <td>{fmtMin(a.durationS)}</td>
                 <td>{fmtSpeed(a.avgSpeedMs)}</td>

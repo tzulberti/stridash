@@ -134,6 +134,8 @@ export interface Activity {
   caloriesKcal: number | null;
   /** source-reported training load / stress (TSS-like); semantics vary by provider */
   trainingLoad: number | null;
+  /** providers that delivered this row (a length-2 list = same ride arrived twice) */
+  providers?: string[];
   indoor: boolean;
   gearId: string | null;
   notes: string | null;

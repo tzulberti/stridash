@@ -326,3 +326,20 @@ footer { margin-top: 48px; color: var(--muted); font-size: 12px; text-align: cen
 .mfa-row label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
 @keyframes spin360 { to { transform: rotate(360deg); } }
 .conn-spin .spin { display: inline-block; animation: spin360 1s linear infinite; }
+
+/* activities feed filters (type / provider selects) */
+.feed-filters {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0 10px;
+  flex-wrap: wrap;
+}
+.feed-filters select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13px;
+}
