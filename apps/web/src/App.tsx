@@ -985,7 +985,14 @@ function ConnectionsSection(props: {
     }
   }
 
-  const identifierLabel = provider === "omron" ? "Omron email or username" : provider === "igpsport" ? "iGPSPORT username" : "Garmin email";
+  const identifierLabel =
+    provider === "omron"
+      ? "Omron email or username"
+      : provider === "igpsport"
+        ? "iGPSPORT username"
+        : provider === "zwift"
+          ? "Zwift account email"
+          : "Garmin email";
 
   return (
     <section className="connections-page">
