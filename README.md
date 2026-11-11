@@ -87,6 +87,22 @@ npm run dev:mobile                  # Expo app: Android / iOS / web
 npm run dev:web
 
 npm run typecheck                   # typecheck all workspaces
+npm test                            # all tests: unit + integration + web
+npm run test:ci                     # same, with the integration Postgres reused
+```
+
+Tests run in three tiers: pure unit tests (provider mappings, sync
+orchestration — mocked, milliseconds), route integration tests (the real
+Hono app in-process against a throwaway Postgres started by
+testcontainers, with every migration applied), and web helper tests.
+`npm test` needs Docker for the integration tier; the dev database is
+never touched. `npm run test:ci` sets `STRIDASH_TEST_REUSE=1`, which
+keeps the container between runs (~5.6s → ~1s warm-up) — useful in
+GitHub Actions and for repeated local runs:
+
+```yaml
+- run: npm ci
+- run: npm run test:ci
 ```
 
 Server configuration lives in `apps/server/.env` (copy from

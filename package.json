@@ -15,6 +15,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:ci": "STRIDASH_TEST_REUSE=1 npm test",
     "dev:server": "npm run dev -w @stridash/server",
     "dev:mobile": "npm run start -w @stridash/mobile",
     "dev:web": "npm run dev -w @stridash/web",
