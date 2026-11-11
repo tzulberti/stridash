@@ -5,8 +5,38 @@ on:
     branches: [main]
   pull_request:
 
+# a new push to the same PR cancels the superseded run
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  typecheck:
+  # ── 1. formatting + lint + typecheck ────────────────────────────────────────
+  static-checks:
+    name: format · lint · typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Prettier
+        run: npm run format:check
+      - name: ESLint
+        run: npm run lint
+      # the generated Prisma client is gitignored — regenerate before tsc sees it
+      - name: Prisma generate
+        run: npm run prisma:generate -w @stridash/server
+        env:
+          DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
+      - name: Typecheck
+        run: npm run typecheck
+
+  # ── 2. unit tests (server + web) — no Docker, no network, milliseconds ──────
+  unit-tests:
+    name: unit tests (server + web)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,5 +49,29 @@ jobs:
         run: npm run prisma:generate -w @stridash/server
         env:
           DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
-      - name: Typecheck
-        run: npm run typecheck
+      - name: Server unit tests
+        run: npx vitest run --project unit
+        working-directory: apps/server
+      - name: Web tests
+        run: npm test -w @stridash/web
+
+  # ── 3. integration tests — real app, real migrations, testcontainers PG ─────
+  integration-tests:
+    name: integration tests (testcontainers postgres)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Prisma generate
+        run: npm run prisma:generate -w @stridash/server
+        env:
+          DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
+      # ubuntu-latest ships Docker; testcontainers boots a throwaway postgres:18
+      # and `prisma migrate deploy` runs every hand-written migration against it
+      - name: Integration tests
+        run: npx vitest run --project integration
+        working-directory: apps/server
