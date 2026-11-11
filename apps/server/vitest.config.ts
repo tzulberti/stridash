@@ -4,8 +4,8 @@ import { defineConfig } from "vitest/config";
  * Two projects:
  *  - unit: provider normalize/mapping + sync-service orchestration (mocked
  *    I/O, no database, runs everywhere in milliseconds)
- *  - integration: the real Hono app over a throwaway Postgres database
- *    (see tests/integration/setup.ts for the bootstrap)
+ *  - integration: the real Hono app over a throwaway Postgres started by
+ *    testcontainers (tests/integration/setup.ts; Docker required)
  */
 export default defineConfig({
   test: {

@@ -1,8 +1,6 @@
 /**
- * Route-level integration tests: the real Hono app (createApp) driven
- * in-process against a throwaway Postgres database (tests/integration/
- * setup.ts). Covers auth, data filtering + provenance joins, connection
- * lifecycle and the sync-failure contract.
+ * Integration-test bootstrap (testcontainers). ... (see setup.ts) — the dev
+ * database and docker-compose db are never touched.
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
