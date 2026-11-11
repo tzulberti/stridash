@@ -10,10 +10,7 @@ export function fmtKm(m: number | null | undefined): string {
   return m == null ? '—' : `${(m / 1000).toFixed(2)} km`;
 }
 export function fmtMin(s: number | null | undefined): string {
-  if (s == null) return '—';
-  const h = Math.floor(s / 3600);
-  const m = Math.round((s % 3600) / 60);
-  return h ? `${h}h ${m}m` : `${m}m`;
+  return s == null ? '—' : fmtSplitTime(s);
 }
 export function fmtSpeed(ms: number | null | undefined): string {
   return ms == null ? '—' : `${((ms * 3600) / 1000).toFixed(1)} km/h`;
@@ -26,11 +23,13 @@ export function fmtPace(sec: number | null): string {
   const s = t % 60;
   return `${m}:${String(s).padStart(2, '0')} /km`;
 }
-/** h:mm:ss for split tables */
+/** exact duration, h:mm:ss (or m:ss under an hour) — rounding happens ONCE
+ * on the total so 59.6s rounds to 1:00, never to a bogus "0:60" */
 export function fmtSplitTime(s: number): string {
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = Math.round(s % 60);
+  const t = Math.round(s);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const ss = t % 60;
   const pad = (v: number): string => String(v).padStart(2, '0');
   return h ? `${h}:${pad(m)}:${pad(ss)}` : `${m}:${pad(ss)}`;
 }

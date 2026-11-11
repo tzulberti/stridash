@@ -28,9 +28,10 @@ describe('formatters', () => {
     expect(fmtKm(undefined)).toBe('—');
   });
 
-  it('fmtMin renders hours when ≥ 1h, minutes otherwise', () => {
-    expect(fmtMin(1800)).toBe('30m');
-    expect(fmtMin(3_661)).toBe('1h 1m');
+  it('fmtMin renders the exact duration (m:ss, or h:mm:ss over an hour)', () => {
+    expect(fmtMin(1_402)).toBe('23:22');
+    expect(fmtMin(1_402.7)).toBe('23:23'); // fractional seconds round once
+    expect(fmtMin(3_661)).toBe('1:01:01');
     expect(fmtMin(null)).toBe('—');
   });
 
@@ -49,6 +50,7 @@ describe('formatters', () => {
 
   it('fmtSplitTime renders h:mm:ss only when hours are warranted', () => {
     expect(fmtSplitTime(59)).toBe('0:59');
+    expect(fmtSplitTime(59.6)).toBe('1:00'); // rounds the total, never "0:60"
     expect(fmtSplitTime(3_725)).toBe('1:02:05');
   });
 
