@@ -1348,6 +1348,70 @@ function GearSection(props: { token: string; onBack: () => void }) {
   );
 }
 
+// ─── Settings page (/settings — account info + future preference toggles) ────
+
+type MeJson = {
+  email: string;
+  displayName: string;
+  createdAt: string;
+};
+
+function SettingsSection(props: { token: string; onBack: () => void }) {
+  const { token, onBack } = props;
+  const [me, setMe] = useState<MeJson | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api<MeJson>('/me', { token })
+      .then((m) => {
+        if (alive) setMe(m);
+      })
+      .catch((err) => {
+        if (alive) setError(String(err).replace(/^Error: /, ''));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
+  return (
+    <section className="connections-page">
+      <button type="button" className="btn ghost small" onClick={onBack}>
+        ← dashboard
+      </button>
+      <h2>Settings</h2>
+      <article className="card settings-card">
+        <h3>Account</h3>
+        {error && <p className="error">{error}</p>}
+        {!me && !error && <p className="muted">Loading…</p>}
+        {me && (
+          <table>
+            <tbody>
+              <tr>
+                <th>email</th>
+                <td>{me.email}</td>
+              </tr>
+              <tr>
+                <th>display name</th>
+                <td>{me.displayName}</td>
+              </tr>
+              <tr>
+                <th>member since</th>
+                <td>{me.createdAt.slice(0, 10)}</td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </article>
+      <p className="muted">
+        Preference toggles (units, themes, sync schedule) land here later — the provider links live
+        under Providers Sync.
+      </p>
+    </section>
+  );
+}
+
 // ─── Connections page (/connections — manage + create provider links) ────────
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -1927,6 +1991,8 @@ export default function App() {
   const [sleep, setSleep] = useState<SleepRow[]>([]);
   const [wellness, setWellness] = useState<DailyWellnessRow[]>([]);
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
+  // hamburger dropdown in the header (Providers Sync / Gear / Settings / Sign out)
+  const [menuOpen, setMenuOpen] = useState(false);
   const [bodyMetric, setBodyMetric] = useState<BodyMetricKey>(BOOT_URL.body);
   const [sleepMetric, setSleepMetric] = useState<SleepMetricKey>(BOOT_URL.sleep);
   const [dailyMetric, setDailyMetric] = useState<DailyMetricKey>(BOOT_URL.daily);
@@ -2010,10 +2076,23 @@ export default function App() {
   }, [token, load]);
   // browser back/forward between the dashboard and activity pages
   useEffect(() => {
-    const onPop = () => setRoute(parseRoute(window.location.pathname));
+    const onPop = () => {
+      setRoute(parseRoute(window.location.pathname));
+      setMenuOpen(false); // hamburger closes on navigation of any kind
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
+  // hamburger menu: any click outside of it closes it
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      const wrap = document.querySelector('.menu-wrap');
+      if (wrap && !wrap.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, [menuOpen]);
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
@@ -2091,10 +2170,17 @@ export default function App() {
   function openConnections(): void {
     window.history.pushState(null, '', '/connections');
     setRoute({ name: 'connections' });
+    setMenuOpen(false);
   }
   function openGear(): void {
     window.history.pushState(null, '', '/gear');
     setRoute({ name: 'gear' });
+    setMenuOpen(false);
+  }
+  function openSettings(): void {
+    window.history.pushState(null, '', '/settings');
+    setRoute({ name: 'settings' });
+    setMenuOpen(false);
   }
 
   /** force-sync one connection; one at a time so a slow Garmin history scan
@@ -2235,55 +2321,73 @@ export default function App() {
     );
   }
 
+  const signOut = () => {
+    clearTokens();
+    setToken(null);
+    setMenuOpen(false);
+  };
+
   const header = (
     <header>
-      <h1>🦾 Stridash</h1>
-      <div className="sources">
-        {connections.map((c) => (
-          <a
-            key={c.id}
-            className={`pill ${c.status.toLowerCase()}`}
-            href="/connections"
-            title="manage connections"
-            onClick={(e) => {
-              e.preventDefault();
-              openConnections();
-            }}
-          >
-            {c.provider.toLowerCase()} · {c.status.toLowerCase()}
-            {c.lastSyncedAt ? ` · ${fmtDate(c.lastSyncedAt)}` : ''}
-          </a>
-        ))}
-        {connections.length === 0 && (
-          <a
-            className="pill"
-            href="/connections"
-            onClick={(e) => {
-              e.preventDefault();
-              openConnections();
-            }}
-          >
-            no connections yet — add one on the connections page
-          </a>
+      <a
+        className="brand"
+        href="/"
+        title="back to the dashboard"
+        onClick={(e) => {
+          e.preventDefault();
+          goHome();
+        }}
+      >
+        <h1>🦾 Stridash</h1>
+      </a>
+      <div className="menu-wrap">
+        <button
+          type="button"
+          className="hamburger"
+          aria-label="menu"
+          aria-expanded={menuOpen}
+          onClick={(e) => {
+            e.stopPropagation(); // the outside-click listener would re-close it
+            setMenuOpen((v) => !v);
+          }}
+        >
+          ☰
+        </button>
+        {menuOpen && (
+          <nav className="menu">
+            <a
+              href="/connections"
+              onClick={(e) => {
+                e.preventDefault();
+                openConnections();
+              }}
+            >
+              Providers Sync
+            </a>
+            <a
+              href="/gear"
+              onClick={(e) => {
+                e.preventDefault();
+                openGear();
+              }}
+            >
+              Gear
+            </a>
+            <a
+              href="/settings"
+              onClick={(e) => {
+                e.preventDefault();
+                openSettings();
+              }}
+            >
+              Settings
+            </a>
+            <button type="button" className="danger" onClick={signOut}>
+              Sign Out
+            </button>
+          </nav>
         )}
       </div>
-      <button
-        className="btn ghost"
-        onClick={() => {
-          openGear();
-        }}
-      >
-        gear
-      </button>
-      <button
-        className="btn ghost"
-        onClick={() => {
-          clearTokens();
-          setToken(null);
-        }}
-      >
-        sign out
-      </button>
     </header>
   );
   const footer = <footer>Stridash · all data read from your own Stridash instance</footer>;
@@ -2311,6 +2415,17 @@ export default function App() {
       <main>
         {header}
         <GearSection token={token ?? ''} onBack={goHome} />
+        {footer}
+      </main>
+    );
+  }
+
+  // the settings page is its own URL: /settings
+  if (route.name === 'settings') {
+    return (
+      <main>
+        {header}
+        <SettingsSection token={token} onBack={goHome} />
         {footer}
       </main>
     );

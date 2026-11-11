@@ -109,6 +109,11 @@ describe('parseRoute (client routing)', () => {
     expect(parseRoute('/gear/')).toEqual({ name: 'gear' });
   });
 
+  it('routes /settings (with or without trailing slash)', () => {
+    expect(parseRoute('/settings')).toEqual({ name: 'settings' });
+    expect(parseRoute('/settings/')).toEqual({ name: 'settings' });
+  });
+
   it('extracts the activity id', () => {
     expect(parseRoute('/activity/01a1c541-b7d4-77d0-b568-5f2bc6078ec0')).toEqual({
       name: 'activity',

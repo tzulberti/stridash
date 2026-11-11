@@ -38,6 +38,15 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     await next();
   });
 
+  routes.get('/me', async (c) => {
+    const user = await prisma.user.findUnique({
+      where: { id: c.get('userId') },
+      select: { email: true, displayName: true, createdAt: true },
+    });
+    if (!user) return c.json({ error: 'Not found' }, 404);
+    return c.json({ ...user, createdAt: user.createdAt.toISOString() });
+  });
+
   routes.get('/activities', async (c) => {
     const q = listQuerySchema.safeParse(c.req.query());
     if (!q.success)

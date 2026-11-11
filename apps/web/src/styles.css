@@ -643,3 +643,84 @@ footer {
   font: inherit;
   font-size: 13px;
 }
+
+/* header — brand goes home, hamburger opens the nav dropdown */
+.brand {
+  color: inherit;
+  text-decoration: none;
+}
+.brand h1 {
+  margin-right: auto; /* keeps the hamburger pinned to the right edge */
+}
+.menu-wrap {
+  position: relative;
+}
+.hamburger {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 12px;
+}
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 6px;
+  z-index: 50;
+}
+.menu a,
+.menu button {
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+  text-align: left;
+  text-decoration: none;
+}
+.menu a:hover,
+.menu button:hover {
+  background: var(--border);
+}
+.menu button.danger {
+  color: #e5484d;
+}
+
+/* settings page */
+.settings-card {
+  max-width: 480px;
+  margin-bottom: 10px;
+}
+.settings-card h3 {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+.settings-card table {
+  border-collapse: collapse;
+  font-size: 14px;
+  width: 100%;
+}
+.settings-card th {
+  color: var(--muted);
+  font-weight: 500;
+  padding: 6px 16px 6px 0;
+  text-align: left;
+  white-space: nowrap;
+}
+.settings-card td {
+  padding: 6px 0;
+}
