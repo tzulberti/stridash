@@ -5,6 +5,24 @@
   --text: #e6e6ea;
   --muted: #8b8b96;
   --accent: #6e56cf;
+  --accent-hover: #7e66de;
+  --hover: #242a36;
+  --danger: #e5484d;
+  --warn: #d29922;
+}
+
+/* light mode (Settings → Theme) — overrides the same variables */
+:root[data-theme='light'] {
+  --bg: #f4f4f6;
+  --panel: #ffffff;
+  --border: #d9d9e0;
+  --text: #1c1c24;
+  --muted: #6d6d7a;
+  --accent: #5b43b8;
+  --accent-hover: #6d55cf;
+  --hover: #ececf1;
+  --danger: #d3242a;
+  --warn: #a96f0a;
 }
 
 * {
@@ -81,13 +99,13 @@ footer {
   color: var(--text);
 }
 .pill.pending {
-  color: #d29922;
+  color: var(--warn);
 }
 .pill.revoked {
-  color: #e5484d;
+  color: var(--danger);
 }
 .pill.error {
-  color: #e5484d;
+  color: var(--danger);
 }
 
 .cards {
@@ -120,7 +138,7 @@ footer {
   border-radius: 12px;
 }
 .chart-grid {
-  stroke: #232833;
+  stroke: var(--border);
   stroke-width: 1;
 }
 .chart-axis {
@@ -128,25 +146,25 @@ footer {
   font-size: 11px;
 }
 .chart-axis-title {
-  fill: #c9cfd9;
+  fill: var(--text);
   font-size: 12px;
   font-weight: 600;
 }
 .chart-cross {
-  stroke: #6e56cf;
+  stroke: var(--accent);
   stroke-width: 1;
   stroke-dasharray: 3 3;
 }
 .chart-tip {
-  fill: #10131a;
-  stroke: #2a2f3a;
+  fill: var(--panel);
+  stroke: var(--border);
 }
 .chart-tip-date {
   fill: var(--muted);
   font-size: 10px;
 }
 .chart-tip-val {
-  fill: #e6e9ef;
+  fill: var(--text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -236,7 +254,7 @@ footer {
 }
 
 .error {
-  color: #e5484d;
+  color: var(--danger);
 }
 .empty {
   color: var(--muted);
@@ -258,12 +276,12 @@ footer {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.85rem;
-  color: var(--text-2, #9aa4b2);
+  color: var(--text-2, var(--muted));
   cursor: pointer;
   user-select: none;
 }
 .remember-me input {
-  accent-color: #6e56cf;
+  accent-color: var(--accent);
 }
 
 /* date-range filter bar */
@@ -274,18 +292,18 @@ footer {
   flex-wrap: wrap;
   margin: 0.75rem 0 1rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid #2a2f3a;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #171a21;
+  background: var(--panel);
 }
 .range-label {
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #9aa4b2;
+  color: var(--muted);
 }
 .range-sep {
-  color: #9aa4b2;
+  color: var(--muted);
   font-size: 0.85rem;
 }
 /* calendar date picker */
@@ -296,9 +314,9 @@ footer {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  background: #10131a;
-  color: #e6e9ef;
-  border: 1px solid #2a2f3a;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.3rem 0.55rem;
   font: inherit;
@@ -307,10 +325,10 @@ footer {
 }
 .dp-btn:hover,
 .dp-btn.open {
-  border-color: #6e56cf;
+  border-color: var(--accent);
 }
 .dp-empty {
-  color: #6b7280;
+  color: var(--muted);
 }
 .dp-icon {
   font-size: 0.85rem;
@@ -320,8 +338,8 @@ footer {
   top: calc(100% + 6px);
   left: 0;
   z-index: 30;
-  background: #14171f;
-  border: 1px solid #2a2f3a;
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
   padding: 0.5rem;
@@ -339,9 +357,9 @@ footer {
 }
 .dp-nav {
   background: transparent;
-  border: 1px solid #2a2f3a;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #e6e9ef;
+  color: var(--text);
   width: 1.7rem;
   height: 1.7rem;
   cursor: pointer;
@@ -349,7 +367,7 @@ footer {
   line-height: 1;
 }
 .dp-nav:hover {
-  border-color: #6e56cf;
+  border-color: var(--accent);
 }
 .dp-grid {
   display: grid;
@@ -359,7 +377,7 @@ footer {
 .dp-wd {
   font-size: 0.65rem;
   text-align: center;
-  color: #9aa4b2;
+  color: var(--muted);
   padding: 0.2rem 0;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -368,20 +386,20 @@ footer {
   background: transparent;
   border: none;
   border-radius: 6px;
-  color: #e6e9ef;
+  color: var(--text);
   font: inherit;
   font-size: 0.78rem;
   padding: 0.35rem 0;
   cursor: pointer;
 }
 .dp-day:hover:not(.disabled) {
-  background: #242a36;
+  background: var(--hover);
 }
 .dp-day.dp-out {
-  color: #4b5563;
+  color: var(--muted);
 }
 .dp-day.dp-out:hover:not(.disabled) {
-  background: #1c2029;
+  background: var(--hover);
 }
 .dp-day.today {
   font-weight: 700;
@@ -389,14 +407,14 @@ footer {
   text-underline-offset: 2px;
 }
 .dp-day.sel {
-  background: #6e56cf;
+  background: var(--accent);
   color: #fff;
 }
 .dp-day.sel:hover {
-  background: #7e66de;
+  background: var(--accent-hover);
 }
 .dp-day.disabled {
-  color: #3a4150;
+  color: var(--muted);
   cursor: not-allowed;
   text-decoration: line-through;
 }
@@ -407,17 +425,17 @@ footer {
 }
 .dp-clear {
   background: transparent;
-  border: 1px solid #2a2f3a;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #9aa4b2;
+  color: var(--muted);
   font: inherit;
   font-size: 0.72rem;
   padding: 0.2rem 0.55rem;
   cursor: pointer;
 }
 .dp-clear:hover:not(:disabled) {
-  color: #e6e9ef;
-  border-color: #6e56cf;
+  color: var(--text);
+  border-color: var(--accent);
 }
 .dp-clear:disabled {
   opacity: 0.4;
@@ -435,7 +453,7 @@ footer {
   flex-wrap: wrap;
   margin: 0.4rem 0 0.2rem;
   font-size: 0.72rem;
-  color: var(--muted, #9aa4b2);
+  color: var(--muted, var(--muted));
 }
 .zone-item {
   display: inline-flex;
@@ -485,16 +503,16 @@ footer {
   padding: 10px 14px;
 }
 .conn-card.error {
-  border-color: #e5484d;
+  border-color: var(--danger);
 }
 .conn-card.pending .conn-status {
-  color: #d29922;
+  color: var(--warn);
 }
 .conn-card.error .conn-status {
-  color: #e5484d;
+  color: var(--danger);
 }
 .conn-card.revoked .conn-status {
-  color: #e5484d;
+  color: var(--danger);
 }
 .conn-card.syncing {
   opacity: 0.75;
@@ -529,7 +547,7 @@ footer {
   color: var(--accent);
 }
 .conn-msg.err {
-  color: #e5484d;
+  color: var(--danger);
 }
 .conn-actions {
   display: flex;
@@ -644,16 +662,14 @@ footer {
   font-size: 13px;
 }
 
-/* header — brand goes home, hamburger opens the nav dropdown */
+/* header — brand goes home, hamburger sits at the top-right */
 .brand {
   color: inherit;
   text-decoration: none;
 }
-.brand h1 {
-  margin-right: auto; /* keeps the hamburger pinned to the right edge */
-}
 .menu-wrap {
   position: relative;
+  margin-left: auto; /* pins the hamburger to the right edge */
 }
 .hamburger {
   background: var(--panel);
@@ -697,7 +713,7 @@ footer {
   background: var(--border);
 }
 .menu button.danger {
-  color: #e5484d;
+  color: var(--danger);
 }
 
 /* settings page */
@@ -723,4 +739,32 @@ footer {
 }
 .settings-card td {
   padding: 6px 0;
+}
+
+/* settings — unit/theme toggles, export, danger zone */
+.setting-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.btn.danger {
+  background: var(--danger);
+  color: #fff;
+}
+.btn.danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.settings-card.danger-zone {
+  border-color: var(--danger);
+}
+.danger-zone input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
 }

@@ -523,3 +523,77 @@ describe('gear', () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ─── Account export + delete (Settings page: download my data / danger zone) ─
+
+describe('account export + delete', () => {
+  let email = '';
+  let token = '';
+
+  it('exports the full account as a JSON download without any tokens', async () => {
+    email = `exporter-${Date.now()}@test.stridash`;
+    const reg = await app.request('/api/auth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: 'exporter-pass-1', displayName: 'Exporter' }),
+    });
+    token = ((await json(reg)) as { accessToken: string }).accessToken;
+    const alice = await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } });
+
+    // seed one of everything, including a connection (tokens must stay out)
+    const conn = await prisma.connection.create({
+      data: {
+        userId: alice.id,
+        provider: 'GARMIN',
+        providerUserId: 'exp-1',
+        status: 'ACTIVE',
+        accessTokenEnc: encryptToken('secret-access', env.STRIDASH_ENC_KEY),
+        refreshTokenEnc: encryptToken('secret-refresh', env.STRIDASH_ENC_KEY),
+        scopes: [],
+      },
+    });
+    await prisma.activity.create({
+      data: {
+        userId: alice.id,
+        headline: 'exportable run',
+        type: 'RUN',
+        startTime: new Date('2026-11-01T07:00:00Z'),
+        durationS: 1800,
+        sources: {
+          create: {
+            connectionId: conn.id,
+            sourceActivityId: 'exp-1',
+            sourceUpdatedAt: new Date('2026-11-01T07:00:00Z'),
+          },
+        },
+      },
+    });
+
+    const res = await app.request('/api/export', authed(aliceToken));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-disposition')).toContain('attachment');
+    const dump = (await json(res)) as Record<string, unknown>;
+    expect(dump.format).toBe('stridash-export/1');
+    expect((dump.account as Record<string, unknown>).email).toBe('alice@test.stridash');
+    const acts = dump.activities as Array<Record<string, unknown>>;
+    const exported = acts.find((a) => a.headline === 'exportable run')!;
+    expect((exported.sources as Array<Record<string, unknown>>)[0].sourceActivityId).toBe('exp-1');
+    const raw = JSON.stringify(dump);
+    expect(raw).not.toContain('secret-access');
+    expect(raw).not.toContain('secret-refresh');
+    // the exporter's own account sees nothing of alice's
+    const mine = await app.request('/api/export', authed(token));
+    expect(((await json(mine)) as { activities: unknown[] }).activities).toHaveLength(0);
+  });
+
+  it('hard-deletes the account and cascades everything; the token dies after', async () => {
+    const res = await app.request('/api/me', authed(token, { method: 'DELETE' }));
+    expect(res.status).toBe(200);
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+
+    // the row is gone — the same token now reads an empty account (JWT is
+    // stateless; refresh tokens died with the cascade, so the session ends)
+    const me = await app.request('/api/me', authed(token));
+    expect(me.status).toBe(404);
+  });
+});

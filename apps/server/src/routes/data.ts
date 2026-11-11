@@ -47,6 +47,84 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     return c.json({ ...user, createdAt: user.createdAt.toISOString() });
   });
 
+  // ─── Account data: full export + hard delete ───────────────────────────────
+
+  /** Full JSON dump of everything this user's account holds ("raw payload is
+   * the authority" — activities carry their raw/detail payloads as-received).
+   * Per-sample series (activity_data_points, ~1 row per activity) are NOT
+   * included: they dominate the payload (100k+ samples/year). Everything
+   * else — scalars, raw payloads, provenance, measurements, sleep, wellness,
+   * gear — is in here. */
+  routes.get('/export', async (c) => {
+    const userId = c.get('userId');
+    const [user, connections, activities, measurements, sleepSessions, dailyWellness, gear] =
+      await Promise.all([
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: { email: true, displayName: true, createdAt: true },
+        }),
+        prisma.connection.findMany({
+          where: { userId },
+          // tokens are NEVER exported — they're credentials, not data
+          select: {
+            provider: true,
+            providerUserId: true,
+            status: true,
+            createdAt: true,
+            lastSyncedAt: true,
+          },
+        }),
+        prisma.activity.findMany({
+          where: { userId },
+          orderBy: { startTime: 'asc' },
+          include: {
+            sources: {
+              select: { connectionId: true, sourceActivityId: true, sourceUpdatedAt: true },
+            },
+          },
+        }),
+        prisma.measurement.findMany({ where: { userId }, orderBy: { measuredAt: 'asc' } }),
+        prisma.sleepSession.findMany({ where: { userId }, orderBy: { dateKey: 'asc' } }),
+        prisma.dailyWellness.findMany({ where: { userId }, orderBy: { dateKey: 'asc' } }),
+        prisma.gear.findMany({
+          where: { userId },
+          include: { components: { orderBy: { createdAt: 'asc' } } },
+        }),
+      ]);
+
+    const dump = {
+      exportedAt: new Date().toISOString(),
+      format: 'stridash-export/1',
+      note: 'Per-sample activity series (the FIT "stream" rows) are not part of this dump; every activity carries its scalars, raw provider payloads and provenance. Tokens/secrets are never exported.',
+      account: user,
+      connections,
+      // serializeRow: Prisma Decimals → JSON numbers, Dates → ISO strings
+      activities: activities.map((a) => ({ ...serializeRow(a), sources: a.sources })),
+      measurements: measurements.map(serializeRow),
+      sleepSessions: sleepSessions.map(serializeRow),
+      dailyWellness: dailyWellness.map(serializeRow),
+      gear: gear.map((g) => ({
+        ...serializeRow(g),
+        components: g.components.map(serializeRow),
+      })),
+    };
+    const filename = `stridash-export-${new Date().toISOString().slice(0, 10)}.json`;
+    return new Response(JSON.stringify(dump, null, 1), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
+    });
+  });
+
+  /** Hard delete: the user row cascades to connections, activities,
+   * measurements, sleep, wellness, gear, components and refresh tokens
+   * (every FK from users is ON DELETE CASCADE). Irreversible. */
+  routes.delete('/me', async (c) => {
+    await prisma.user.delete({ where: { id: c.get('userId') } });
+    return c.json({ ok: true });
+  });
+
   routes.get('/activities', async (c) => {
     const q = listQuerySchema.safeParse(c.req.query());
     if (!q.success)

@@ -3,7 +3,7 @@
  * dashboard's user-visible formatting and the deep-link parsing contract.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   fmtKm,
   fmtMin,
@@ -11,6 +11,8 @@ import {
   fmtPace,
   fmtSplitTime,
   fmtDate,
+  metersPerUnit,
+  setUnit,
   TYPE_EMOJI,
   FEED_TYPES,
   FEED_PROVIDERS,
@@ -20,12 +22,23 @@ import {
   parseRoute,
 } from './format';
 
+// the unit setting is module-level state — restore km after each mile test
+afterEach(() => setUnit('km'));
+
 describe('formatters', () => {
   it('fmtKm renders metres as kilometres, — for null', () => {
     expect(fmtKm(22_400)).toBe('22.40 km');
     expect(fmtKm(0)).toBe('0.00 km');
     expect(fmtKm(null)).toBe('—');
     expect(fmtKm(undefined)).toBe('—');
+  });
+
+  it('miles mode converts distances, speeds, paces and the split bucket', () => {
+    setUnit('mi');
+    expect(fmtKm(160_934.4)).toBe('100.00 mi');
+    expect(fmtSpeed(8.396)).toBe('18.8 mph'); // 30.2 km/h ≈ 18.8 mph
+    expect(fmtPace(1_028)).toBe('17:08 /mi'); // in miles mode callers pass sec-per-mile
+    expect(metersPerUnit()).toBe(1_609.344);
   });
 
   it('fmtMin renders the exact duration (m:ss, or h:mm:ss over an hour)', () => {

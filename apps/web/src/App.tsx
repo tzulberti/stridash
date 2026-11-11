@@ -265,13 +265,14 @@ function LineChart({
     .join(' ');
 
   const yTicks = niceTicks(y0, y1, 4);
-  // distance mode ticks live in km space (nice numbers), plotted back in meters
+  // distance mode ticks live in unit space (nice numbers), plotted back in meters
   const isDist = xMode === 'distance';
+  const unitM = metersPerUnit();
   const xTickCount = Math.max(2, Math.round(plotW / 170));
   const xTickMarks = isDist
-    ? niceTicks(x0 / 1000, x1 / 1000, Math.max(3, Math.round(plotW / 160))).map((km) => ({
-        x: km * 1000,
-        label: fmtVal(km),
+    ? niceTicks(x0 / unitM, x1 / unitM, Math.max(3, Math.round(plotW / 160))).map((d) => ({
+        x: d * unitM,
+        label: fmtVal(d),
       }))
     : Array.from({ length: xTickCount }, (_, i) => {
         const t = x0 + (spanX * i) / (xTickCount - 1);
@@ -382,7 +383,7 @@ function LineChart({
         </text>
       )}
       <text x={W - padR} y={H - 6} textAnchor="end" className="chart-axis-title">
-        {isDist ? 'distance (km)' : spanDays < 1.5 ? 'elapsed' : 'date'}
+        {isDist ? `distance (${unitLabel()})` : spanDays < 1.5 ? 'elapsed' : 'date'}
       </text>
       {zonePaths ? (
         zonePaths.map((zp) => (
@@ -513,9 +514,11 @@ type KmSplitsSeries = {
   altitudeM?: number[];
 };
 
-/** split table for one activity: one row per full km (plus the partial tail),
- * every column an in-window aggregate of a stored stream (Garmin-style laps) */
+/** split table for one activity: one row per full unit (km or mi, per the
+ * settings), every column an in-window aggregate of a stored stream
+ * (Garmin-style laps) */
 function buildKmSplits(s: KmSplitsSeries): KmSplit[] | null {
+  const unitM = metersPerUnit();
   const dist = s.distanceM;
   const ts = s.timeMs;
   if (!dist || !ts) return null;
@@ -523,7 +526,7 @@ function buildKmSplits(s: KmSplitsSeries): KmSplit[] | null {
   if (n < 2) return null;
   const base = dist[0] ?? 0;
   const total = (dist[n - 1] ?? 0) - base;
-  if (total < 1000) return null;
+  if (total < unitM) return null;
 
   /** time recorded at distance d — linear interp between bracketing samples */
   const timeAt = (d: number): number => {
@@ -537,7 +540,7 @@ function buildKmSplits(s: KmSplitsSeries): KmSplit[] | null {
   };
 
   const rows: KmSplit[] = [];
-  const fullKms = Math.floor(total / 1000);
+  const fullUnits = Math.floor(total / unitM);
   const push = (
     k: number,
     label: string,
@@ -548,7 +551,7 @@ function buildKmSplits(s: KmSplitsSeries): KmSplit[] | null {
     headTimeS: number,
   ): void => {
     const distanceM = dEnd - dStart;
-    const paceSec = distanceM > 0 ? headTimeS / (distanceM / 1000) : null;
+    const paceSec = distanceM > 0 ? headTimeS / (distanceM / unitM) : null;
     const bestSpeed = windowStat(s.speedMs, i0, i1, 0.01, 'max');
     const voM = windowStat(s.verticalOscillationM, i0, i1, 0.001, 'avg');
     rows.push({
@@ -557,7 +560,7 @@ function buildKmSplits(s: KmSplitsSeries): KmSplit[] | null {
       distanceM,
       timeS: headTimeS,
       paceSec,
-      bestPaceSec: bestSpeed ? 1000 / bestSpeed : null,
+      bestPaceSec: bestSpeed ? unitM / bestSpeed : null,
       avgHr: windowStat(s.hrBpm, i0, i1, 30, 'avg'),
       maxHr: windowStat(s.hrBpm, i0, i1, 30, 'max'),
       avgCadence: windowStat(s.cadenceRpm, i0, i1, 1, 'avg'),
@@ -570,22 +573,22 @@ function buildKmSplits(s: KmSplitsSeries): KmSplit[] | null {
       elevM: s.altitudeM ? windowElevGain(s.altitudeM, i0, i1) : null,
     });
   };
-  for (let k = 1; k <= fullKms; k++) {
-    const dStart = base + 1000 * (k - 1);
-    const dEnd = base + 1000 * k;
+  for (let k = 1; k <= fullUnits; k++) {
+    const dStart = base + unitM * (k - 1);
+    const dEnd = base + unitM * k;
     const i0 = kmBisect(dist, dStart);
     const i1 = Math.max(kmBisect(dist, dEnd), i0 + 1);
     // ts is in MILLISECONDS — convert to seconds for the table
     push(k, String(k), dStart, dEnd, i0, i1, Math.max(0, (timeAt(dEnd) - timeAt(dStart)) / 1000));
   }
   // a ≥50 m tail is worth a speed-up read of the finish line
-  if (total - 1000 * fullKms >= 50) {
-    const dStart = base + 1000 * fullKms;
+  if (total - unitM * fullUnits >= 50) {
+    const dStart = base + unitM * fullUnits;
     const i0 = kmBisect(dist, dStart);
     const dEnd = dist[n - 1] ?? dStart;
     push(
       -1,
-      `last (${((dEnd - dStart) / 1000).toFixed(2)} km)`,
+      `last (${((dEnd - dStart) / unitM).toFixed(2)} ${unitLabel()})`,
       dStart,
       dEnd,
       i0,
@@ -642,6 +645,9 @@ import {
   fmtPace,
   fmtSplitTime,
   fmtDate,
+  setUnit,
+  metersPerUnit,
+  unitLabel,
   TYPE_EMOJI,
   FEED_TYPES,
   FEED_PROVIDERS,
@@ -650,6 +656,7 @@ import {
   isoDate,
   parseRoute,
   type Route,
+  type Unit,
 } from './lib/format';
 
 // ─── Activity page (/activity/<id> — every scrap of info for one activity) ───
@@ -786,7 +793,7 @@ function ActivityDetail({
 
   const hasDistance = (rows?.[0]?.series.distanceM?.length ?? 0) >= 2;
 
-  // per-km split table (needs a distance stream ≥ 1 km)
+  // per-unit split table (needs a distance stream ≥ 1 unit)
   const splits = useMemo(() => {
     const s = rows?.[0]?.series;
     if (!s) return null;
@@ -799,7 +806,7 @@ function ActivityDetail({
     const rs = splits ?? [];
     const has = (pick: (r: KmSplit) => number | null): boolean => rs.some((r) => pick(r) != null);
     const cols: Array<{ key: string; head: string; cell: (r: KmSplit) => string | null }> = [
-      { key: 'km', head: 'km', cell: (r) => r.label },
+      { key: 'km', head: unitLabel(), cell: (r) => r.label },
       { key: 'time', head: 'time', cell: (r) => fmtSplitTime(r.timeS) },
     ];
     if (has((r) => r.bestPaceSec))
@@ -828,7 +835,7 @@ function ActivityDetail({
       cols.push({
         key: 'spd',
         head: 'speed',
-        cell: (r) => (r.avgSpeedMs != null ? `${(r.avgSpeedMs * 3.6).toFixed(1)} km/h` : null),
+        cell: (r) => (r.avgSpeedMs != null ? fmtSpeed(r.avgSpeedMs) : null),
       });
     if (has((r) => r.avgPowerW))
       cols.push({
@@ -1150,7 +1157,7 @@ const COMPONENT_KINDS = [
 ] as const;
 
 const km = (m: number): string =>
-  m >= 1000 ? `${(m / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })} km` : `${m} m`;
+  `${(m / metersPerUnit()).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${unitLabel()}`;
 
 function usageLine(u: GearUsageJson): string {
   const parts = [km(u.distanceM), `${(u.durationS / 3600).toFixed(1)} h`];
@@ -1348,7 +1355,7 @@ function GearSection(props: { token: string; onBack: () => void }) {
   );
 }
 
-// ─── Settings page (/settings — account info + future preference toggles) ────
+// ─── Settings page (/settings — units, theme, export, delete) ────────────────
 
 type MeJson = {
   email: string;
@@ -1356,10 +1363,23 @@ type MeJson = {
   createdAt: string;
 };
 
-function SettingsSection(props: { token: string; onBack: () => void }) {
-  const { token, onBack } = props;
+function SettingsSection(props: {
+  token: string;
+  unit: Unit;
+  onUnitChange: (u: Unit) => void;
+  theme: 'dark' | 'light';
+  onThemeChange: (t: 'dark' | 'light') => void;
+  onDeleted: () => void;
+  onBack: () => void;
+}) {
+  const { token, unit, onUnitChange, theme, onThemeChange, onDeleted, onBack } = props;
   const [me, setMe] = useState<MeJson | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // two-step delete: the button only arms once the user types DELETE
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteTyped, setDeleteTyped] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -1375,15 +1395,53 @@ function SettingsSection(props: { token: string; onBack: () => void }) {
     };
   }, [token]);
 
+  async function exportData(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      // raw fetch: the response is a download, not a JSON envelope
+      const res = await fetch('/api/export', { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`export failed (HTTP ${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download =
+        res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ??
+        'stridash-export.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      setNote('Export downloaded.');
+    } catch (err) {
+      setError(String(err).replace(/^Error: /, ''));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteAccount(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/me', { method: 'DELETE', token });
+      onDeleted(); // tokens are dead — back to the login screen
+    } catch (err) {
+      setError(String(err).replace(/^Error: /, ''));
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="connections-page">
       <button type="button" className="btn ghost small" onClick={onBack}>
         ← dashboard
       </button>
       <h2>Settings</h2>
+      {error && <p className="error">{error}</p>}
+      {note && !error && <p className="muted">{note}</p>}
+
       <article className="card settings-card">
         <h3>Account</h3>
-        {error && <p className="error">{error}</p>}
         {!me && !error && <p className="muted">Loading…</p>}
         {me && (
           <table>
@@ -1404,10 +1462,104 @@ function SettingsSection(props: { token: string; onBack: () => void }) {
           </table>
         )}
       </article>
-      <p className="muted">
-        Preference toggles (units, themes, sync schedule) land here later — the provider links live
-        under Providers Sync.
-      </p>
+
+      <article className="card settings-card">
+        <h3>Units</h3>
+        <div className="setting-row">
+          <button
+            type="button"
+            className={`btn small ${unit === 'km' ? '' : 'ghost'}`}
+            onClick={() => onUnitChange('km')}
+          >
+            kilometers
+          </button>
+          <button
+            type="button"
+            className={`btn small ${unit === 'mi' ? '' : 'ghost'}`}
+            onClick={() => onUnitChange('mi')}
+          >
+            miles
+          </button>
+          <span className="muted">applies to distances, speeds and paces everywhere</span>
+        </div>
+      </article>
+
+      <article className="card settings-card">
+        <h3>Theme</h3>
+        <div className="setting-row">
+          <button
+            type="button"
+            className={`btn small ${theme === 'dark' ? '' : 'ghost'}`}
+            onClick={() => onThemeChange('dark')}
+          >
+            dark
+          </button>
+          <button
+            type="button"
+            className={`btn small ${theme === 'light' ? '' : 'ghost'}`}
+            onClick={() => onThemeChange('light')}
+          >
+            light
+          </button>
+          <span className="muted">saved per browser</span>
+        </div>
+      </article>
+
+      <article className="card settings-card">
+        <h3>Export</h3>
+        <p className="muted">
+          Downloads a full JSON dump of your account: activities (with provider raw payloads and
+          provenance), measurements, sleep, daily wellness and gear. Tokens are never included;
+          per-sample series are out of the dump (huge) but stay available per activity.
+        </p>
+        <button type="button" className="btn" disabled={busy} onClick={() => void exportData()}>
+          {busy ? 'preparing…' : 'Download my data (JSON)'}
+        </button>
+      </article>
+
+      <article className="card settings-card danger-zone">
+        <h3>Danger zone</h3>
+        <p className="muted">
+          Permanently deletes this Stridash account and everything synced into it — activities,
+          weigh-ins, sleep, gear, provider links. Provider accounts themselves are untouched. There
+          is no undo.
+        </p>
+        {!confirmDelete ? (
+          <button
+            type="button"
+            className="btn danger"
+            onClick={() => {
+              setConfirmDelete(true);
+              setDeleteTyped('');
+            }}
+          >
+            Delete account…
+          </button>
+        ) : (
+          <div className="setting-row">
+            <input
+              value={deleteTyped}
+              onChange={(e) => setDeleteTyped(e.target.value)}
+              placeholder="type DELETE to confirm"
+            />
+            <button
+              type="button"
+              className="btn danger"
+              disabled={deleteTyped !== 'DELETE' || busy}
+              onClick={() => void deleteAccount()}
+            >
+              {busy ? 'deleting…' : 'Delete permanently'}
+            </button>
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setConfirmDelete(false)}
+            >
+              cancel
+            </button>
+          </div>
+        )}
+      </article>
     </section>
   );
 }
@@ -1993,6 +2145,19 @@ export default function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
   // hamburger dropdown in the header (Providers Sync / Gear / Settings / Sign out)
   const [menuOpen, setMenuOpen] = useState(false);
+  // settings-owned preferences; the module-level formatter unit is kept in
+  // sync BEFORE the re-render so every fmt* call speaks the chosen unit
+  const [unit, setUnitState] = useState<Unit>(() => {
+    const stored = localStorage.getItem('stridash.units') === 'mi' ? 'mi' : 'km';
+    setUnit(stored);
+    return stored;
+  });
+  const [theme, setThemeState] = useState<'dark' | 'light'>(() =>
+    localStorage.getItem('stridash.theme') === 'light' ? 'light' : 'dark',
+  );
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
   const [bodyMetric, setBodyMetric] = useState<BodyMetricKey>(BOOT_URL.body);
   const [sleepMetric, setSleepMetric] = useState<SleepMetricKey>(BOOT_URL.sleep);
   const [dailyMetric, setDailyMetric] = useState<DailyMetricKey>(BOOT_URL.daily);
@@ -2425,7 +2590,25 @@ export default function App() {
     return (
       <main>
         {header}
-        <SettingsSection token={token} onBack={goHome} />
+        <SettingsSection
+          token={token}
+          unit={unit}
+          onUnitChange={(u) => {
+            setUnit(u); // formatters read this on the re-render
+            localStorage.setItem('stridash.units', u);
+            setUnitState(u);
+          }}
+          theme={theme}
+          onThemeChange={(t) => {
+            localStorage.setItem('stridash.theme', t);
+            setThemeState(t);
+          }}
+          onDeleted={() => {
+            clearTokens();
+            setToken(null);
+          }}
+          onBack={goHome}
+        />
         {footer}
       </main>
     );

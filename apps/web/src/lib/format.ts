@@ -6,22 +6,43 @@
 
 // ─── Number/date formatting ─────────────────────────────────────────────────
 
+/** Distance/speed/pace unit — module-level so every formatter (and the raw
+ * math in charts/splits) speaks the same unit, set from the Settings page. */
+export type Unit = 'km' | 'mi';
+const M_PER_UNIT: Record<Unit, number> = { km: 1000, mi: 1609.344 };
+let unit: Unit = 'km';
+export function getUnit(): Unit {
+  return unit;
+}
+export function setUnit(u: Unit): void {
+  unit = u;
+}
+/** meters per display unit — for callers doing raw math (split buckets, axis ticks) */
+export function metersPerUnit(): number {
+  return M_PER_UNIT[unit];
+}
+export function unitLabel(): string {
+  return unit;
+}
+
 export function fmtKm(m: number | null | undefined): string {
-  return m == null ? '—' : `${(m / 1000).toFixed(2)} km`;
+  if (m == null) return '—';
+  return `${(m / M_PER_UNIT[unit]).toFixed(2)} ${unit}`;
 }
 export function fmtMin(s: number | null | undefined): string {
   return s == null ? '—' : fmtSplitTime(s);
 }
 export function fmtSpeed(ms: number | null | undefined): string {
-  return ms == null ? '—' : `${((ms * 3600) / 1000).toFixed(1)} km/h`;
+  if (ms == null) return '—';
+  return `${((ms * 3600) / M_PER_UNIT[unit]).toFixed(1)} ${unit === 'km' ? 'km/h' : 'mph'}`;
 }
-/** minutes:seconds per km */
+/** pace per display unit (minutes:seconds per km — or per mile) */
 export function fmtPace(sec: number | null): string {
   if (sec == null || !Number.isFinite(sec)) return '—';
   const t = Math.round(sec);
   const m = Math.floor(t / 60);
   const s = t % 60;
-  return `${m}:${String(s).padStart(2, '0')} /km`;
+  return `${m}:${String(s).padStart(2, '0')} /${unit}`;
 }
 /** exact duration, h:mm:ss (or m:ss under an hour) — rounding happens ONCE
  * on the total so 59.6s rounds to 1:00, never to a bogus "0:60" */
