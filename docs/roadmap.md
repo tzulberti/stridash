@@ -45,12 +45,19 @@ web client's WASM signer and are rejected for now. See
 - [ ] Real-account E2E verification (needs a live iGPSPORT account)
 - [ ] CN-region support (requires executing the WASM request signer) — only
       if a CN user shows up
+- [ ] Apply for official OpenAPI access and swap the reverse-engineered JWT
+      client over (OAuth2; email `global@igpsport.com` per
+      [igpsport.com/support/app/openapi](https://www.igpsport.com/support/app/openapi) —
+      Intervals.icu went this route). ToU §5.2 forbids reverse engineering,
+      so the current client is a terms violation the official path removes.
 
 ## M3 — Garmin Connect integration ▶ (server side, scraping path built)
 
 *(Unofficial SSO-scraping API — see `docs/garmin.md`. Long-term: replace with
-the official Garmin Connect Developer Program "Personal" tier OAuth once an
-application is approved; the auth half is a swap-in.)*
+the official **Garmin Personal API** — launched ~2026-10, personal use without
+a business application: create a key on Garmin Connect Web, exchange it for a
+24h bearer at `personalapitoken-service/personal-api/personal-api-key/token`,
+no refresh token (re-exchange on expiry). The auth half is a swap-in.)*
 
 - [x] Garmin auth: 3-strategy SSO chain (mobile iOS / embed widget / portal
       web), CAS ticket → DI OAuth2 token exchange, refresh grant, anti-WAF
@@ -76,6 +83,10 @@ application is approved; the auth half is a swap-in.)*
       Garmin)
 - [ ] Blood pressure ingest
 - [ ] E2E dedup testing against Strava-originated duplicates
+- [ ] Migrate auth to the official Garmin Personal API (removes the
+      unofficial-SSO gray zone: key → 24h token exchange, no refresh —
+      re-exchange; same activity/health read surface. Key expiry
+      30/90/180/365 days per the key chosen)
 
 ## M4 — Omron scale integration ✅ (server side)
 
@@ -94,6 +105,10 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [x] Region config validated for the user's account country
 - [x] Unit tests for the value-code mapping (`apps/server/tests/`)
 - [ ] Real-account E2E verification (needs a live Omron account)
+- [ ] Register for the OMRON Connect Partner API (official OAuth2 + consent
+      flow via [omron-connect-create.readme.io](https://omron-connect-create.readme.io);
+      app registration, production approval) and retire the
+      reverse-engineered app protocol it replaces
 - [ ] Mobile connection UI (M5 scope)
 
 ## M5 — App dashboard ▶ (web dashboard — first cut)
@@ -121,3 +136,13 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [ ] Direct BLE pairing to the Omron scale on mobile (bypass cloud)
 - [ ] Multi-user hardening, push notifications ("new ride synced")
 - [ ] Garadget-style webhooks/poll for near-real-time sync where APIs allow
+- [ ] Write `docs/provider-tos-risk.md` — the per-provider terms-of-service
+      risk profile audited 2026-11: **Zwift** §5.a explicitly prohibits
+      unofficial API clients (reverse engineering, scraping, "applications
+      that interact with our Platform without prior written authorization")
+      and reserves shadow-ban/disregard-ride-data/termination at sole
+      discretion — no official API exists, risk accepted for a read-only
+      personal sync; **Garmin/iGPSPORT/Omron** all violate their terms via
+      the unofficial paths but have official alternatives, tracked above
+      (M3 / M2.1 / M4). Practical exposure is account-flagging, not legal:
+      own-account, read-only, self-hosted.
