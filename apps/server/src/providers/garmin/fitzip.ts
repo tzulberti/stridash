@@ -12,12 +12,12 @@
  * local-file-header formats by hand with node zlib.
  */
 
-import { inflateRawSync } from "node:zlib";
-import { parseFitSeries } from "../igpsport/fit.js";
-import type { FitRecord } from "../igpsport/normalize.js";
+import { inflateRawSync } from 'node:zlib';
+import { parseFitSeries } from '../igpsport/fit.js';
+import type { FitRecord } from '../igpsport/normalize.js';
 
 const ZIP_MAGIC = 0x04_03_4b_50; // readUInt32LE of bytes "PK\x03\x04"
-const FIT_EXT = ".fit";
+const FIT_EXT = '.fit';
 
 /** Extract the FIT member of a zip-wrapped download; passthrough for bare FIT. */
 export function extractFitFromDownload(buf: Buffer): Buffer {
@@ -25,7 +25,7 @@ export function extractFitFromDownload(buf: Buffer): Buffer {
 
   const offset = findZipMemberOffset(buf, FIT_EXT);
   if (offset === null) {
-    throw new Error("Garmin download is a ZIP but contains no .FIT member");
+    throw new Error('Garmin download is a ZIP but contains no .FIT member');
   }
   return readZipMember(buf, offset);
 }
@@ -51,7 +51,10 @@ function findZipMemberOffset(buf: Buffer, ext: string): ZipHeader | null {
     // those are the ones Garmin actually emits, sizes are trustworthy anyway
     // because they re-appear post-EOCD… except when not. Safer: rely on name
     // + compressedSize and skip to the next header conservatively.
-    const name = buf.subarray(nameStart, nameStart + nameLen).toString("utf8").toLowerCase();
+    const name = buf
+      .subarray(nameStart, nameStart + nameLen)
+      .toString('utf8')
+      .toLowerCase();
     if (name.endsWith(ext)) {
       return {
         getName: () => name,
@@ -78,9 +81,7 @@ function readZipMember(buf: Buffer, header: ZipHeader): Buffer {
     // A streaming zipfile may leave compressedSize = 0 in the local header and
     // write the real value only in the central directory; if it is 0, inflate
     // with a big window and let inflateRawSync consume to the descriptor.
-    const raw = header.compressedSize
-      ? data
-      : buf.subarray(header.dataStart);
+    const raw = header.compressedSize ? data : buf.subarray(header.dataStart);
     const out = inflateRawSync(raw, { maxOutputLength: 64 * 1024 * 1024 });
     return Buffer.from(out);
   }

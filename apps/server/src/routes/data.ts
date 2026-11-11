@@ -1,8 +1,8 @@
-import { Hono } from "hono";
-import { z } from "zod";
-import { prisma } from "../db.js";
-import { requireUserId } from "../auth.js";
-import type { Env } from "../env.js";
+import { Hono } from 'hono';
+import { z } from 'zod';
+import { prisma } from '../db.js';
+import { requireUserId } from '../auth.js';
+import type { Env } from '../env.js';
 
 const listQuerySchema = z.object({
   /** ISO date lower bound (activities.start_time / measurements.measured_at) */
@@ -17,7 +17,12 @@ function serializeRow(row: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(row).map(([k, v]) => {
       if (v instanceof Date) return [k, v.toISOString()];
-      if (typeof v === "object" && v !== null && "toFixed" in v && typeof (v as any).toFixed === "function") {
+      if (
+        typeof v === 'object' &&
+        v !== null &&
+        'toFixed' in v &&
+        typeof (v as any).toFixed === 'function'
+      ) {
         return [k, Number(v)]; // Prisma Decimal
       }
       return [k, v];
@@ -28,23 +33,29 @@ function serializeRow(row: Record<string, unknown>): Record<string, unknown> {
 export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   const routes = new Hono<{ Variables: { userId: string } }>();
 
-  routes.use("*", async (c, next) => {
-    c.set("userId", await requireUserId(c, env.STRIDASH_JWT_SECRET));
+  routes.use('*', async (c, next) => {
+    c.set('userId', await requireUserId(c, env.STRIDASH_JWT_SECRET));
     await next();
   });
 
-  routes.get("/activities", async (c) => {
+  routes.get('/activities', async (c) => {
     const q = listQuerySchema.safeParse(c.req.query());
-    if (!q.success) return c.json({ error: "Invalid query", detail: q.error.flatten().fieldErrors }, 400);
+    if (!q.success)
+      return c.json({ error: 'Invalid query', detail: q.error.flatten().fieldErrors }, 400);
 
     const items = await prisma.activity.findMany({
       where: {
-        userId: c.get("userId"),
+        userId: c.get('userId'),
         ...(q.data.from || q.data.to
-          ? { startTime: { ...(q.data.from ? { gte: new Date(q.data.from) } : {}), ...(q.data.to ? { lte: new Date(q.data.to) } : {}) } }
+          ? {
+              startTime: {
+                ...(q.data.from ? { gte: new Date(q.data.from) } : {}),
+                ...(q.data.to ? { lte: new Date(q.data.to) } : {}),
+              },
+            }
           : {}),
       },
-      orderBy: { startTime: "desc" },
+      orderBy: { startTime: 'desc' },
       take: q.data.limit,
       // cursor semantics: without skip the cursor row itself is re-served
       ...(q.data.cursor ? { cursor: { id: q.data.cursor }, skip: 1 } : {}),
@@ -76,59 +87,93 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   // ─── Wellness: nightly sleep + daily wearer metrics ──────────────────────
 
   const rangeQuerySchema = z.object({
-    from: z.string().regex(/^\d{4}-\d{2}-\d{2}/, "YYYY-MM-DD").optional(),
-    to: z.string().regex(/^\d{4}-\d{2}-\d{2}/, "YYYY-MM-DD").optional(),
+    from: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}/, 'YYYY-MM-DD')
+      .optional(),
+    to: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}/, 'YYYY-MM-DD')
+      .optional(),
     limit: z.coerce.number().int().min(1).max(200).default(60),
   });
   /** dateKey-based rows sorted newest-first; from/to key off date_key, not a
    * timestamp column. */
   async function listDateKeyed(
-    table: "sleepSession" | "dailyWellness",
+    table: 'sleepSession' | 'dailyWellness',
     userId: string,
     from: string | undefined,
     to: string | undefined,
     limit: number,
   ) {
-    if (table === "sleepSession") {
+    if (table === 'sleepSession') {
       return prisma.sleepSession.findMany({
         where: {
           userId,
-          ...(from || to ? { dateKey: { ...(from ? { gte: from.slice(0, 10) } : {}), ...(to ? { lte: to.slice(0, 10) } : {}) } } : {}),
+          ...(from || to
+            ? {
+                dateKey: {
+                  ...(from ? { gte: from.slice(0, 10) } : {}),
+                  ...(to ? { lte: to.slice(0, 10) } : {}),
+                },
+              }
+            : {}),
         },
-        orderBy: { dateKey: "desc" },
+        orderBy: { dateKey: 'desc' },
         take: limit,
       });
     }
     return prisma.dailyWellness.findMany({
       where: {
         userId,
-        ...(from || to ? { dateKey: { ...(from ? { gte: from.slice(0, 10) } : {}), ...(to ? { lte: to.slice(0, 10) } : {}) } } : {}),
+        ...(from || to
+          ? {
+              dateKey: {
+                ...(from ? { gte: from.slice(0, 10) } : {}),
+                ...(to ? { lte: to.slice(0, 10) } : {}),
+              },
+            }
+          : {}),
       },
-      orderBy: { dateKey: "desc" },
+      orderBy: { dateKey: 'desc' },
       take: limit,
     });
   }
 
-  routes.get("/sleeps", async (c) => {
+  routes.get('/sleeps', async (c) => {
     const q = rangeQuerySchema.safeParse(c.req.query());
-    if (!q.success) return c.json({ error: "Invalid query", detail: q.error.flatten().fieldErrors }, 400);
-    const items = await listDateKeyed("sleepSession", c.get("userId"), q.data.from, q.data.to, q.data.limit);
+    if (!q.success)
+      return c.json({ error: 'Invalid query', detail: q.error.flatten().fieldErrors }, 400);
+    const items = await listDateKeyed(
+      'sleepSession',
+      c.get('userId'),
+      q.data.from,
+      q.data.to,
+      q.data.limit,
+    );
     return c.json({ items: items.map(serializeRow) });
   });
 
-  routes.get("/wellness", async (c) => {
+  routes.get('/wellness', async (c) => {
     const q = rangeQuerySchema.safeParse(c.req.query());
-    if (!q.success) return c.json({ error: "Invalid query", detail: q.error.flatten().fieldErrors }, 400);
-    const items = await listDateKeyed("dailyWellness", c.get("userId"), q.data.from, q.data.to, q.data.limit);
+    if (!q.success)
+      return c.json({ error: 'Invalid query', detail: q.error.flatten().fieldErrors }, 400);
+    const items = await listDateKeyed(
+      'dailyWellness',
+      c.get('userId'),
+      q.data.from,
+      q.data.to,
+      q.data.limit,
+    );
     return c.json({ items: items.map(serializeRow) });
   });
 
-  routes.get("/activities/:id", async (c) => {
-    const id = c.req.param("id");
+  routes.get('/activities/:id', async (c) => {
+    const id = c.req.param('id');
     const activity = await prisma.activity.findFirst({
-      where: { id, userId: c.get("userId") },
+      where: { id, userId: c.get('userId') },
     });
-    if (!activity) return c.json({ error: "Not found" }, 404);
+    if (!activity) return c.json({ error: 'Not found' }, 404);
     const points = await prisma.activityDataPoint.findMany({
       where: { activityId: id },
       select: { provider: true, sampleCount: true, series: true },
@@ -136,18 +181,24 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     return c.json({ items: [{ ...serializeRow(activity), series: points }] });
   });
 
-  routes.get("/measurements", async (c) => {
+  routes.get('/measurements', async (c) => {
     const q = listQuerySchema.safeParse(c.req.query());
-    if (!q.success) return c.json({ error: "Invalid query", detail: q.error.flatten().fieldErrors }, 400);
+    if (!q.success)
+      return c.json({ error: 'Invalid query', detail: q.error.flatten().fieldErrors }, 400);
 
     const items = await prisma.measurement.findMany({
       where: {
-        userId: c.get("userId"),
+        userId: c.get('userId'),
         ...(q.data.from || q.data.to
-          ? { measuredAt: { ...(q.data.from ? { gte: new Date(q.data.from) } : {}), ...(q.data.to ? { lte: new Date(q.data.to) } : {}) } }
+          ? {
+              measuredAt: {
+                ...(q.data.from ? { gte: new Date(q.data.from) } : {}),
+                ...(q.data.to ? { lte: new Date(q.data.to) } : {}),
+              },
+            }
           : {}),
       },
-      orderBy: { measuredAt: "desc" },
+      orderBy: { measuredAt: 'desc' },
       take: q.data.limit,
       // cursor semantics: without skip the cursor row itself is re-served
       ...(q.data.cursor ? { cursor: { id: q.data.cursor }, skip: 1 } : {}),

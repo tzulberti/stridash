@@ -25,30 +25,30 @@
  * through the real API and connections/activities through prisma).
  */
 
-import { PostgreSqlContainer } from "@testcontainers/postgresql";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-import pg from "pg";
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import pg from 'pg';
 
-const serverRoot = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const serverRoot = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
 // 1: throwaway Postgres (reused across runs when STRIDASH_TEST_REUSE=1)
-const container = await new PostgreSqlContainer("postgres:18")
-  .withDatabase("stridash_test")
-  .withUsername("stridash")
-  .withPassword("stridash")
-  .withReuse(process.env.STRIDASH_TEST_REUSE === "1")
+const container = await new PostgreSqlContainer('postgres:18')
+  .withDatabase('stridash_test')
+  .withUsername('stridash')
+  .withPassword('stridash')
+  .withReuse(process.env.STRIDASH_TEST_REUSE === '1')
   .start();
 
 export const testDatabaseUrl = container.getConnectionUri();
 
 // 2 + 3: real migrations, then a data wipe so every run starts clean
 {
-  const migrated = spawnSync("npx", ["prisma", "migrate", "deploy"], {
+  const migrated = spawnSync('npx', ['prisma', 'migrate', 'deploy'], {
     cwd: serverRoot,
     env: { ...process.env, DATABASE_URL: testDatabaseUrl },
-    encoding: "utf8",
+    encoding: 'utf8',
   });
   if (migrated.status !== 0) {
     await container.stop();

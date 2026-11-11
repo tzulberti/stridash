@@ -7,13 +7,13 @@ services:
       POSTGRES_DB: stridash
     ports:
       # 5433 on the host — 5432 commonly conflicts with other local Postgres
-      - "5433:5432"
+      - '5433:5432'
     volumes:
       # PG18 image wants the mount at /var/lib/postgresql (data goes into a
       # subdirectory, enabling in-place pg_upgrade on later major bumps)
       - pgdata18:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stridash"]
+      test: ['CMD-SHELL', 'pg_isready -U stridash']
       interval: 5s
       timeout: 3s
       retries: 10

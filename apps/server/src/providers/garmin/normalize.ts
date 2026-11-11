@@ -6,41 +6,41 @@
  * never disagree), falling back to the list row when the FIT is unavailable.
  */
 
-import type { FitRecord, FitSession, ActivityType } from "../igpsport/normalize.js";
-import type { GarminActivityRow } from "./api.js";
+import type { FitRecord, FitSession, ActivityType } from '../igpsport/normalize.js';
+import type { GarminActivityRow } from './api.js';
 
 /** Garmin activityTypes typeKey → our domain enum (strava-flavored). */
 export function mapType(typeKey: string | undefined): ActivityType {
-  const k = (typeKey ?? "").toLowerCase();
+  const k = (typeKey ?? '').toLowerCase();
   switch (k) {
-    case "cycling":
-      return "RIDE";
-    case "virtual_ride":
-    case "indoor_cycling":
-    case "virtual_run":
-      return "VIRTUAL_RIDE";
-    case "running":
-    case "trail_running":
-    case "treadmill_running":
-      return "RUN";
-    case "walking":
-    case "treadmill":
-    case "indoor_walking":
-      return "WALK";
-    case "hiking":
-      return "HIKE";
-    case "lap_swimming":
-    case "open_water_swimming":
-    case "swimming":
-      return "SWIM";
-    case "strength_training":
-    case "gym":
-    case "indoor_cardio":
-    case "hiit":
-    case "workout":
-      return "WORKOUT";
+    case 'cycling':
+      return 'RIDE';
+    case 'virtual_ride':
+    case 'indoor_cycling':
+    case 'virtual_run':
+      return 'VIRTUAL_RIDE';
+    case 'running':
+    case 'trail_running':
+    case 'treadmill_running':
+      return 'RUN';
+    case 'walking':
+    case 'treadmill':
+    case 'indoor_walking':
+      return 'WALK';
+    case 'hiking':
+      return 'HIKE';
+    case 'lap_swimming':
+    case 'open_water_swimming':
+    case 'swimming':
+      return 'SWIM';
+    case 'strength_training':
+    case 'gym':
+    case 'indoor_cardio':
+    case 'hiit':
+    case 'workout':
+      return 'WORKOUT';
     default:
-      return "OTHER";
+      return 'OTHER';
   }
 }
 
@@ -96,7 +96,8 @@ export function seriesFromRecords(records: FitRecord[], session?: FitSession | n
     if (r.cadenceRpm !== undefined) series.cadenceRpm.push(r.cadenceRpm);
     if (r.powerW !== undefined) series.powerW.push(r.powerW);
     if (r.temperatureC !== undefined) series.temperatureC.push(r.temperatureC);
-    if (r.verticalOscillationM !== undefined) series.verticalOscillationM.push(r.verticalOscillationM);
+    if (r.verticalOscillationM !== undefined)
+      series.verticalOscillationM.push(r.verticalOscillationM);
     if (r.stanceTimePct !== undefined) series.stanceTimePct.push(r.stanceTimePct);
     if (r.verticalRatioPct !== undefined) series.verticalRatioPct.push(r.verticalRatioPct);
     if (r.stepLengthM !== undefined) series.stepLengthM.push(r.stepLengthM);
@@ -107,7 +108,7 @@ export function seriesFromRecords(records: FitRecord[], session?: FitSession | n
   // around as [] — serialization cost is negligible and the dashboard's
   // "has-channel" test is arrays.length
   for (const [k, v] of Object.entries(series)) {
-    if (k === "timeMs") continue;
+    if (k === 'timeMs') continue;
     if (!(v as number[]).length) delete (series as unknown as Record<string, unknown>)[k];
   }
   void session;
@@ -154,7 +155,7 @@ function scalarStats(series: Series) {
   const hrs = nonEmpty(series.hrBpm).filter((v) => v > 0);
   const powers = nonEmpty(series.powerW).filter((v) => v >= 0);
   const cadences = nonEmpty(series.cadenceRpm).filter((v) => v >= 0);
-  const alts = nonEmpty(series.altitudeM).filter((v) => typeof v === "number");
+  const alts = nonEmpty(series.altitudeM).filter((v) => typeof v === 'number');
   let ascent: number | null = null;
   let descent: number | null = null;
   if (alts.length > 1) {
@@ -203,42 +204,45 @@ export function fitToActivity(
   const stats = scalarStats(series);
   const startTime = series.timeMs.length
     ? new Date(series.timeMs[0] ?? 0)
-    : new Date(`${row.startTimeGMT?.replace(" ", "T")}Z`);
+    : new Date(`${row.startTimeGMT?.replace(' ', 'T')}Z`);
   const endTime = series.timeMs.length
     ? new Date(series.timeMs[series.timeMs.length - 1] ?? 0)
     : startTime;
-  const durationFromSeries = Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 1000));
+  const durationFromSeries = Math.max(
+    0,
+    Math.round((endTime.getTime() - startTime.getTime()) / 1000),
+  );
 
   const type = mapType(row.activityType?.typeKey);
-  const indoor = extra.indoor || (type === "RIDE" && !(series.latDeg?.length));
+  const indoor = extra.indoor || (type === 'RIDE' && !series.latDeg?.length);
 
   const session = extra.session ?? null;
 
   const activity: ActivityInput = {
-    headline: row.activityName ?? "Garmin activity",
-    type: indoor && type === "RIDE" ? "VIRTUAL_RIDE" : type,
+    headline: row.activityName ?? 'Garmin activity',
+    type: indoor && type === 'RIDE' ? 'VIRTUAL_RIDE' : type,
     startTime,
     durationS: durationFromSeries || Math.round(row.duration ?? 0),
     movingTimeS: row.movingDuration ? Math.round(row.movingDuration) : null,
-    distanceM: stats.distance ?? (row.distance ?? null),
-    avgSpeedMs: stats.avgSpeed ?? (row.averageSpeed ?? null),
-    maxSpeedMs: stats.maxSpeed ?? (row.maxSpeed ?? null),
-    totalAscentM: stats.ascent ?? (row.elevationGain ?? null),
-    totalDescentM: stats.descent ?? (row.elevationLoss ?? null),
+    distanceM: stats.distance ?? row.distance ?? null,
+    avgSpeedMs: stats.avgSpeed ?? row.averageSpeed ?? null,
+    maxSpeedMs: stats.maxSpeed ?? row.maxSpeed ?? null,
+    totalAscentM: stats.ascent ?? row.elevationGain ?? null,
+    totalDescentM: stats.descent ?? row.elevationLoss ?? null,
     elevationHighM: stats.high,
     elevationLowM: stats.low,
-    avgHr: session?.avgHr ?? stats.avgHr ?? (row.averageHR ?? null),
-    maxHr: session?.maxHr ?? stats.maxHr ?? (row.maxHR ?? null),
-    avgPowerW: session?.avgPowerW ?? stats.avgPower ?? (row.averagePower ?? null),
-    maxPowerW: session?.maxPowerW ?? stats.maxPower ?? (row.maxPower ?? null),
+    avgHr: session?.avgHr ?? stats.avgHr ?? row.averageHR ?? null,
+    maxHr: session?.maxHr ?? stats.maxHr ?? row.maxHR ?? null,
+    avgPowerW: session?.avgPowerW ?? stats.avgPower ?? row.averagePower ?? null,
+    maxPowerW: session?.maxPowerW ?? stats.maxPower ?? row.maxPower ?? null,
     avgCadence: stats.avgCadence,
     maxCadence: stats.maxCadence,
     trainingLoad: session?.trainingLoadPeak ?? null, // source-reported, ambiguous unit — see types
-    caloriesKcal: session?.totalCalories ?? (row.calories ?? null),
+    caloriesKcal: session?.totalCalories ?? row.calories ?? null,
     hrZonesMin: session?.hrZonesMin ?? null,
     indoor,
     raw: {
-      provider: "GARMIN",
+      provider: 'GARMIN',
       activityId: row.activityId,
       typeKey: row.activityType?.typeKey,
       approximateStartTime: series.timeMs.length === 0,
@@ -254,9 +258,9 @@ export function fitToActivity(
 /** List-row-only fallback (FIT unavailable / failed to decode). */
 export function rowToActivity(row: GarminActivityRow): ActivityInput {
   return {
-    headline: row.activityName ?? "Garmin activity",
+    headline: row.activityName ?? 'Garmin activity',
     type: mapType(row.activityType?.typeKey),
-    startTime: new Date(`${row.startTimeGMT?.replace(" ", "T")}Z`),
+    startTime: new Date(`${row.startTimeGMT?.replace(' ', 'T')}Z`),
     durationS: Math.round(row.duration ?? 0),
     movingTimeS: row.movingDuration ? Math.round(row.movingDuration) : null,
     distanceM: row.distance ?? null,
@@ -277,7 +281,7 @@ export function rowToActivity(row: GarminActivityRow): ActivityInput {
     hrZonesMin: null,
     indoor: false,
     raw: {
-      provider: "GARMIN",
+      provider: 'GARMIN',
       activityId: row.activityId,
       typeKey: row.activityType?.typeKey,
       listRow: row,

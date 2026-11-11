@@ -14,28 +14,28 @@
  * per pass). Same fallback as iGPSPORT's FIT path otherwise.
  */
 
-import { prisma } from "../db.js";
-import { Prisma } from "../generated/prisma/client.js";
-import { decryptToken, encryptToken } from "../crypto.js";
+import { prisma } from '../db.js';
+import { Prisma } from '../generated/prisma/client.js';
+import { decryptToken, encryptToken } from '../crypto.js';
 import {
   ZwiftClient,
   ZwiftError,
   zwiftRefresh,
   type ZwiftActivity,
-} from "../providers/zwift/client.js";
+} from '../providers/zwift/client.js';
 import {
   mapZwiftActivityRow,
   detailScalars,
   toZwiftSeries,
   type ZwiftSeries,
-} from "../providers/zwift/normalize.js";
-import { redactProviderDetail } from "../redact.js";
-import type { ActivityInput } from "../providers/igpsport/normalize.js";
-import type { Env } from "../env.js";
+} from '../providers/zwift/normalize.js';
+import { redactProviderDetail } from '../redact.js';
+import type { ActivityInput } from '../providers/igpsport/normalize.js';
+import type { Env } from '../env.js';
 
 export type ZwiftSyncResult = {
   syncLogId: string;
-  status: "OK" | "PARTIAL" | "ERROR";
+  status: 'OK' | 'PARTIAL' | 'ERROR';
   itemsPulled: number;
   itemsCreated: number;
   itemsUpdated: number;
@@ -54,11 +54,11 @@ interface ConnectionLike {
 
 /** Rehydrate or rotate the stored token pair and return a ready client. */
 async function ensureClient(env: Env, connection: ConnectionLike): Promise<ZwiftClient> {
-  if (connection.status === "REVOKED") {
-    throw new ZwiftError("CONNECTION", "Connection revoked — reconnect the Zwift account first");
+  if (connection.status === 'REVOKED') {
+    throw new ZwiftError('CONNECTION', 'Connection revoked — reconnect the Zwift account first');
   }
   if (!connection.providerUserId) {
-    throw new ZwiftError("CONNECTION", "Connection has no Zwift athlete id — reconnect");
+    throw new ZwiftError('CONNECTION', 'Connection has no Zwift athlete id — reconnect');
   }
 
   const expMs = (connection.tokenExpiresAt as Date | null | undefined)?.getTime() ?? 0;
@@ -66,7 +66,7 @@ async function ensureClient(env: Env, connection: ConnectionLike): Promise<Zwift
 
   const storedAccess = connection.accessTokenEnc
     ? decryptToken(connection.accessTokenEnc, env.STRIDASH_ENC_KEY)
-    : "";
+    : '';
   if (storedAccess && Date.now() < expMs - 60_000) {
     return client.withAccessToken(storedAccess); // fast path: still valid
   }
@@ -74,9 +74,9 @@ async function ensureClient(env: Env, connection: ConnectionLike): Promise<Zwift
   // rotate: the refresh grant must use client_id "Zwift Game Client" (baked in)
   const refreshToken = connection.refreshTokenEnc
     ? decryptToken(connection.refreshTokenEnc, env.STRIDASH_ENC_KEY)
-    : "";
+    : '';
   if (!refreshToken) {
-    throw new ZwiftError("CONNECTION", "No stored Zwift credentials — reconnect the account");
+    throw new ZwiftError('CONNECTION', 'No stored Zwift credentials — reconnect the account');
   }
   const tokens = await zwiftRefreshWithPersist(env, connection, refreshToken);
   return client.withAccessToken(tokens.accessToken);
@@ -89,9 +89,11 @@ async function zwiftRefreshWithPersist(env: Env, connection: ConnectionLike, ref
     where: { id: connection.id },
     data: {
       accessTokenEnc: encryptToken(tokens.accessToken, env.STRIDASH_ENC_KEY),
-      refreshTokenEnc: tokens.refreshToken ? encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY) : undefined,
+      refreshTokenEnc: tokens.refreshToken
+        ? encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY)
+        : undefined,
       tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
-      status: "ACTIVE",
+      status: 'ACTIVE',
     },
   });
   return tokens;
@@ -100,10 +102,10 @@ async function zwiftRefreshWithPersist(env: Env, connection: ConnectionLike, ref
 /** Persist (or replace) an activity's ZWIFT series row. */
 async function storeSeries(activityId: string, series: ZwiftSeries): Promise<void> {
   await prisma.activityDataPoint.upsert({
-    where: { activityId_provider: { activityId, provider: "ZWIFT" } },
+    where: { activityId_provider: { activityId, provider: 'ZWIFT' } },
     create: {
       activityId,
-      provider: "ZWIFT",
+      provider: 'ZWIFT',
       sampleCount: series.timeMs.length,
       series: series as unknown as Prisma.InputJsonValue,
     },
@@ -123,7 +125,7 @@ async function upsertZwiftActivity(
   activity: ActivityInput,
   series: ZwiftSeries | null,
   detail: ZwiftActivity | null,
-): Promise<"created" | "updated"> {
+): Promise<'created' | 'updated'> {
   const dup = await prisma.activity.findFirst({
     where: {
       userId: connection.userId,
@@ -138,10 +140,15 @@ async function upsertZwiftActivity(
     // another provider stored this activity — register provenance only
     await prisma.activitySource.upsert({
       where: { activityId_connectionId: { activityId: dup.id, connectionId: connection.id } },
-      create: { activityId: dup.id, connectionId: connection.id, sourceActivityId: externalId, sourceUpdatedAt: new Date() },
+      create: {
+        activityId: dup.id,
+        connectionId: connection.id,
+        sourceActivityId: externalId,
+        sourceUpdatedAt: new Date(),
+      },
       update: { sourceUpdatedAt: new Date() },
     });
-    return "updated";
+    return 'updated';
   }
 
   const created = await prisma.activity.create({
@@ -178,24 +185,32 @@ async function upsertZwiftActivity(
 
   await prisma.activitySource.upsert({
     where: { activityId_connectionId: { activityId: created.id, connectionId: connection.id } },
-    create: { activityId: created.id, connectionId: connection.id, sourceActivityId: externalId, sourceUpdatedAt: new Date() },
+    create: {
+      activityId: created.id,
+      connectionId: connection.id,
+      sourceActivityId: externalId,
+      sourceUpdatedAt: new Date(),
+    },
     update: { sourceUpdatedAt: new Date() },
   });
 
   if (series) {
     await storeSeries(created.id, series);
   }
-  return "created";
+  return 'created';
 }
 
 /** Pages the newest activities first; stops when nothing new for 2 pages. */
-export async function syncZwiftConnection(env: Env, connection: ConnectionLike): Promise<ZwiftSyncResult> {
+export async function syncZwiftConnection(
+  env: Env,
+  connection: ConnectionLike,
+): Promise<ZwiftSyncResult> {
   const log = await prisma.syncLog.create({
-    data: { connectionId: connection.id, kind: "ACTIVITIES", status: "OK" },
+    data: { connectionId: connection.id, kind: 'ACTIVITIES', status: 'OK' },
   });
   const result: ZwiftSyncResult = {
     syncLogId: log.id,
-    status: "OK",
+    status: 'OK',
     itemsPulled: 0,
     itemsCreated: 0,
     itemsUpdated: 0,
@@ -218,7 +233,7 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
       try {
         rows = await client.listActivities(page * PAGE_SIZE, PAGE_SIZE);
       } catch (err) {
-        result.status = "PARTIAL";
+        result.status = 'PARTIAL';
         result.failedActivities.push(`page:${page}`);
         console.error(`[zwift] list page ${page} failed:`, err);
         break;
@@ -227,14 +242,15 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
 
       let freshCount = 0;
       for (const row of rows) {
-        const externalId = String(row.id_str ?? row.id ?? "");
+        const externalId = String(row.id_str ?? row.id ?? '');
         if (!externalId) continue;
         result.itemsPulled++;
         if (knownIds.has(externalId)) continue;
         freshCount++;
         try {
           const activity = mapZwiftActivityRow(row);
-          if (!activity) throw new ZwiftError("CONNECTION", `activity ${externalId} has no usable start date`);
+          if (!activity)
+            throw new ZwiftError('CONNECTION', `activity ${externalId} has no usable start date`);
           let series: ZwiftSeries | null = null;
           let detail: ZwiftActivity | null = null;
           try {
@@ -250,14 +266,14 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
               : null;
           } catch (err) {
             // stream/detail hiccups must be visible in the sync result, not silent
-            result.status = "PARTIAL";
+            result.status = 'PARTIAL';
             result.failedActivities.push(externalId);
             console.error(`[zwift] ingest incomplete for ${externalId} — summary only`, err);
           }
           await upsertZwiftActivity(connection, externalId, activity, series, detail);
           result.itemsCreated++;
         } catch (err) {
-          result.status = "PARTIAL";
+          result.status = 'PARTIAL';
           result.failedActivities.push(externalId);
           console.error(`[zwift] activity ${externalId} ingest failed:`, err);
         }
@@ -284,13 +300,13 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
       where: {
         connectionId: connection.id,
         OR: [
-          { activity: { dataPoints: { none: { provider: "ZWIFT" } } } },
+          { activity: { dataPoints: { none: { provider: 'ZWIFT' } } } },
           { activity: { movingTimeS: null } },
           {
             activity: {
               // never stored a detail payload yet
               detailRaw: { equals: Prisma.DbNull },
-              raw: { path: ["provider"], equals: "ZWIFT" },
+              raw: { path: ['provider'], equals: 'ZWIFT' },
             },
           },
         ],
@@ -302,11 +318,11 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
           select: {
             movingTimeS: true,
             detailRaw: true,
-            dataPoints: { where: { provider: "ZWIFT" }, select: { id: true } },
+            dataPoints: { where: { provider: 'ZWIFT' }, select: { id: true } },
           },
         },
       },
-      orderBy: { sourceUpdatedAt: "desc" },
+      orderBy: { sourceUpdatedAt: 'desc' },
       take: 50,
     });
     for (const s of upgradeable) {
@@ -341,18 +357,24 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
         }
         if (healed) result.itemsUpdated++;
       } catch (err) {
-        result.status = "PARTIAL";
+        result.status = 'PARTIAL';
         result.failedActivities.push(s.sourceActivityId);
         console.error(`[zwift] streams upgrade failed for ${s.sourceActivityId}:`, err);
       }
     }
   } catch (err) {
-    const detail = err instanceof ZwiftError
-      ? { error: err.message, kind: err.kind, status: err.status, providerDetail: redactProviderDetail(err.detail) }
-      : { error: err instanceof Error ? err.message : String(err) };
+    const detail =
+      err instanceof ZwiftError
+        ? {
+            error: err.message,
+            kind: err.kind,
+            status: err.status,
+            providerDetail: redactProviderDetail(err.detail),
+          }
+        : { error: err instanceof Error ? err.message : String(err) };
     await prisma.syncLog.update({
       where: { id: result.syncLogId },
-      data: { status: "ERROR", errorDetail: detail as never, finishedAt: new Date() },
+      data: { status: 'ERROR', errorDetail: detail as never, finishedAt: new Date() },
     });
     console.error(`[zwift] sync ${connection.id} failed:`, detail);
     throw err;
@@ -365,7 +387,9 @@ export async function syncZwiftConnection(env: Env, connection: ConnectionLike):
       itemsPulled: result.itemsPulled,
       itemsCreated: result.itemsCreated,
       itemsUpdated: result.itemsUpdated,
-      errorDetail: (result.failedActivities.length ? { failed: result.failedActivities.slice(0, 20) } : null) as never,
+      errorDetail: (result.failedActivities.length
+        ? { failed: result.failedActivities.slice(0, 20) }
+        : null) as never,
       finishedAt: new Date(),
     },
   });

@@ -12,7 +12,7 @@
  */
 
 export interface IgpSportRegion {
-  key: "intl" | "cn";
+  key: 'intl' | 'cn';
   apiBase: string;
   origin: string;
   referer: string;
@@ -25,34 +25,34 @@ export interface IgpSportRegion {
   signing: boolean;
 }
 
-export const IGPSPORT_REGIONS: Record<IgpSportRegion["key"], IgpSportRegion> = {
+export const IGPSPORT_REGIONS: Record<IgpSportRegion['key'], IgpSportRegion> = {
   intl: {
-    key: "intl",
-    apiBase: "https://prod.en.igpsport.com",
-    origin: "https://app.igpsport.com",
-    referer: "https://app.igpsport.com/",
-    appVersion: "8.07.06",
-    timezone: "Asia/Shanghai",
-    accessKey: "",
-    platform: "",
-    loginAppId: "igpsport-web",
+    key: 'intl',
+    apiBase: 'https://prod.en.igpsport.com',
+    origin: 'https://app.igpsport.com',
+    referer: 'https://app.igpsport.com/',
+    appVersion: '8.07.06',
+    timezone: 'Asia/Shanghai',
+    accessKey: '',
+    platform: '',
+    loginAppId: 'igpsport-web',
     signing: false,
   },
   cn: {
-    key: "cn",
-    apiBase: "https://prod.zh.igpsport.com",
-    origin: "https://app.igpsport.cn",
-    referer: "https://app.igpsport.cn/",
-    appVersion: "8.07.08",
-    timezone: "Asia/Shanghai",
-    accessKey: "AKIDWebClient",
-    platform: "web",
-    loginAppId: "igpsport-web",
+    key: 'cn',
+    apiBase: 'https://prod.zh.igpsport.com',
+    origin: 'https://app.igpsport.cn',
+    referer: 'https://app.igpsport.cn/',
+    appVersion: '8.07.08',
+    timezone: 'Asia/Shanghai',
+    accessKey: 'AKIDWebClient',
+    platform: 'web',
+    loginAppId: 'igpsport-web',
     signing: true,
   },
 };
 
 export function regionForKey(key: string): IgpSportRegion | null {
-  const r = IGPSPORT_REGIONS[key as IgpSportRegion["key"]];
+  const r = IGPSPORT_REGIONS[key as IgpSportRegion['key']];
   return r ?? null;
 }

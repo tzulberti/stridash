@@ -3,23 +3,23 @@
  * documented bodyIndexList contract. No network access needed.
  */
 
-import { describe, it, expect } from "vitest";
-import { applyScale, weightToKg, Value as V, WeightUnit } from "../src/providers/omron/client.js";
-import { normalizeSample } from "../src/providers/omron/normalize.js";
-import { regionForCountry } from "../src/providers/omron/regions.js";
+import { describe, it, expect } from 'vitest';
+import { applyScale, weightToKg, Value as V, WeightUnit } from '../src/providers/omron/client.js';
+import { normalizeSample } from '../src/providers/omron/normalize.js';
+import { regionForCountry } from '../src/providers/omron/regions.js';
 
 // ── conversion helpers ──────────────────────────────────────────────────────
 
-describe("applyScale", () => {
-  it("multiplies by 10^scale", () => {
+describe('applyScale', () => {
+  it('multiplies by 10^scale', () => {
     expect(applyScale(825, -1)).toBeCloseTo(82.5); // typical weight encoding
     expect(applyScale(264, 0)).toBe(264);
     expect(applyScale(2, 1)).toBe(20);
   });
 });
 
-describe("weightToKg", () => {
-  it("converts imperial unit subtypes", () => {
+describe('weightToKg', () => {
+  it('converts imperial unit subtypes', () => {
     expect(weightToKg(182.4, WeightUnit.LB)).toBeCloseTo(182.4 * 0.45359237, 5);
     expect(weightToKg(14, WeightUnit.ST)).toBeCloseTo(14 * 6.35029318, 5);
     expect(weightToKg(82500, WeightUnit.G)).toBeCloseTo(82.5, 5);
@@ -29,22 +29,22 @@ describe("weightToKg", () => {
 
 // ── region resolution ───────────────────────────────────────────────────────
 
-describe("regionForCountry", () => {
-  it("resolves Latin America (data-eu)", () => {
-    const ar = regionForCountry("AR");
-    expect(ar?.cloudUrl).toBe("https://data-eu.omronconnect.com/api");
+describe('regionForCountry', () => {
+  it('resolves Latin America (data-eu)', () => {
+    const ar = regionForCountry('AR');
+    expect(ar?.cloudUrl).toBe('https://data-eu.omronconnect.com/api');
   });
-  it("resolves Japan", () => {
-    expect(regionForCountry("jp")?.cloudUrl).toBe("https://data-jp.omronconnect.com/api");
+  it('resolves Japan', () => {
+    expect(regionForCountry('jp')?.cloudUrl).toBe('https://data-jp.omronconnect.com/api');
   });
-  it("rejects unsupported countries (US = ohiomron v2 stack)", () => {
-    expect(regionForCountry("US")).toBeNull();
+  it('rejects unsupported countries (US = ohiomron v2 stack)', () => {
+    expect(regionForCountry('US')).toBeNull();
   });
 });
 
 // ── weigh-in normalization (full fidelity) ──────────────────────────────────
 
-const CONNECTION = "conn-uuid";
+const CONNECTION = 'conn-uuid';
 
 /** Encode a bodyIndexList entry: [value, subtype, scale, measurementId]. */
 function entry(value: number, scale = 0, subtype = 0, measurementId = 1) {
@@ -55,7 +55,7 @@ function entry(value: number, scale = 0, subtype = 0, measurementId = 1) {
 function fullScaleSample() {
   return {
     measureDateTo: 1730880000000, // 2024-11-06T08:00:00Z
-    timeZone: "America/Argentina/Buenos_Aires",
+    timeZone: 'America/Argentina/Buenos_Aires',
     bodyIndexList: {
       [V.WEIGHT]: [825, WeightUnit.KG, -1, 1], // 82.5 kg
       [V.BODY_FAT_PCT]: [215, 0, -1, 1], // 21.5 %
@@ -68,8 +68,8 @@ function fullScaleSample() {
   };
 }
 
-describe("normalizeSample — WEIGH_IN", () => {
-  it("maps the full body composition set incl. fields omramin drops", () => {
+describe('normalizeSample — WEIGH_IN', () => {
+  it('maps the full body composition set incl. fields omramin drops', () => {
     const sample = fullScaleSample();
     // complete with the high-fidelity codes
     sample.bodyIndexList[V.IMPEDANCE] = entry(534, 0);
@@ -86,11 +86,11 @@ describe("normalizeSample — WEIGH_IN", () => {
 
     const row = normalizeSample(
       sample,
-      { deviceSerialID: "665544feff332211", deviceModel: "HBF-703T", category: "1" },
+      { deviceSerialID: '665544feff332211', deviceModel: 'HBF-703T', category: '1' },
       CONNECTION,
     )!;
 
-    expect(row.kind).toBe("WEIGH_IN");
+    expect(row.kind).toBe('WEIGH_IN');
     expect(row.connectionId).toBe(CONNECTION);
     expect(row.weightKg).toBeCloseTo(82.5, 5);
     expect(row.bodyFatPct).toBeCloseTo(21.5, 5);
@@ -114,56 +114,56 @@ describe("normalizeSample — WEIGH_IN", () => {
     expect(row.segments?.trunk?.subcutaneousFatPct).toBeCloseTo(21.1, 5);
     expect(row.segments?.legs?.subcutaneousFatPct).toBeCloseTo(20.8, 5);
     // raw keeps everything for backfill, incl. human-readable keys
-    expect(row.raw.deviceModel).toBe("HBF-703T");
-    expect(row.raw.timeZone).toBe("America/Argentina/Buenos_Aires");
+    expect(row.raw.deviceModel).toBe('HBF-703T');
+    expect(row.raw.timeZone).toBe('America/Argentina/Buenos_Aires');
     expect(row.raw.values).toMatchObject({ IMPEDANCE: { value: 534 } });
   });
 
-  it("handles partial samples (scale without body-composition features)", () => {
+  it('handles partial samples (scale without body-composition features)', () => {
     const row = normalizeSample(
       {
         measureDateTo: 1730880000000,
-        timeZone: "UTC",
+        timeZone: 'UTC',
         bodyIndexList: { [V.WEIGHT]: entry(825, -1, WeightUnit.KG) },
       },
-      { deviceSerialID: "x", deviceModel: "HBF-222T", category: "1" },
+      { deviceSerialID: 'x', deviceModel: 'HBF-222T', category: '1' },
       CONNECTION,
     )!;
-    expect(row.kind).toBe("WEIGH_IN");
+    expect(row.kind).toBe('WEIGH_IN');
     expect(row.weightKg).toBeCloseTo(82.5, 5);
     expect(row.impedanceOhm).toBeUndefined();
     expect(row.segments).toBeUndefined();
   });
 
-  it("converts lb-encoded weights", () => {
+  it('converts lb-encoded weights', () => {
     const row = normalizeSample(
       {
         measureDateTo: 1730880000000,
-        timeZone: "UTC",
+        timeZone: 'UTC',
         bodyIndexList: { [V.WEIGHT]: entry(1824, -1, WeightUnit.LB) },
       },
-      { deviceSerialID: "x", deviceModel: "HBF-703T", category: "1" },
+      { deviceSerialID: 'x', deviceModel: 'HBF-703T', category: '1' },
       CONNECTION,
     )!;
     expect(row.weightKg).toBeCloseTo(182.4 * 0.45359237, 4);
   });
 
-  it("returns null when there is no weight value", () => {
+  it('returns null when there is no weight value', () => {
     const row = normalizeSample(
-      { measureDateTo: 1, timeZone: "UTC", bodyIndexList: {} },
-      { deviceSerialID: "x", deviceModel: "HBF-703T", category: "1" },
+      { measureDateTo: 1, timeZone: 'UTC', bodyIndexList: {} },
+      { deviceSerialID: 'x', deviceModel: 'HBF-703T', category: '1' },
       CONNECTION,
     );
     expect(row).toBeNull();
   });
 });
 
-describe("normalizeSample — BLOOD_PRESSURE", () => {
-  it("maps systolic/diastolic/pulse/MAP + flags", () => {
+describe('normalizeSample — BLOOD_PRESSURE', () => {
+  it('maps systolic/diastolic/pulse/MAP + flags', () => {
     const row = normalizeSample(
       {
         measureDateTo: 1730880000000,
-        timeZone: "UTC",
+        timeZone: 'UTC',
         bodyIndexList: {
           [V.MMHG_MAX]: entry(118),
           [V.MMHG_MIN]: entry(75),
@@ -173,14 +173,14 @@ describe("normalizeSample — BLOOD_PRESSURE", () => {
           [V.BODY_MOTION_FLAG]: entry(0),
         },
       },
-      { deviceSerialID: "x", deviceModel: "HEM-7600T", category: "0" },
+      { deviceSerialID: 'x', deviceModel: 'HEM-7600T', category: '0' },
       CONNECTION,
     )!;
-    expect(row.kind).toBe("BLOOD_PRESSURE");
+    expect(row.kind).toBe('BLOOD_PRESSURE');
     expect(row.systolicMmhg).toBe(118);
     expect(row.diastolicMmhg).toBe(75);
     expect(row.pulseBpm).toBe(63);
     expect(row.meanArterialPressure).toBe(89);
-    expect(row.raw.flags).toContain("arrhythmia");
+    expect(row.raw.flags).toContain('arrhythmia');
   });
 });

@@ -7,14 +7,14 @@
  * whole point of Stridash).
  */
 
-import { prisma } from "../db.js";
-import { Prisma } from "../generated/prisma/client.js";
-import { decryptToken, encryptToken } from "../crypto.js";
-import { OmronConnectError, OmronConnectV1, type OmronDevice } from "../providers/omron/client.js";
-import { type OmronRegion, regionForCountry } from "../providers/omron/regions.js";
-import { normalizeSample } from "../providers/omron/normalize.js";
-import { redactProviderDetail } from "../redact.js";
-import type { Env } from "../env.js";
+import { prisma } from '../db.js';
+import { Prisma } from '../generated/prisma/client.js';
+import { decryptToken, encryptToken } from '../crypto.js';
+import { OmronConnectError, OmronConnectV1, type OmronDevice } from '../providers/omron/client.js';
+import { type OmronRegion, regionForCountry } from '../providers/omron/regions.js';
+import { normalizeSample } from '../providers/omron/normalize.js';
+import { redactProviderDetail } from '../redact.js';
+import type { Env } from '../env.js';
 
 interface ConnectionLike {
   id: string;
@@ -29,7 +29,7 @@ interface ConnectionLike {
 
 export type OmronSyncResult = {
   syncLogId: string;
-  status: "OK" | "PARTIAL" | "ERROR";
+  status: 'OK' | 'PARTIAL' | 'ERROR';
   itemsPulled: number;
   itemsCreated: number;
   itemsUpdated: number;
@@ -37,9 +37,20 @@ export type OmronSyncResult = {
 };
 
 const DECIMAL_FIELDS = new Set([
-  "weightKg", "bodyFatPct", "muscleMassKg", "skeletalMusclePct", "bmi", "visceralFatLevel",
-  "subcutaneousFatPct", "fatFreeMassKg", "fatMassKg", "skeletalMuscleMassKg", "impedanceOhm",
-  "bodyWaterPct", "boneMassKg", "meanArterialPressure",
+  'weightKg',
+  'bodyFatPct',
+  'muscleMassKg',
+  'skeletalMusclePct',
+  'bmi',
+  'visceralFatLevel',
+  'subcutaneousFatPct',
+  'fatFreeMassKg',
+  'fatMassKg',
+  'skeletalMuscleMassKg',
+  'impedanceOhm',
+  'bodyWaterPct',
+  'boneMassKg',
+  'meanArterialPressure',
 ]);
 
 /** Update payload: Prisma Decimal nulling needs `{ set: null }` (create accepts null directly). */
@@ -53,7 +64,10 @@ function toUpdatePayload(data: Record<string, unknown>): Record<string, unknown>
 }
 
 /** Prisma Measurement scalar list — nulls for fields the provider didn't send. */
-function toMeasurementRowNonNullable(userId: string, input: NonNullable<ReturnType<typeof normalizeSample>>) {
+function toMeasurementRowNonNullable(
+  userId: string,
+  input: NonNullable<ReturnType<typeof normalizeSample>>,
+) {
   return {
     kind: input.kind,
     userId,
@@ -94,20 +108,24 @@ export function omronCountryOf(connection: ConnectionLike): string | null {
  * Run one Omron sync for a connection. Errors throw — route handler decides
  * how to surface them; partial device failures degrade to status PARTIAL.
  */
-export async function syncOmronConnection(env: Env, connection: ConnectionLike): Promise<OmronSyncResult> {
-  if (connection.status === "REVOKED") {
-    throw new OmronConnectError("Connection revoked — reconnect the Omron account first");
+export async function syncOmronConnection(
+  env: Env,
+  connection: ConnectionLike,
+): Promise<OmronSyncResult> {
+  if (connection.status === 'REVOKED') {
+    throw new OmronConnectError('Connection revoked — reconnect the Omron account first');
   }
   const country = omronCountryOf(connection);
-  if (!country) throw new OmronConnectError("Connection has no Omron region configured — reconnect");
+  if (!country)
+    throw new OmronConnectError('Connection has no Omron region configured — reconnect');
 
   const log = await prisma.syncLog.create({
-    data: { connectionId: connection.id, kind: "MEASUREMENTS", status: "OK" },
+    data: { connectionId: connection.id, kind: 'MEASUREMENTS', status: 'OK' },
   });
 
   const result: OmronSyncResult = {
     syncLogId: log.id,
-    status: "OK",
+    status: 'OK',
     itemsPulled: 0,
     itemsCreated: 0,
     itemsUpdated: 0,
@@ -122,9 +140,15 @@ export async function syncOmronConnection(env: Env, connection: ConnectionLike):
       : 0;
 
     for (const device of devices) {
-      if (device.category !== "0" && device.category !== "1") continue; // BPM, SCALE
+      if (device.category !== '0' && device.category !== '1') continue; // BPM, SCALE
       try {
-        const perDevice = await syncDevice(client, device, connection.id, connection.userId, fromMs);
+        const perDevice = await syncDevice(
+          client,
+          device,
+          connection.id,
+          connection.userId,
+          fromMs,
+        );
         result.devices.push({
           deviceModel: device.deviceModel,
           serial: device.deviceSerialID,
@@ -136,7 +160,7 @@ export async function syncOmronConnection(env: Env, connection: ConnectionLike):
         result.itemsUpdated += perDevice.updated;
       } catch (err) {
         // One sick device must not poison the whole sync — record and move on.
-        result.status = "PARTIAL";
+        result.status = 'PARTIAL';
         result.devices.push({
           deviceModel: device.deviceModel,
           serial: device.deviceSerialID,
@@ -147,13 +171,18 @@ export async function syncOmronConnection(env: Env, connection: ConnectionLike):
       }
     }
   } catch (err) {
-    const detail = err instanceof OmronConnectError
-      ? { error: err.message, status: err.status, providerDetail: redactProviderDetail(err.detail) }
-      : { error: err instanceof Error ? err.message : String(err) };
+    const detail =
+      err instanceof OmronConnectError
+        ? {
+            error: err.message,
+            status: err.status,
+            providerDetail: redactProviderDetail(err.detail),
+          }
+        : { error: err instanceof Error ? err.message : String(err) };
     await prisma.syncLog.update({
       where: { id: result.syncLogId },
       data: {
-        status: "ERROR",
+        status: 'ERROR',
         errorDetail: detail as never,
         finishedAt: new Date(),
       },
@@ -169,7 +198,9 @@ export async function syncOmronConnection(env: Env, connection: ConnectionLike):
       itemsPulled: result.itemsPulled,
       itemsCreated: result.itemsCreated,
       itemsUpdated: result.itemsUpdated,
-      errorDetail: (result.status === "PARTIAL" ? { note: "one or more devices failed" } : null) as never,
+      errorDetail: (result.status === 'PARTIAL'
+        ? { note: 'one or more devices failed' }
+        : null) as never,
       finishedAt: new Date(),
     },
   });
@@ -182,7 +213,11 @@ export async function syncOmronConnection(env: Env, connection: ConnectionLike):
 }
 
 /** Authenticate (refresh or reuse stored access token) and return a client. */
-async function ensureSession(env: Env, connection: ConnectionLike, country: string): Promise<OmronConnectV1> {
+async function ensureSession(
+  env: Env,
+  connection: ConnectionLike,
+  country: string,
+): Promise<OmronConnectV1> {
   const region: OmronRegion | null = regionForCountry(country);
   if (!region) throw new OmronConnectError(`No Omron server region for country ${country}`);
   const client = new OmronConnectV1(region, {
@@ -193,7 +228,7 @@ async function ensureSession(env: Env, connection: ConnectionLike, country: stri
           accessTokenEnc: encryptToken(tokens.accessToken, env.STRIDASH_ENC_KEY),
           refreshTokenEnc: encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY),
           tokenExpiresAt: null, // protocol does not advertise expiry; refresh on every sync
-          status: "ACTIVE",
+          status: 'ACTIVE',
         },
       });
     },

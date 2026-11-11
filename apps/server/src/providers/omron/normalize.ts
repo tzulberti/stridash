@@ -9,9 +9,9 @@
  * backfilled without re-pulling.
  */
 
-import { type OmronDevice, Value as V, applyScale, weightToKg } from "./client.js";
+import { type OmronDevice, Value as V, applyScale, weightToKg } from './client.js';
 
-export type MeasurementKind = "WEIGH_IN" | "BLOOD_PRESSURE";
+export type MeasurementKind = 'WEIGH_IN' | 'BLOOD_PRESSURE';
 
 export interface Segments {
   arms?: { musclePct?: number; subcutaneousFatPct?: number };
@@ -51,9 +51,7 @@ export interface MeasurementInput {
   raw: Record<string, unknown>;
 }
 
-const dict = new Map<string, string>(
-  Object.entries(V).map(([k, v]) => [v as string, k]),
-);
+const dict = new Map<string, string>(Object.entries(V).map(([k, v]) => [v as string, k]));
 /** Human-readable key for an unknown value code (e.g. "omron_2305"). */
 function codeKey(code: string): string {
   return dict.get(code) ?? `omron_${code}`;
@@ -84,7 +82,7 @@ export function normalizeSample(
     bodyIndexList: Record<string, [number, number, number, number]>;
     [key: string]: unknown;
   },
-  deviceInfo: Pick<OmronDevice, "deviceSerialID" | "deviceModel" | "category">,
+  deviceInfo: Pick<OmronDevice, 'deviceSerialID' | 'deviceModel' | 'category'>,
   connectionId: string,
 ): MeasurementInput | null {
   const list = sample.bodyIndexList ?? {};
@@ -103,7 +101,7 @@ export function normalizeSample(
   };
 
   const isWeighIn =
-    deviceInfo.category === "1" || (list[V.WEIGHT] !== undefined && list[V.MMHG_MAX] === undefined);
+    deviceInfo.category === '1' || (list[V.WEIGHT] !== undefined && list[V.MMHG_MAX] === undefined);
   if (isWeighIn) {
     const weightKg = read(list, V.WEIGHT, { weight: true });
     if (!weightKg) return null; // no weight datum — not a usable weigh-in
@@ -115,13 +113,17 @@ export function normalizeSample(
     const segFatArms = read(list, V.SEG_SUBCUT_FAT_ARMS);
     const segFatTrunk = read(list, V.SEG_SUBCUT_FAT_TRUNK);
     const segFatLegs = read(list, V.SEG_SUBCUT_FAT_LEGS);
-    const hasSegments =
-      [segMuscleArms, segMuscleTrunk, segMuscleLegs, segFatArms, segFatTrunk, segFatLegs].some(
-        (v) => v !== undefined,
-      );
+    const hasSegments = [
+      segMuscleArms,
+      segMuscleTrunk,
+      segMuscleLegs,
+      segFatArms,
+      segFatTrunk,
+      segFatLegs,
+    ].some((v) => v !== undefined);
 
     return {
-      kind: "WEIGH_IN",
+      kind: 'WEIGH_IN',
       connectionId,
       measuredAt,
       weightKg,
@@ -153,14 +155,14 @@ export function normalizeSample(
   if (!systolic) return null; // no BP datum
   const cuffEntry = list[V.CUFF_WRAP_CHECK];
   const flags = [
-    !!list[V.ARRHYTHMIA_FLAG] && list[V.ARRHYTHMIA_FLAG]![0] !== 0 && "arrhythmia",
-    !!list[V.BODY_MOTION_FLAG] && list[V.BODY_MOTION_FLAG]![0] !== 0 && "bodyMotion",
-    (!cuffEntry || cuffEntry[0] === 0) && "cuffWrapGuide",
+    !!list[V.ARRHYTHMIA_FLAG] && list[V.ARRHYTHMIA_FLAG]![0] !== 0 && 'arrhythmia',
+    !!list[V.BODY_MOTION_FLAG] && list[V.BODY_MOTION_FLAG]![0] !== 0 && 'bodyMotion',
+    (!cuffEntry || cuffEntry[0] === 0) && 'cuffWrapGuide',
   ].filter(Boolean) as string[];
   if (flags.length) raw.flags = flags;
 
   return {
-    kind: "BLOOD_PRESSURE",
+    kind: 'BLOOD_PRESSURE',
     connectionId,
     measuredAt,
     systolicMmhg: systolic,

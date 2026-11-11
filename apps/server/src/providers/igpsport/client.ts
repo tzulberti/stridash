@@ -16,12 +16,12 @@
  * `{code: 0, data}` where code 0 = success.
  */
 
-import type { IgpSportRegion } from "./regions.js";
+import type { IgpSportRegion } from './regions.js';
 
 // ─── Path constants ──────────────────────────────────────────────────────────
 
-export const PATH_LOGIN = "/service/auth/account/login";
-export const PATH_QUERY_ACTIVITY = "/service/web-gateway/web-analyze/activity/queryMyActivity";
+export const PATH_LOGIN = '/service/auth/account/login';
+export const PATH_QUERY_ACTIVITY = '/service/web-gateway/web-analyze/activity/queryMyActivity';
 export const PATH_ACTIVITY_DETAIL = (rideId: string) =>
   `/service/web-gateway/web-analyze/activity/queryActivityDetail/${rideId}`;
 export const PATH_DOWNLOAD_URL = (rideId: string) =>
@@ -34,7 +34,7 @@ export class IgpSportError extends Error {
   readonly detail?: unknown;
   constructor(message: string, status?: number, detail?: unknown) {
     super(message);
-    this.name = "IgpSportError";
+    this.name = 'IgpSportError';
     this.status = status;
     this.detail = detail;
   }
@@ -78,14 +78,14 @@ export interface IgpSportLoginResponse {
 export function peekJwtClaims(jwtToken: string): { memberId: string; exp: number | null } {
   try {
     const payload = JSON.parse(
-      Buffer.from(jwtToken.split(".")[1] ?? "", "base64url").toString("utf8"),
+      Buffer.from(jwtToken.split('.')[1] ?? '', 'base64url').toString('utf8'),
     );
     return {
-      memberId: String(payload.memberid ?? ""),
-      exp: typeof payload.exp === "number" ? payload.exp : null,
+      memberId: String(payload.memberid ?? ''),
+      exp: typeof payload.exp === 'number' ? payload.exp : null,
     };
   } catch {
-    return { memberId: "", exp: null };
+    return { memberId: '', exp: null };
   }
 }
 
@@ -93,7 +93,7 @@ export function peekJwtClaims(jwtToken: string): { memberId: string; exp: number
 
 export class IgpSportClient {
   readonly region: IgpSportRegion;
-  private accessToken: string = "";
+  private accessToken: string = '';
 
   constructor(region: IgpSportRegion) {
     if (region.signing) {
@@ -106,14 +106,14 @@ export class IgpSportClient {
 
   private headers(extra?: Record<string, string>): Record<string, string> {
     return {
-      Accept: "application/json, text/plain, */*",
-      "User-Agent": `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Stridash/0.1`,
+      Accept: 'application/json, text/plain, */*',
+      'User-Agent': `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Stridash/0.1`,
       Origin: this.region.origin,
       Referer: this.region.referer,
-      "qiWu-app-version-echo": this.region.appVersion, // harmless: unrecognized headers are ignored
-      "qiwu-app-version": this.region.appVersion,
-      ...(this.region.accessKey ? { "x-access-key": this.region.accessKey } : {}),
-      ...(this.region.platform ? { "x-platform": this.region.platform } : {}),
+      'qiWu-app-version-echo': this.region.appVersion, // harmless: unrecognized headers are ignored
+      'qiwu-app-version': this.region.appVersion,
+      ...(this.region.accessKey ? { 'x-access-key': this.region.accessKey } : {}),
+      ...(this.region.platform ? { 'x-platform': this.region.platform } : {}),
       ...(this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}),
       ...extra,
     };
@@ -125,15 +125,19 @@ export class IgpSportClient {
       headers: { ...this.headers(), ...((init?.headers as Record<string, string>) ?? {}) },
     });
     const json: any = await res.json().catch(() => {
-      throw new IgpSportError(`Invalid JSON from iGPSPORT (HTTP ${res.status}) on ${path}`, res.status);
+      throw new IgpSportError(
+        `Invalid JSON from iGPSPORT (HTTP ${res.status}) on ${path}`,
+        res.status,
+      );
     });
-    if (!res.ok) throw new IgpSportError(`iGPSPORT HTTP ${res.status} on ${path}`, res.status, json);
-    if (typeof json.code !== "number") {
+    if (!res.ok)
+      throw new IgpSportError(`iGPSPORT HTTP ${res.status} on ${path}`, res.status, json);
+    if (typeof json.code !== 'number') {
       throw new IgpSportError(`Unexpected envelope from iGPSPORT ${path}`, res.status, json);
     }
     if (json.code !== 0) {
       throw new IgpSportError(
-        `iGPSPORT business error ${json.code} on ${path}: ${json.message ?? json.msg ?? ""}`,
+        `iGPSPORT business error ${json.code} on ${path}: ${json.message ?? json.msg ?? ''}`,
         res.status === 200 ? 200 : res.status,
         { code: json.code, message: json.message ?? json.msg },
       );
@@ -146,11 +150,11 @@ export class IgpSportClient {
   /** Login and return the fresh token pair (access JWT, optional refresh). */
   async login(username: string, password: string): Promise<IgpSportLoginResponse> {
     const res = await fetch(this.region.apiBase + PATH_LOGIN, {
-      method: "POST",
+      method: 'POST',
       headers: {
         ...this.headers(),
-        "Content-Type": "application/json",
-        Authorization: "", // never send a stale JWT to the login endpoint
+        'Content-Type': 'application/json',
+        Authorization: '', // never send a stale JWT to the login endpoint
       },
       body: JSON.stringify({ appId: this.region.loginAppId, username, password }),
     });
@@ -159,7 +163,7 @@ export class IgpSportClient {
     if (!res.ok || json?.code !== 0 || !data?.access_token) {
       const providerMessage = json?.message ?? json?.msg ?? null;
       throw new IgpSportError(
-        `iGPSPORT login failed${providerMessage ? `: ${providerMessage}` : " (check username/password/region)"}`,
+        `iGPSPORT login failed${providerMessage ? `: ${providerMessage}` : ' (check username/password/region)'}`,
         res.status,
         providerMessage ? { providerMessage } : null,
       );
@@ -198,7 +202,7 @@ export class IgpSportClient {
   /** Presigned OSS URL for the FIT file (not a Stridash-API-hosted URL). */
   async getFitDownloadUrl(rideId: string): Promise<string | null> {
     const data = await this.request(PATH_DOWNLOAD_URL(rideId));
-    const url = typeof data === "string" ? data : data?.url;
+    const url = typeof data === 'string' ? data : data?.url;
     return url ?? null;
   }
 
@@ -207,9 +211,10 @@ export class IgpSportClient {
     const url = await this.getFitDownloadUrl(rideId);
     if (!url) throw new IgpSportError(`No FIT download URL for ride ${rideId}`);
     const res = await fetch(url);
-    if (!res.ok) throw new IgpSportError(`FIT download failed (HTTP ${res.status}) for ride ${rideId}`);
+    if (!res.ok)
+      throw new IgpSportError(`FIT download failed (HTTP ${res.status}) for ride ${rideId}`);
     const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length < 12 || buf.subarray(8, 12).toString("ascii") !== ".FIT") {
+    if (buf.length < 12 || buf.subarray(8, 12).toString('ascii') !== '.FIT') {
       throw new IgpSportError(`Downloaded file for ride ${rideId} is not a FIT file`);
     }
     return buf;

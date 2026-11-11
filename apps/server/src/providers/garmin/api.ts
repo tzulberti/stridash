@@ -14,20 +14,23 @@ import {
   peekJwtExpMs,
   refreshDiToken,
   type DiTokens,
-} from "./sso.js";
+} from './sso.js';
 
-const VERIFY_PATH = "/userprofile-service/socialProfile";
-const LIST_PATH = "/activitylist-service/activities/search/activities";
-const FIT_PATH = "/download-service/files/activity";
+const VERIFY_PATH = '/userprofile-service/socialProfile';
+const LIST_PATH = '/activitylist-service/activities/search/activities';
+const FIT_PATH = '/download-service/files/activity';
 
-async function connectapiGet(path: string, bearer: string): Promise<{ status: number; json: unknown }> {
+async function connectapiGet(
+  path: string,
+  bearer: string,
+): Promise<{ status: number; json: unknown }> {
   const res = await fetch(`${CONNECTAPI_BASE}${path}`, {
     headers: {
       Authorization: `Bearer ${bearer}`,
-      Accept: "application/json",
-      "User-Agent": NATIVE_API_UA,
-      "x-garmin-user-agent": NATIVE_X_GARMIN_UA,
-      "DI-Backend": "connectapi.garmin.com",
+      Accept: 'application/json',
+      'User-Agent': NATIVE_API_UA,
+      'x-garmin-user-agent': NATIVE_X_GARMIN_UA,
+      'DI-Backend': 'connectapi.garmin.com',
     },
     signal: AbortSignal.timeout(30_000),
   });
@@ -49,11 +52,15 @@ export async function verifyToken(bearer: string): Promise<boolean> {
 
 export async function getProfile(bearer: string): Promise<GarminProfile> {
   const { json } = await connectapiGet(VERIFY_PATH, bearer);
-  return (typeof json === "object" && json !== null ? json : {}) as GarminProfile;
+  return (typeof json === 'object' && json !== null ? json : {}) as GarminProfile;
 }
 
 /** One page of the activity list, newest first. */
-export async function listActivities(bearer: string, start: number, limit: number): Promise<GarminActivityRow[]> {
+export async function listActivities(
+  bearer: string,
+  start: number,
+  limit: number,
+): Promise<GarminActivityRow[]> {
   const { json } = await connectapiGet(`${LIST_PATH}?start=${start}&limit=${limit}`, bearer);
   if (!Array.isArray(json)) return [];
   return json as GarminActivityRow[];
@@ -63,15 +70,18 @@ export async function downloadFit(bearer: string, activityId: string): Promise<B
   const res = await fetch(`${CONNECTAPI_BASE}${FIT_PATH}/${activityId}`, {
     headers: {
       Authorization: `Bearer ${bearer}`,
-      Accept: "*/*",
-      "User-Agent": NATIVE_API_UA,
-      "x-garmin-user-agent": NATIVE_X_GARMIN_UA,
-      "DI-Backend": "connectapi.garmin.com",
+      Accept: '*/*',
+      'User-Agent': NATIVE_API_UA,
+      'x-garmin-user-agent': NATIVE_X_GARMIN_UA,
+      'DI-Backend': 'connectapi.garmin.com',
     },
     signal: AbortSignal.timeout(120_000),
   });
   if (!res.ok) {
-    throw new GarminError("CONNECTION", `FIT download for ${activityId} returned HTTP ${res.status}`);
+    throw new GarminError(
+      'CONNECTION',
+      `FIT download for ${activityId} returned HTTP ${res.status}`,
+    );
   }
   const arr = new Uint8Array(await res.arrayBuffer());
   return Buffer.from(arr);
@@ -107,36 +117,50 @@ export function tokenExpiryMs(token: string): number | null {
 
 /** Range-capped daily sleep summaries (≤ 28 days per request — 400 beyond).
  * Rows carry stage minutes, score, resting HR, HRV status/avg, sleep need. */
-export async function getSleepStatsRange(bearer: string, start: string, end: string): Promise<Record<string, unknown>[]> {
+export async function getSleepStatsRange(
+  bearer: string,
+  start: string,
+  end: string,
+): Promise<Record<string, unknown>[]> {
   const { status, json } = await connectapiGet(
     `/sleep-service/stats/sleep/daily/${start}/${end}`,
     bearer,
   );
-  if (status !== 200) throw new GarminError("CONNECTION", `sleep stats ${start}→${end} returned HTTP ${status}`);
-  return ((json as { individualStats?: Record<string, unknown>[] })?.individualStats ?? []);
+  if (status !== 200)
+    throw new GarminError('CONNECTION', `sleep stats ${start}→${end} returned HTTP ${status}`);
+  return (json as { individualStats?: Record<string, unknown>[] })?.individualStats ?? [];
 }
 
 /** One day of full sleep detail (stages percentages, naps, sleep need,
  * feedback phrases...) — one request per date. */
-export async function getSleepDay(bearer: string, date: string): Promise<Record<string, unknown> | null> {
+export async function getSleepDay(
+  bearer: string,
+  date: string,
+): Promise<Record<string, unknown> | null> {
   const { status, json } = await connectapiGet(
     `/sleep-service/sleep/dailySleepData?date=${date}&nonSleepBufferMinutes=60`,
     bearer,
   );
-  if (status !== 200) throw new GarminError("CONNECTION", `sleep day ${date} returned HTTP ${status}`);
+  if (status !== 200)
+    throw new GarminError('CONNECTION', `sleep day ${date} returned HTTP ${status}`);
   const dto = (json as { dailySleepDTO?: Record<string, unknown> })?.dailySleepDTO;
-  return typeof dto === "object" && dto !== null ? dto : null;
+  return typeof dto === 'object' && dto !== null ? dto : null;
 }
 
 /** Daily summaries for a date range (steps, floors, calories, HR, IM,
  * stress, body battery in ONE call — larger than 28 days still answers). */
-export async function getDailySummaries(bearer: string, start: string, end: string): Promise<Record<string, unknown>[]> {
+export async function getDailySummaries(
+  bearer: string,
+  start: string,
+  end: string,
+): Promise<Record<string, unknown>[]> {
   const { status, json } = await connectapiGet(
     `/usersummary-service/v2/dailysummaries?startDate=${start}&endDate=${end}`,
     bearer,
   );
-  if (status !== 200) throw new GarminError("CONNECTION", `daily summaries ${start}→${end} returned HTTP ${status}`);
-  return ((json as { data?: Record<string, unknown>[] })?.data ?? []);
+  if (status !== 200)
+    throw new GarminError('CONNECTION', `daily summaries ${start}→${end} returned HTTP ${status}`);
+  return (json as { data?: Record<string, unknown>[] })?.data ?? [];
 }
 
 /** Re-authenticate a Garmin connection with the DI refresh grant. */
@@ -149,8 +173,8 @@ export async function maybeRefresh(
   }
   if (!tokens.diRefreshToken) {
     throw new GarminError(
-      "CONNECTION",
-      "Garmin session expired and no refresh token was stored — reconnect the account",
+      'CONNECTION',
+      'Garmin session expired and no refresh token was stored — reconnect the account',
     );
   }
   return { fresh: false, tokens: await refreshDiToken(tokens.diRefreshToken, tokens.diClientId) };

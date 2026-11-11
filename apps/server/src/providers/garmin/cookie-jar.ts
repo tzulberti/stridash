@@ -22,21 +22,26 @@ export class CookieJar {
   /** Merge every Set-Cookie of a response under the URL's host. */
   capture(url: URL, response: Response): void {
     const headers =
-      typeof (response.headers as { getSetCookie?: () => string[] }).getSetCookie === "function"
+      typeof (response.headers as { getSetCookie?: () => string[] }).getSetCookie === 'function'
         ? (response.headers as { getSetCookie: () => string[] }).getSetCookie()
         : [];
     for (const raw of headers) {
       // Truncate at the first ";" — we only need name, value, Domain.
-      const sep = raw.indexOf(";");
+      const sep = raw.indexOf(';');
       const line = sep === -1 ? raw : raw.slice(0, sep);
-      const eq = line.indexOf("=");
+      const eq = line.indexOf('=');
       if (eq <= 0) continue;
       const name = line.slice(0, eq).trim();
       const value = line.slice(eq + 1).trim();
       const domainMatch = /(?:^|;\s*)domain=([^;]+)/i.exec(raw);
-      const domain = domainMatch?.[1]?.replace(/^\./, "").toLowerCase() ?? "";
+      const domain = domainMatch?.[1]?.replace(/^\./, '').toLowerCase() ?? '';
       // key: replacing a cookie never keyed on path (Garmin uses "/")
-      this.cookies.set(`${name}@${domain || url.hostname}`, { name, value, domain, host: url.hostname });
+      this.cookies.set(`${name}@${domain || url.hostname}`, {
+        name,
+        value,
+        domain,
+        host: url.hostname,
+      });
     }
   }
 
@@ -48,7 +53,7 @@ export class CookieJar {
       const owner = domain || cHost;
       if (host === owner || host.endsWith(`.${owner}`)) parts.push(`${name}=${value}`);
     }
-    return parts.length ? parts.join("; ") : undefined;
+    return parts.length ? parts.join('; ') : undefined;
   }
 
   valueFor(name: string): string | undefined {

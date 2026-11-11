@@ -7,20 +7,20 @@
  * cadenceRpm, powerW}).
  */
 
-import type { ActivityInput, ActivityType } from "../igpsport/normalize.js";
-import type { ZwiftActivity, ZwiftFitnessData } from "./client.js";
+import type { ActivityInput, ActivityType } from '../igpsport/normalize.js';
+import type { ZwiftActivity, ZwiftFitnessData } from './client.js';
 
 // ─── Sport mapping ───────────────────────────────────────────────────────────
 
 /** Zwift is always indoor; CYCLING is a virtual ride by construction. */
 export function mapZwiftType(sport?: string): ActivityType {
-  switch ((sport ?? "").toUpperCase()) {
-    case "CYCLING":
-      return "VIRTUAL_RIDE";
-    case "RUNNING":
-      return "RUN";
+  switch ((sport ?? '').toUpperCase()) {
+    case 'CYCLING':
+      return 'VIRTUAL_RIDE';
+    case 'RUNNING':
+      return 'RUN';
     default:
-      return "OTHER";
+      return 'OTHER';
   }
 }
 
@@ -46,16 +46,17 @@ export function mapZwiftActivityRow(act: ZwiftActivity): ActivityInput | null {
   const start = act.startDate ? new Date(act.startDate) : null;
   const end = act.endDate ? new Date(act.endDate) : null;
   if (!start || Number.isNaN(start.getTime())) return null;
-  const durationS = end && !Number.isNaN(end.getTime())
-    ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000))
-    : 0;
-  const sport = act.sport ?? "";
-  const headline = act.name?.trim() || `Zwift ${sport.toLowerCase() || "activity"}`;
+  const durationS =
+    end && !Number.isNaN(end.getTime())
+      ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000))
+      : 0;
+  const sport = act.sport ?? '';
+  const headline = act.name?.trim() || `Zwift ${sport.toLowerCase() || 'activity'}`;
   return {
     headline,
     // Zwift's workout-activity naming convention is "Zwift - <workout name>"
     // ("Half an Hour of Relaxation"); free rides / worlds get other headlines
-    workoutName: headline.startsWith("Zwift - ") ? headline.slice("Zwift - ".length) || null : null,
+    workoutName: headline.startsWith('Zwift - ') ? headline.slice('Zwift - '.length) || null : null,
     type: mapZwiftType(sport),
     startTime: start,
     durationS,
@@ -71,13 +72,19 @@ export function mapZwiftActivityRow(act: ZwiftActivity): ActivityInput | null {
     maxHr: act.maxHeartRate != null ? Math.round(act.maxHeartRate) : null,
     avgPowerW: act.avgWatts != null ? Math.round(act.avgWatts) : null,
     maxPowerW: act.maxWatts != null ? Math.round(act.maxWatts) : null,
-    avgCadence: act.avgCadenceInRotationsPerMinute != null ? Math.round(act.avgCadenceInRotationsPerMinute) : null,
-    maxCadence: act.maxCadenceInRotationsPerMinute != null ? Math.round(act.maxCadenceInRotationsPerMinute) : null,
+    avgCadence:
+      act.avgCadenceInRotationsPerMinute != null
+        ? Math.round(act.avgCadenceInRotationsPerMinute)
+        : null,
+    maxCadence:
+      act.maxCadenceInRotationsPerMinute != null
+        ? Math.round(act.maxCadenceInRotationsPerMinute)
+        : null,
     // Zwift's calorie figure is mechanical-work-like (≈1:1 with kJ); stored as
     // kcal which is the same order of magnitude
     caloriesKcal: act.calories != null ? Math.round(act.calories) : null,
     indoor: true,
-    raw: { provider: "ZWIFT", sourceRow: act },
+    raw: { provider: 'ZWIFT', sourceRow: act },
   };
 }
 
@@ -114,9 +121,7 @@ export function toZwiftSeries(samples: ZwiftFitnessData): ZwiftSeries | null {
   const cm = (arr: number[] | undefined): number[] =>
     (arr ?? []).map((v) => Math.round((v / 100) * 1000) / 1000);
   return {
-    timeMs: time.length
-      ? time.map((s) => s * 1000)
-      : Array.from({ length: n }, (_, i) => i * 1000), // 1 Hz fallback when time is missing
+    timeMs: time.length ? time.map((s) => s * 1000) : Array.from({ length: n }, (_, i) => i * 1000), // 1 Hz fallback when time is missing
     distanceM: cm(samples.distanceInCm),
     speedMs: cm(samples.speedInCmPerSec),
     altitudeM: cm(samples.altitudeInCm),

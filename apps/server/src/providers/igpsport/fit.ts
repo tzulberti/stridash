@@ -4,7 +4,7 @@
  * to our stream types.
  */
 
-import type { FitRecord, FitSession } from "./normalize.js";
+import type { FitRecord, FitSession } from './normalize.js';
 
 // CJS module: load through interop
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -14,7 +14,7 @@ type FitFileParserModule = new (opts: Record<string, unknown>) => {
 
 // fit-file-parser ships CJS; with our ESM tsconfig (bundler resolution) the
 // import resolves via its main field.
-import FitParserModule from "fit-file-parser";
+import FitParserModule from 'fit-file-parser';
 const FitParser = FitParserModule as unknown as FitFileParserModule;
 
 /**
@@ -34,10 +34,10 @@ export async function parseFitFile(
 ): Promise<{ records: FitRecord[]; session: FitSession | null }> {
   const parser = new FitParser({
     force: true, // tolerate invalid checksums (some iGPSPORT files glitch)
-    speedUnit: "m/s",
-    lengthUnit: "meter",
-    temperatureUnit: "celsius",
-    positionUnit: "deg",
+    speedUnit: 'm/s',
+    lengthUnit: 'meter',
+    temperatureUnit: 'celsius',
+    positionUnit: 'deg',
   });
 
   return new Promise<{ records: FitRecord[]; session: FitSession | null }>((resolve, reject) => {
@@ -53,31 +53,44 @@ export async function parseFitFile(
         if (!Number.isFinite(t) || t <= 0) continue;
         out.push({
           timeMs: t,
-          latDeg: typeof m.position_lat === "number" ? m.position_lat : undefined,
-          lngDeg: typeof m.position_long === "number" ? m.position_long : undefined,
-          distanceM: typeof m.distance === "number" ? m.distance : undefined,
+          latDeg: typeof m.position_lat === 'number' ? m.position_lat : undefined,
+          lngDeg: typeof m.position_long === 'number' ? m.position_long : undefined,
+          distanceM: typeof m.distance === 'number' ? m.distance : undefined,
           // Garmin emits the enhanced_* variants of speed/altitude; ride with
           // either spelling (older bare fields) so no channel silently drops
-          speedMs: typeof m.enhanced_speed === "number" ? m.enhanced_speed
-            : typeof m.speed === "number" ? m.speed : undefined,
-          altitudeM: typeof m.enhanced_altitude === "number" ? m.enhanced_altitude
-            : typeof m.altitude === "number" ? m.altitude : undefined,
-          hrBpm: typeof m.heart_rate === "number" ? m.heart_rate : undefined,
-          cadenceRpm: typeof m.cadence === "number" ? m.cadence : undefined,
-          powerW: typeof m.power === "number" ? m.power : undefined,
-          temperatureC: typeof m.temperature === "number" ? m.temperature : undefined,
+          speedMs:
+            typeof m.enhanced_speed === 'number'
+              ? m.enhanced_speed
+              : typeof m.speed === 'number'
+                ? m.speed
+                : undefined,
+          altitudeM:
+            typeof m.enhanced_altitude === 'number'
+              ? m.enhanced_altitude
+              : typeof m.altitude === 'number'
+                ? m.altitude
+                : undefined,
+          hrBpm: typeof m.heart_rate === 'number' ? m.heart_rate : undefined,
+          cadenceRpm: typeof m.cadence === 'number' ? m.cadence : undefined,
+          powerW: typeof m.power === 'number' ? m.power : undefined,
+          temperatureC: typeof m.temperature === 'number' ? m.temperature : undefined,
           // running dynamics + body metrics (2026-11: verified present in
           // Garmin running FITs; iGPSPORT head-unit files do not carry these)
-          verticalOscillationM: typeof m.vertical_oscillation === "number" ? m.vertical_oscillation / 1000 : undefined,
-          stanceTimePct: typeof m.stance_time_percent === "number" ? m.stance_time_percent : undefined,
-          verticalRatioPct: typeof m.vertical_ratio === "number" ? m.vertical_ratio : undefined,
+          verticalOscillationM:
+            typeof m.vertical_oscillation === 'number' ? m.vertical_oscillation / 1000 : undefined,
+          stanceTimePct:
+            typeof m.stance_time_percent === 'number' ? m.stance_time_percent : undefined,
+          verticalRatioPct: typeof m.vertical_ratio === 'number' ? m.vertical_ratio : undefined,
           // parser leaves these in raw millimetres (scale fields aren't
           // rescaled by lengthUnit) — convert to metres for the series
-          stepLengthM: typeof m.step_length === "number" ? m.step_length / 1000 : undefined,
-          respirationRate: typeof m.enhanced_respiration_rate === "number"
-            ? m.enhanced_respiration_rate
-            : typeof m.respiration_rate === "number" ? m.respiration_rate : undefined,
-          staminaPct: typeof m.stamina === "number" ? m.stamina : undefined,
+          stepLengthM: typeof m.step_length === 'number' ? m.step_length / 1000 : undefined,
+          respirationRate:
+            typeof m.enhanced_respiration_rate === 'number'
+              ? m.enhanced_respiration_rate
+              : typeof m.respiration_rate === 'number'
+                ? m.respiration_rate
+                : undefined,
+          staminaPct: typeof m.stamina === 'number' ? m.stamina : undefined,
         });
       }
       resolve({ records: out, session: extractSession(data) });
@@ -87,7 +100,7 @@ export async function parseFitFile(
 
 /** Session/user summaries + source-reported HR-zone minutes. */
 function extractSession(data: any): FitSession | null {
-  if (!data || typeof data !== "object") return null;
+  if (!data || typeof data !== 'object') return null;
   const s = (data.sessions ?? [])[0];
   const am = (data.activity_metrics ?? [])[0];
   const um = (data.user_metrics ?? [])[0];
@@ -115,14 +128,16 @@ function extractSession(data: any): FitSession | null {
     hrZonesMin: hrZones(tiz?.time_in_hr_zone),
   };
   // strip undefineds so the stored jsonb stays tight
-  return Object.fromEntries(Object.entries(session).filter(([, v]) => v !== undefined)) as FitSession;
+  return Object.fromEntries(
+    Object.entries(session).filter(([, v]) => v !== undefined),
+  ) as FitSession;
 }
 
 function str(v: unknown): string | undefined {
-  return typeof v === "string" ? v : undefined;
+  return typeof v === 'string' ? v : undefined;
 }
 function num(v: unknown): number | undefined {
-  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 }
 function hrZones(arr: unknown): number[] | undefined {
   if (!Array.isArray(arr) || !arr.length) return undefined;

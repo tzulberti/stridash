@@ -16,61 +16,61 @@
  * defensively (see the fetch() wrapper).
  */
 
-import { gunzipSync } from "node:zlib";
+import { gunzipSync } from 'node:zlib';
 
-import type { OmronRegion } from "./regions.js";
+import type { OmronRegion } from './regions.js';
 
 // ─── Protocol constants ──────────────────────────────────────────────────────
 
-export const OMRON_APP_VERSION = "011.004.00000"; // iOS OmronConnect build
-export const OMRON_SDK_VERSION = "000.005";
+export const OMRON_APP_VERSION = '011.004.00000'; // iOS OmronConnect build
+export const OMRON_SDK_VERSION = '000.005';
 
 export const USER_AGENT = `OmronConnect/${OMRON_APP_VERSION}.001 CFNetwork/1335.0.3.4 Darwin/21.6.0)`;
 
 /** bodyIndexList value codes (units via `subtype`, precision via `scale`). */
 export const Value = {
   // Blood pressure
-  MMHG_MAX: "1", // systolic (mmHg; kPa when unit subtype says so)
-  MMHG_MIN: "2", // diastolic
-  BPM: "3", // pulse
-  MMHG_MAP: "16", // mean arterial pressure
-  ARRHYTHMIA_FLAG: "6",
-  BODY_MOTION_FLAG: "7",
-  POSTURE_GUIDE: "20",
-  CUFF_WRAP_CHECK: "8",
-  PULSE_QUIET_CHECK: "9",
+  MMHG_MAX: '1', // systolic (mmHg; kPa when unit subtype says so)
+  MMHG_MIN: '2', // diastolic
+  BPM: '3', // pulse
+  MMHG_MAP: '16', // mean arterial pressure
+  ARRHYTHMIA_FLAG: '6',
+  BODY_MOTION_FLAG: '7',
+  POSTURE_GUIDE: '20',
+  CUFF_WRAP_CHECK: '8',
+  PULSE_QUIET_CHECK: '9',
   // Weight / body composition
-  WEIGHT: "257", // %-str: kg|lb|st|g — disambiguated via `subtype`
-  BODY_FAT_PCT: "259",
-  BASAL_METABOLISM: "260", // kcal
-  SKELETAL_MUSCLE_PCT: "261",
-  METABOLIC_AGE: "263",
-  VISCERAL_FAT_LEVEL: "264",
-  VISCERAL_FAT_CHECK: "265",
-  SKELETAL_MUSCLE_CHECK: "266",
-  IMPEDANCE: "267", // ohm
-  FAT_FREE_MASS: "268", // FFMI kg/m² (dimensionless, unit 0 — verified vs real data)
-  AVG_WEIGHT: "269",
-  AVG_WEIGHT_FFM: "270",
-  BLE_BMI: "292",
-  SKELETAL_MUSCLE_MASS: "294", // kg
-  BODY_FAT_MASS: "295", // kg
+  WEIGHT: '257', // %-str: kg|lb|st|g — disambiguated via `subtype`
+  BODY_FAT_PCT: '259',
+  BASAL_METABOLISM: '260', // kcal
+  SKELETAL_MUSCLE_PCT: '261',
+  METABOLIC_AGE: '263',
+  VISCERAL_FAT_LEVEL: '264',
+  VISCERAL_FAT_CHECK: '265',
+  SKELETAL_MUSCLE_CHECK: '266',
+  IMPEDANCE: '267', // ohm
+  FAT_FREE_MASS: '268', // FFMI kg/m² (dimensionless, unit 0 — verified vs real data)
+  AVG_WEIGHT: '269',
+  AVG_WEIGHT_FFM: '270',
+  BLE_BMI: '292',
+  SKELETAL_MUSCLE_MASS: '294', // kg
+  BODY_FAT_MASS: '295', // kg
   // Segmental (body parts)
-  SEG_MUSCLE_ARMS: "275",
-  SEG_MUSCLE_TRUNK: "277",
-  SEG_MUSCLE_LEGS: "279",
-  SEG_SUBCUT_FAT: "281",
-  SEG_SUBCUT_FAT_ARMS: "283",
-  SEG_SUBCUT_FAT_TRUNK: "285",
-  SEG_SUBCUT_FAT_LEGS: "287",
-  SEG_MUSCLE_CHECK_ARMS: "276",
-  SEG_MUSCLE_CHECK_TRUNK: "278",
-  SEG_MUSCLE_CHECK_LEGS: "280",
-  SEG_SUBCUT_CHECK: "282",
-  SEG_SUBCUT_CHECK_ARMS: "284",
-  SEG_SUBCUT_CHECK_TRUNK: "286",
-  SEG_SUBCUT_CHECK_LEGS: "288",
-  BMI: "262",
+  SEG_MUSCLE_ARMS: '275',
+  SEG_MUSCLE_TRUNK: '277',
+  SEG_MUSCLE_LEGS: '279',
+  SEG_SUBCUT_FAT: '281',
+  SEG_SUBCUT_FAT_ARMS: '283',
+  SEG_SUBCUT_FAT_TRUNK: '285',
+  SEG_SUBCUT_FAT_LEGS: '287',
+  SEG_MUSCLE_CHECK_ARMS: '276',
+  SEG_MUSCLE_CHECK_TRUNK: '278',
+  SEG_MUSCLE_CHECK_LEGS: '280',
+  SEG_SUBCUT_CHECK: '282',
+  SEG_SUBCUT_CHECK_ARMS: '284',
+  SEG_SUBCUT_CHECK_TRUNK: '286',
+  SEG_SUBCUT_CHECK_LEGS: '288',
+  BMI: '262',
 } as const;
 
 /** weight `subtype` unit codes. */
@@ -83,8 +83,8 @@ export const WeightUnit = {
 
 /** Device categories. */
 export const DeviceCategory = {
-  BPM: "0",
-  SCALE: "1",
+  BPM: '0',
+  SCALE: '1',
 } as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -151,7 +151,7 @@ export class OmronConnectError extends Error {
 
   constructor(message: string, status?: number, detail?: unknown) {
     super(message);
-    this.name = "OmronConnectError";
+    this.name = 'OmronConnectError';
     this.status = status;
     this.detail = detail;
   }
@@ -159,7 +159,7 @@ export class OmronConnectError extends Error {
 
 export class OmronConnectV1 {
   readonly region: OmronRegion;
-  private accessToken: string = "";
+  private accessToken: string = '';
   private onTokensRefreshed?: (tokens: OmronTokens) => void | Promise<void>;
 
   constructor(
@@ -176,11 +176,11 @@ export class OmronConnectV1 {
 
   private headers(extra?: Record<string, string>): Record<string, string> {
     const h: Record<string, string> = {
-      "User-Agent": USER_AGENT,
-      "X-OGSC-SDK-Version": OMRON_SDK_VERSION,
-      "X-OGSC-App-Version": OMRON_APP_VERSION,
-      "X-Kii-AppID": this.region.appId,
-      "X-Kii-AppKey": this.region.appKey,
+      'User-Agent': USER_AGENT,
+      'X-OGSC-SDK-Version': OMRON_SDK_VERSION,
+      'X-OGSC-App-Version': OMRON_APP_VERSION,
+      'X-Kii-AppID': this.region.appId,
+      'X-Kii-AppKey': this.region.appKey,
       ...extra,
     };
     if (this.accessToken) h.Authorization = `Bearer ${this.accessToken}`;
@@ -197,9 +197,9 @@ export class OmronConnectV1 {
     const buf = Buffer.from(await res.arrayBuffer());
     let text: string;
     if (buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b) {
-      text = gunzipSync(buf).toString("utf8");
+      text = gunzipSync(buf).toString('utf8');
     } else {
-      text = buf.toString("utf8");
+      text = buf.toString('utf8');
     }
     let json: unknown;
     try {
@@ -213,11 +213,11 @@ export class OmronConnectV1 {
   }
 
   private async post(path: string, payload: unknown): Promise<any> {
-    const res = await fetch(path.startsWith("http") ? path : this.appUrl() + path, {
-      method: "POST",
+    const res = await fetch(path.startsWith('http') ? path : this.appUrl() + path, {
+      method: 'POST',
       headers: {
         ...this.headers(),
-        "Content-Type": "application/vnd.kii+json;charset=utf-8",
+        'Content-Type': 'application/vnd.kii+json;charset=utf-8',
       },
       body: JSON.stringify(payload),
     });
@@ -229,7 +229,7 @@ export class OmronConnectV1 {
   }
 
   private async get(path: string): Promise<any> {
-    const res = await fetch(this.appUrl() + path, { method: "GET", headers: this.headers() });
+    const res = await fetch(this.appUrl() + path, { method: 'GET', headers: this.headers() });
     const json = await this.parseBody(res);
     if (!res.ok) throw new OmronConnectError(`Omron API error on ${path}`, res.status, json);
     return json;
@@ -240,13 +240,17 @@ export class OmronConnectV1 {
   /** Login with the user's Omron Connect account credentials. */
   async login(email: string, password: string): Promise<OmronTokens> {
     const res = await fetch(`${this.region.cloudUrl}/oauth2/token`, {
-      method: "POST",
-      headers: { ...this.headers(), "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { ...this.headers(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: email, password }),
     });
     const json: any = await this.parseBody(res);
     if (!res.ok || !json.access_token) {
-      throw new OmronConnectError("Omron login failed (check email/password/region)", res.status, json);
+      throw new OmronConnectError(
+        'Omron login failed (check email/password/region)',
+        res.status,
+        json,
+      );
     }
     this.accessToken = json.access_token;
     return { accessToken: json.access_token, refreshToken: json.refresh_token };
@@ -255,17 +259,20 @@ export class OmronConnectV1 {
   /** Exchange a refresh token for a fresh token pair. */
   async refresh(refreshToken: string): Promise<OmronTokens> {
     const res = await fetch(`${this.region.cloudUrl}/oauth2/token`, {
-      method: "POST",
-      headers: { ...this.headers(), "Content-Type": "application/json" },
-      body: JSON.stringify({ grant_type: "refresh_token", refresh_token: refreshToken }),
+      method: 'POST',
+      headers: { ...this.headers(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: refreshToken }),
     });
     const json: any = await this.parseBody(res);
     if (!res.ok || !json.access_token) {
-      throw new OmronConnectError("Omron token refresh failed", res.status, json);
+      throw new OmronConnectError('Omron token refresh failed', res.status, json);
     }
     this.accessToken = json.access_token;
     if (this.onTokensRefreshed) {
-      await this.onTokensRefreshed({ accessToken: json.access_token, refreshToken: json.refresh_token });
+      await this.onTokensRefreshed({
+        accessToken: json.access_token,
+        refreshToken: json.refresh_token,
+      });
     }
     return { accessToken: json.access_token, refreshToken: json.refresh_token };
   }
@@ -279,7 +286,12 @@ export class OmronConnectV1 {
   // ── Account / devices ──────────────────────────────────────────────────────
 
   /** Stable provider-side user identity (falls back to "unknown"). */
-  async getUser(): Promise<{ userID?: string; loginName?: string; email?: string; [k: string]: unknown }> {
+  async getUser(): Promise<{
+    userID?: string;
+    loginName?: string;
+    email?: string;
+    [k: string]: unknown;
+  }> {
     return this.get(`/users/me`);
   }
 
@@ -310,7 +322,7 @@ export class OmronConnectV1 {
                   deviceModel: model.deviceModel,
                   deviceSerialID: String(dev.deviceSerialID),
                   userNumberInDevice: Number(dev.userNumberInDevice),
-                  category: String(category ?? ""),
+                  category: String(category ?? ''),
                 });
               }
             }
@@ -325,7 +337,11 @@ export class OmronConnectV1 {
   }
 
   /** Raw measurements for one device since `fromMs` (unix ms, 0 = all). */
-  async getMeasurements(device: OmronDevice, fromMs = 0, toMs?: number): Promise<RawDeviceMeasurements[]> {
+  async getMeasurements(
+    device: OmronDevice,
+    fromMs = 0,
+    toMs?: number,
+  ): Promise<RawDeviceMeasurements[]> {
     const resp: any = await this.post(`/versions/current/measureData`, {
       containCorrectedDataFlag: 1,
       containAllDataTypeFlag: 1,
@@ -338,7 +354,7 @@ export class OmronConnectV1 {
 
     const returned: any = resp?.returnedValue;
     if (!returned || returned.errorCode) return [];
-    const models: any[] = Array.isArray(returned) ? returned : returned.deviceModelList ?? [];
+    const models: any[] = Array.isArray(returned) ? returned : (returned.deviceModelList ?? []);
     const out: RawDeviceMeasurements[] = [];
     for (const model of models) {
       for (const dev of model.deviceSerialIDList ?? []) {
@@ -350,7 +366,11 @@ export class OmronConnectV1 {
   }
 
   /** Flatten every device's measureList into samples. */
-  async getMeasureSamples(device: OmronDevice, fromMs = 0, toMs?: number): Promise<RawMeasureSample[]> {
+  async getMeasureSamples(
+    device: OmronDevice,
+    fromMs = 0,
+    toMs?: number,
+  ): Promise<RawMeasureSample[]> {
     const perDevice = await this.getMeasurements(device, fromMs, toMs);
     return perDevice.flatMap((d) => d.measureList ?? []);
   }

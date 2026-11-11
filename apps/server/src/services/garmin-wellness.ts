@@ -10,15 +10,11 @@
  * history backfills stay cheap (2 range requests per 28 days).
  */
 
-import { prisma } from "../db.js";
-import { Prisma } from "../generated/prisma/client.js";
-import {
-  getDailySummaries,
-  getSleepDay,
-  getSleepStatsRange,
-} from "../providers/garmin/api.js";
-import { ensureGarminTokens, type GarminConnectionLike } from "./garmin-tokens.js";
-import type { Env } from "../env.js";
+import { prisma } from '../db.js';
+import { Prisma } from '../generated/prisma/client.js';
+import { getDailySummaries, getSleepDay, getSleepStatsRange } from '../providers/garmin/api.js';
+import { ensureGarminTokens, type GarminConnectionLike } from './garmin-tokens.js';
+import type { Env } from '../env.js';
 
 const CHUNK_DAYS = 28;
 /** nights also fetched with the full detail endpoint */
@@ -26,7 +22,7 @@ const DETAIL_RECENT_DAYS = 45;
 
 export type GarminWellnessResult = {
   syncLogId: string;
-  status: "OK" | "PARTIAL" | "ERROR";
+  status: 'OK' | 'PARTIAL' | 'ERROR';
   sleepPulled: number;
   sleepUpserted: number;
   daysPulled: number;
@@ -48,17 +44,20 @@ function addDaysStr(s: string, n: number): string {
 }
 
 function num(v: unknown): number | undefined {
-  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 }
 
 function str(v: unknown): string | undefined {
-  return typeof v === "string" && v.trim() ? v : undefined;
+  return typeof v === 'string' && v.trim() ? v : undefined;
 }
 
-export async function syncGarminWellness(env: Env, connection: GarminConnectionLike): Promise<GarminWellnessResult> {
+export async function syncGarminWellness(
+  env: Env,
+  connection: GarminConnectionLike,
+): Promise<GarminWellnessResult> {
   const result: GarminWellnessResult = {
-    syncLogId: "",
-    status: "OK",
+    syncLogId: '',
+    status: 'OK',
     sleepPulled: 0,
     sleepUpserted: 0,
     daysPulled: 0,
@@ -68,7 +67,7 @@ export async function syncGarminWellness(env: Env, connection: GarminConnectionL
   };
 
   const log = await prisma.syncLog.create({
-    data: { connectionId: connection.id, kind: "WELLNESS", status: "OK" },
+    data: { connectionId: connection.id, kind: 'WELLNESS', status: 'OK' },
   });
   result.syncLogId = log.id;
 
@@ -78,19 +77,19 @@ export async function syncGarminWellness(env: Env, connection: GarminConnectionL
     // Backfill start: the oldest row we already have, else deep past for the
     // first run — Garmin simply answers zero rows past the device's history.
     const earliestSleep = await prisma.sleepSession.findFirst({
-      where: { userId: connection.userId, provider: "GARMIN" },
-      orderBy: { dateKey: "asc" },
+      where: { userId: connection.userId, provider: 'GARMIN' },
+      orderBy: { dateKey: 'asc' },
       select: { dateKey: true },
     });
     const earliestDay = await prisma.dailyWellness.findFirst({
-      where: { userId: connection.userId, provider: "GARMIN" },
-      orderBy: { dateKey: "asc" },
+      where: { userId: connection.userId, provider: 'GARMIN' },
+      orderBy: { dateKey: 'asc' },
       select: { dateKey: true },
     });
     const existingKeys = [earliestSleep?.dateKey, earliestDay?.dateKey]
       .filter((k): k is string => !!k)
       .sort();
-    const startStr = existingKeys[0] ?? "2022-01-01";
+    const startStr = existingKeys[0] ?? '2022-01-01';
 
     const today = iso(new Date()); // "today" in UTC; the wearer's local night
     // for the current morning is keyed by yesterday's calendarDate anyway,
@@ -112,7 +111,7 @@ export async function syncGarminWellness(env: Env, connection: GarminConnectionL
         result.sleepPulled += rows.length;
         await upsertSleepChunk(connection, rows, sleepKeys, result);
       } catch (err) {
-        result.status = "PARTIAL";
+        result.status = 'PARTIAL';
         result.failedChunks++;
         console.error(`[garmin] sleep range ${cs}→${ce} failed:`, err);
       }
@@ -123,7 +122,7 @@ export async function syncGarminWellness(env: Env, connection: GarminConnectionL
         result.daysPulled += rows.length;
         await upsertDailyChunk(connection, rows, dayKeys, result);
       } catch (err) {
-        result.status = "PARTIAL";
+        result.status = 'PARTIAL';
         result.failedChunks++;
         console.error(`[garmin] summaries ${cs}→${ce} failed:`, err);
       }
@@ -136,7 +135,7 @@ export async function syncGarminWellness(env: Env, connection: GarminConnectionL
         detail = await getSleepDay(bearer, d);
       } catch (err) {
         console.error(`[garmin] sleep detail ${d} failed:`, err);
-        result.status = "PARTIAL";
+        result.status = 'PARTIAL';
         result.failedChunks++;
         continue;
       }
@@ -146,11 +145,13 @@ export async function syncGarminWellness(env: Env, connection: GarminConnectionL
       }
       try {
         await prisma.sleepSession.upsert({
-          where: { userId_provider_dateKey: { userId: connection.userId, provider: "GARMIN", dateKey: d } },
+          where: {
+            userId_provider_dateKey: { userId: connection.userId, provider: 'GARMIN', dateKey: d },
+          },
           create: {
             userId: connection.userId,
             connectionId: connection.id,
-            provider: "GARMIN",
+            provider: 'GARMIN',
             dateKey: d,
             ...patch,
           } as Prisma.SleepSessionUncheckedCreateInput,
@@ -159,7 +160,7 @@ export async function syncGarminWellness(env: Env, connection: GarminConnectionL
         result.sleepUpserted++;
       } catch (err) {
         console.error(`[garmin] sleep detail upsert ${d} failed:`, err);
-        result.status = "PARTIAL";
+        result.status = 'PARTIAL';
         result.failedChunks++;
       }
     }
@@ -179,7 +180,7 @@ export async function syncGarminWellness(env: Env, connection: GarminConnectionL
     await prisma.syncLog.update({
       where: { id: result.syncLogId },
       data: {
-        status: "ERROR",
+        status: 'ERROR',
         errorDetail: { error: String(err) } as never,
         finishedAt: new Date(),
       },
@@ -211,7 +212,10 @@ async function upsertSleepChunk(
     }
     const data = {
       startAt: new Date(startMs),
-      endAt: num(v.gmtSleepEndTimeInMillis) !== undefined ? new Date(num(v.gmtSleepEndTimeInMillis)!) : null,
+      endAt:
+        num(v.gmtSleepEndTimeInMillis) !== undefined
+          ? new Date(num(v.gmtSleepEndTimeInMillis)!)
+          : null,
       totalSleepS: num(v.totalSleepTimeInSeconds) ?? null,
       deepS: num(v.deepTime) ?? null,
       lightS: num(v.lightTime) ?? null,
@@ -231,11 +235,13 @@ async function upsertSleepChunk(
     seen.add(dateKey);
     try {
       await prisma.sleepSession.upsert({
-        where: { userId_provider_dateKey: { userId: connection.userId, provider: "GARMIN", dateKey } },
+        where: {
+          userId_provider_dateKey: { userId: connection.userId, provider: 'GARMIN', dateKey },
+        },
         create: {
           userId: connection.userId,
           connectionId: connection.id,
-          provider: "GARMIN",
+          provider: 'GARMIN',
           dateKey,
           ...data,
         },
@@ -245,7 +251,7 @@ async function upsertSleepChunk(
       else result.sleepUpserted++;
     } catch (err) {
       console.error(`[garmin] sleep row ${dateKey} upsert failed:`, err);
-      result.status = "PARTIAL";
+      result.status = 'PARTIAL';
       result.failedChunks++;
     }
   }
@@ -297,20 +303,21 @@ interface DailySleepDto {
  * row fields. `startAt: null` means "night had no syncable sleep". */
 function sleepDetailPatch(detail: unknown): SleepDetailPatch {
   const dto = (detail ?? null) as DailySleepDto | null;
-  if (!dto || typeof dto !== "object") return { startAt: null };
+  if (!dto || typeof dto !== 'object') return { startAt: null };
   const startMs = num(dto.sleepStartTimestampGMT);
   if (!startMs) return { startAt: null };
 
   // Keep the response lean: the endpoint also returns large inspection
   // arrays (per-minute movement charts...) that we don't query.
-  const raw = ({
+  const raw = {
     sleepScores: dto.sleepScores,
     sleepNeed: dto.sleepNeed,
-  }) as Prisma.InputJsonValue;
+  } as Prisma.InputJsonValue;
 
   return {
     startAt: new Date(startMs),
-    endAt: num(dto.sleepEndTimestampGMT) !== undefined ? new Date(num(dto.sleepEndTimestampGMT)!) : null,
+    endAt:
+      num(dto.sleepEndTimestampGMT) !== undefined ? new Date(num(dto.sleepEndTimestampGMT)!) : null,
     totalSleepS: num(dto.sleepTimeSeconds) ?? null,
     deepS: num(dto.deepSleepSeconds) ?? null,
     lightS: num(dto.lightSleepSeconds) ?? null,
@@ -341,7 +348,13 @@ interface DailySummaryRow {
   intensityMinutes?: { goal?: number; moderate?: number; vigorous?: number };
   wellnessChronology?: unknown;
   stress?: { avgLevel?: number; maxLevel?: number };
-  bodyBattery?: { minValue?: number; maxValue?: number; latestValue?: number; chargedValue?: number; drainedValue?: number };
+  bodyBattery?: {
+    minValue?: number;
+    maxValue?: number;
+    latestValue?: number;
+    chargedValue?: number;
+    drainedValue?: number;
+  };
 }
 
 async function upsertDailyChunk(
@@ -385,11 +398,13 @@ async function upsertDailyChunk(
     seen.add(dateKey);
     try {
       await prisma.dailyWellness.upsert({
-        where: { userId_provider_dateKey: { userId: connection.userId, provider: "GARMIN", dateKey } },
+        where: {
+          userId_provider_dateKey: { userId: connection.userId, provider: 'GARMIN', dateKey },
+        },
         create: {
           userId: connection.userId,
           connectionId: connection.id,
-          provider: "GARMIN",
+          provider: 'GARMIN',
           dateKey,
           ...data,
         },
@@ -399,7 +414,7 @@ async function upsertDailyChunk(
       else result.daysUpserted++;
     } catch (err) {
       console.error(`[garmin] daily row ${dateKey} upsert failed:`, err);
-      result.status = "PARTIAL";
+      result.status = 'PARTIAL';
       result.failedChunks++;
     }
   }

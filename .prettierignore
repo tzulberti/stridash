@@ -1,0 +1,13 @@
+# generated code
+apps/server/src/generated/
+package-lock.json
+
+# build output / platform artifacts
+dist/
+.expo/
+android/
+ios/
+web-build/
+
+# machine files (kept as-is)
+*.md

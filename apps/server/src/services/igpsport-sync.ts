@@ -5,19 +5,23 @@
  * data model. Every run writes a sync_logs row.
  */
 
-import { prisma } from "../db.js";
-import { encryptToken, decryptToken } from "../crypto.js";
-import { Prisma } from "../generated/prisma/client.js";
+import { prisma } from '../db.js';
+import { encryptToken, decryptToken } from '../crypto.js';
+import { Prisma } from '../generated/prisma/client.js';
 import {
   IgpSportError,
   IgpSportClient,
   peekJwtClaims,
   type IgpSportActivityRow,
-} from "../providers/igpsport/client.js";
-import { regionForKey } from "../providers/igpsport/regions.js";
-import { type ActivityInput, type FitRecord, fitToActivity } from "../providers/igpsport/normalize.js";
-import { parseFitSeries } from "../providers/igpsport/fit.js";
-import type { Env } from "../env.js";
+} from '../providers/igpsport/client.js';
+import { regionForKey } from '../providers/igpsport/regions.js';
+import {
+  type ActivityInput,
+  type FitRecord,
+  fitToActivity,
+} from '../providers/igpsport/normalize.js';
+import { parseFitSeries } from '../providers/igpsport/fit.js';
+import type { Env } from '../env.js';
 
 interface ConnectionLike {
   id: string;
@@ -32,7 +36,7 @@ interface ConnectionLike {
 
 export type IgpSportSyncResult = {
   syncLogId: string;
-  status: "OK" | "PARTIAL" | "ERROR";
+  status: 'OK' | 'PARTIAL' | 'ERROR';
   itemsPulled: number;
   itemsCreated: number;
   itemsUpdated: number;
@@ -42,7 +46,7 @@ export type IgpSportSyncResult = {
 /** Read the { igpsport: { region } } config blob. */
 function regionKeyOf(connection: ConnectionLike): string {
   const cfg = connection.config as { igpsport?: { region?: string } } | null;
-  return cfg?.igpsport?.region ?? "intl";
+  return cfg?.igpsport?.region ?? 'intl';
 }
 
 /** Activity scalars → Prisma create payload (jsonb + nulls handled). */
@@ -81,15 +85,15 @@ function toActivityCreate(userId: string, connectionId: string, input: ActivityI
  * password. Writes the fresh token pair + expiry back to the connection row.
  */
 async function ensureClient(env: Env, connection: ConnectionLike): Promise<IgpSportClient> {
-  if (connection.status === "REVOKED") {
-    throw new IgpSportError("Connection revoked — reconnect the iGPSPORT account first");
+  if (connection.status === 'REVOKED') {
+    throw new IgpSportError('Connection revoked — reconnect the iGPSPORT account first');
   }
   const region = regionForKey(regionKeyOf(connection))!;
   const client = new IgpSportClient(region);
 
   const username = await (async () => {
     const cfg = connection.config as { igpsport?: { username?: string } } | null;
-    return cfg?.igpsport?.username ?? "";
+    return cfg?.igpsport?.username ?? '';
   })();
 
   const expMs = connection.tokenExpiresAt?.getTime() ?? 0;
@@ -102,7 +106,7 @@ async function ensureClient(env: Env, connection: ConnectionLike): Promise<IgpSp
   // (Re-)login. The account password is persisted encrypted in
   // refreshTokenEnc (the protocol has no refresh-token grant we can rely on).
   if (!connection.refreshTokenEnc) {
-    throw new IgpSportError("No stored iGPSPORT credentials — reconnect the account");
+    throw new IgpSportError('No stored iGPSPORT credentials — reconnect the account');
   }
   const password = decryptToken(connection.refreshTokenEnc, env.STRIDASH_ENC_KEY);
   const login = await client.login(username, password);
@@ -117,7 +121,7 @@ async function ensureClient(env: Env, connection: ConnectionLike): Promise<IgpSp
       accessTokenEnc: encryptToken(login.access_token, env.STRIDASH_ENC_KEY),
       // keep the password blob as-is (refreshTokenEnc)
       tokenExpiresAt: expiresAt,
-      status: "ACTIVE",
+      status: 'ACTIVE',
     },
   });
   return client.withAccessToken(login.access_token);
@@ -127,13 +131,16 @@ async function ensureClient(env: Env, connection: ConnectionLike): Promise<IgpSp
  * Run one iGPSPORT sync. Pages through the activity list starting at the
  * newest ride; stops at the first page whose rows are all already known.
  */
-export async function syncIgpSportConnection(env: Env, connection: ConnectionLike): Promise<IgpSportSyncResult> {
+export async function syncIgpSportConnection(
+  env: Env,
+  connection: ConnectionLike,
+): Promise<IgpSportSyncResult> {
   const log = await prisma.syncLog.create({
-    data: { connectionId: connection.id, kind: "ACTIVITIES", status: "OK" },
+    data: { connectionId: connection.id, kind: 'ACTIVITIES', status: 'OK' },
   });
   const result: IgpSportSyncResult = {
     syncLogId: log.id,
-    status: "OK",
+    status: 'OK',
     itemsPulled: 0,
     itemsCreated: 0,
     itemsUpdated: 0,
@@ -156,7 +163,7 @@ export async function syncIgpSportConnection(env: Env, connection: ConnectionLik
         rows = await client.listActivities(page, 20);
       } catch (err) {
         // Partial failure: keep what we have, note the failure
-        result.status = "PARTIAL";
+        result.status = 'PARTIAL';
         result.failedRides.push(`page:${page}`);
         console.error(`[igpsport] list page ${page} failed:`, err);
         break;
@@ -172,7 +179,7 @@ export async function syncIgpSportConnection(env: Env, connection: ConnectionLik
           await ingestRide(client, connection, row);
           result.itemsCreated++;
         } catch (err) {
-          result.status = "PARTIAL";
+          result.status = 'PARTIAL';
           result.failedRides.push(String(row.rideId));
           console.error(`[igpsport] ride ${row.rideId} ingest failed:`, err);
         }
@@ -186,12 +193,15 @@ export async function syncIgpSportConnection(env: Env, connection: ConnectionLik
       }
     }
   } catch (err) {
-    const detail = err instanceof IgpSportError ? { error: err.message, providerDetail: err.detail } : { error: String(err) };
+    const detail =
+      err instanceof IgpSportError
+        ? { error: err.message, providerDetail: err.detail }
+        : { error: String(err) };
     await prisma.syncLog.update({
       where: { id: result.syncLogId },
-      data: { status: "ERROR", errorDetail: detail as never, finishedAt: new Date() },
+      data: { status: 'ERROR', errorDetail: detail as never, finishedAt: new Date() },
     });
-    console.error("[igpsport] sync failed:", detail);
+    console.error('[igpsport] sync failed:', detail);
     throw err;
   }
 
@@ -247,12 +257,12 @@ async function ingestRide(
   // as-is (string without offset) — dedup still works because the ride id is
   // registered in activity_sources first anyway.
   const startTime = row.startTime
-    ? new Date(`${row.startTime.replace(" ", "T")}Z`) // treat as UTC; corrected when FIT arrives
+    ? new Date(`${row.startTime.replace(' ', 'T')}Z`) // treat as UTC; corrected when FIT arrives
     : new Date(0);
   const activity: ActivityInput = {
-    headline: row.title ?? row.name ?? "iGPSPORT ride",
+    headline: row.title ?? row.name ?? 'iGPSPORT ride',
     workoutName: null,
-    type: row.exerciseType === 0 ? "RIDE" : "OTHER",
+    type: row.exerciseType === 0 ? 'RIDE' : 'OTHER',
     startTime,
     durationS: row.totalMovingTime ?? row.recordTime ?? 0,
     movingTimeS: row.totalMovingTime ?? null,
@@ -271,7 +281,7 @@ async function ingestRide(
     maxCadence: null,
     caloriesKcal: null,
     indoor: false,
-    raw: { provider: "IGPSPORT", sourceRow: row, approximateStartTime: true },
+    raw: { provider: 'IGPSPORT', sourceRow: row, approximateStartTime: true },
   };
   await upsertActivity(connection, rideId, activity, null);
 }
@@ -310,31 +320,43 @@ async function upsertActivity(
       where: {
         activityId_connectionId: { activityId: dup.id, connectionId: connection.id },
       },
-      create: { activityId: dup.id, connectionId: connection.id, sourceActivityId: rideId, sourceUpdatedAt: new Date() },
+      create: {
+        activityId: dup.id,
+        connectionId: connection.id,
+        sourceActivityId: rideId,
+        sourceUpdatedAt: new Date(),
+      },
       update: { sourceActivityId: rideId, sourceUpdatedAt: new Date() },
     });
     return;
   }
 
   await prisma.$transaction(async (tx) => {
-    const created = await tx.activity.create({ data: toActivityCreate(connection.userId, connection.id, activity) });
+    const created = await tx.activity.create({
+      data: toActivityCreate(connection.userId, connection.id, activity),
+    });
 
     await tx.activitySource.upsert({
       where: {
         activityId_connectionId: { activityId: created.id, connectionId: connection.id },
       },
-      create: { activityId: created.id, connectionId: connection.id, sourceActivityId: rideId, sourceUpdatedAt: new Date() },
+      create: {
+        activityId: created.id,
+        connectionId: connection.id,
+        sourceActivityId: rideId,
+        sourceUpdatedAt: new Date(),
+      },
       update: { sourceActivityId: rideId },
     });
 
     if (series) {
       await tx.activityDataPoint.upsert({
         where: {
-          activityId_provider: { activityId: created.id, provider: "IGPSPORT" },
+          activityId_provider: { activityId: created.id, provider: 'IGPSPORT' },
         },
         create: {
           activityId: created.id,
-          provider: "IGPSPORT",
+          provider: 'IGPSPORT',
           sampleCount: (series.timeMs as number[]).length,
           series: series as unknown as Prisma.InputJsonValue,
         },

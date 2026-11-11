@@ -8,9 +8,10 @@
  * from the same records so summary and series can never disagree.
  */
 
-import type { IgpSportActivityRow } from "./client.js";
+import type { IgpSportActivityRow } from './client.js';
 
-export type ActivityType = "RUN" | "RIDE" | "VIRTUAL_RIDE" | "WALK" | "HIKE" | "SWIM" | "WORKOUT" | "OTHER";
+export type ActivityType =
+  'RUN' | 'RIDE' | 'VIRTUAL_RIDE' | 'WALK' | 'HIKE' | 'SWIM' | 'WORKOUT' | 'OTHER';
 
 /** FIT record message, post-decode (see parseFitSeries). */
 export interface FitRecord {
@@ -68,16 +69,16 @@ export interface FitSession {
 export function exerciseTypeToActivity(type: number | undefined): ActivityType {
   switch (type) {
     case 0:
-      return "RIDE";
+      return 'RIDE';
     // iGPSPORT head units are cycling devices; everything unrecognized stays OTHER
     default:
-      return "OTHER";
+      return 'OTHER';
   }
 }
 
 /** Headline/title fallback from the list row. */
 export function activityHeadline(row: IgpSportActivityRow): string {
-  return String(row.title ?? row.name ?? "iGPSPORT ride");
+  return String(row.title ?? row.name ?? 'iGPSPORT ride');
 }
 
 /**
@@ -121,7 +122,7 @@ function max(values: number[]): number | null {
 function ascentDescent(altitudes: (number | undefined)[]): { ascent: number; descent: number } {
   let ascent = 0;
   let descent = 0;
-  const pts = altitudes.filter((a): a is number => typeof a === "number");
+  const pts = altitudes.filter((a): a is number => typeof a === 'number');
   for (let i = 1; i < pts.length; i++) {
     const delta = (pts[i] ?? 0) - (pts[i - 1] ?? 0);
     if (delta > 0) ascent += delta;
@@ -157,7 +158,7 @@ export function fitToActivity(
 ): FitParseResult | null {
   if (!records.length) return null;
 
-  const series: FitParseResult["series"] = {
+  const series: FitParseResult['series'] = {
     timeMs: [],
     latDeg: [],
     lngDeg: [],
@@ -202,23 +203,27 @@ export function fitToActivity(
   const avgCadenceVal = avg(cadences);
   const maxCadenceVal = max(cadences);
 
-  const listAscent = typeof row.totalAscent === "number" ? row.totalAscent : null;
-  const listDescent = typeof row.totalDescent === "number" ? row.totalDescent : null;
+  const listAscent = typeof row.totalAscent === 'number' ? row.totalAscent : null;
+  const listDescent = typeof row.totalDescent === 'number' ? row.totalDescent : null;
 
   const activity: ActivityInput = {
     headline: activityHeadline(row),
     workoutName: null,
     type: exerciseTypeToActivity(row.exerciseType),
     startTime,
-    durationS: durationS || (typeof row.totalMovingTime === "number" ? row.totalMovingTime : 0)
-      || (typeof row.recordTime === "number" ? row.recordTime : 0)
-      || 0,
-    movingTimeS: typeof row.totalMovingTime === "number" ? row.totalMovingTime : null,
+    durationS:
+      durationS ||
+      (typeof row.totalMovingTime === 'number' ? row.totalMovingTime : 0) ||
+      (typeof row.recordTime === 'number' ? row.recordTime : 0) ||
+      0,
+    movingTimeS: typeof row.totalMovingTime === 'number' ? row.totalMovingTime : null,
     distanceM:
-      (series.distanceM.length > 0 ? series.distanceM[series.distanceM.length - 1]
-      : typeof row.rideDistance === "number" ? row.rideDistance
-      : null) ?? null,
-    avgSpeedMs: avg(speeds) ?? (typeof row.avgSpeed === "number" ? row.avgSpeed : null) ?? null,
+      (series.distanceM.length > 0
+        ? series.distanceM[series.distanceM.length - 1]
+        : typeof row.rideDistance === 'number'
+          ? row.rideDistance
+          : null) ?? null,
+    avgSpeedMs: avg(speeds) ?? (typeof row.avgSpeed === 'number' ? row.avgSpeed : null) ?? null,
     maxSpeedMs: max(speeds) ?? null,
     totalAscentM: listAscent ?? Math.max(0, Math.round(ascent * 10) / 10),
     totalDescentM: listDescent ?? Math.max(0, Math.round(descent * 10) / 10),
@@ -233,7 +238,7 @@ export function fitToActivity(
     caloriesKcal: null,
     indoor: extras.indoor,
     raw: {
-      provider: "IGPSPORT",
+      provider: 'IGPSPORT',
       sourceRow: row,
       sampleCount: records.length,
     },

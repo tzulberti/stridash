@@ -11,7 +11,7 @@
 
 // ─── Users ───────────────────────────────────────────────────────────────────
 
-export type Sex = "MALE" | "FEMALE" | "OTHER" | "UNDISCLOSED";
+export type Sex = 'MALE' | 'FEMALE' | 'OTHER' | 'UNDISCLOSED';
 
 export interface User {
   id: string;
@@ -30,14 +30,14 @@ export interface AuthIdentity {
   updatedAt: string;
 }
 
-export type IdentityKind = "PASSWORD";
+export type IdentityKind = 'PASSWORD';
 
 // ─── Connections (external providers) ────────────────────────────────────────
 
 /** Providers Stridash can sync from. */
-export type Provider = "STRAVA" | "GARMIN" | "ZWIFT" | "IGPSPORT" | "OMRON" | "MANUAL";
+export type Provider = 'STRAVA' | 'GARMIN' | 'ZWIFT' | 'IGPSPORT' | 'OMRON' | 'MANUAL';
 
-export type ConnectionStatus = "PENDING" | "ACTIVE" | "ERROR" | "REVOKED";
+export type ConnectionStatus = 'PENDING' | 'ACTIVE' | 'ERROR' | 'REVOKED';
 
 /** A (user, external account) pair. Tokens live server-side only. */
 export interface Connection {
@@ -56,7 +56,7 @@ export interface Connection {
 
 /** Connect an Omron account (server verifies credentials; password never stored). */
 export interface OmronConnectRequest {
-  provider: "OMRON";
+  provider: 'OMRON';
   /** Omron Connect account identifier — email or username. */
   identifier: string;
   /** Omron Connect account password — sent over TLS once, never persisted. */
@@ -67,7 +67,7 @@ export interface OmronConnectRequest {
 
 /** Connect a Garmin account (SSO credential login; only DI tokens are stored). */
 export interface GarminConnectRequest {
-  provider: "GARMIN";
+  provider: 'GARMIN';
   /** Garmin account email (SSO login field). */
   email: string;
   /** Garmin account password — used once over TLS, never persisted. */
@@ -80,8 +80,8 @@ export interface GarminMfaRequest {
   code: string;
 }
 
-export type SyncKind = "ACTIVITIES" | "MEASUREMENTS" | "TOKEN_REFRESH";
-export type SyncStatus = "OK" | "PARTIAL" | "ERROR";
+export type SyncKind = 'ACTIVITIES' | 'MEASUREMENTS' | 'TOKEN_REFRESH';
+export type SyncStatus = 'OK' | 'PARTIAL' | 'ERROR';
 
 export interface SyncLog {
   id: string;
@@ -99,14 +99,7 @@ export interface SyncLog {
 // ─── Activities ──────────────────────────────────────────────────────────────
 
 export type ActivityType =
-  | "RUN"
-  | "RIDE"
-  | "VIRTUAL_RIDE"
-  | "WALK"
-  | "HIKE"
-  | "SWIM"
-  | "WORKOUT"
-  | "OTHER";
+  'RUN' | 'RIDE' | 'VIRTUAL_RIDE' | 'WALK' | 'HIKE' | 'SWIM' | 'WORKOUT' | 'OTHER';
 
 export interface Activity {
   id: string;
@@ -195,7 +188,7 @@ export interface ActivitySource {
   sourceUpdatedAt: string;
 }
 
-export type GearKind = "BIKE" | "SHOES" | "OTHER";
+export type GearKind = 'BIKE' | 'SHOES' | 'OTHER';
 
 export interface Gear {
   id: string;
@@ -215,7 +208,7 @@ export interface Gear {
  * Metrics that don't apply to a kind are null — see docs/data-model.md
  * for the Omron field mapping.
  */
-export type MeasurementKind = "WEIGH_IN" | "BLOOD_PRESSURE";
+export type MeasurementKind = 'WEIGH_IN' | 'BLOOD_PRESSURE';
 
 /** Segmental body composition (Omron codes 275–288): body part × metric. */
 export interface BodySegmentMetrics {
@@ -265,7 +258,7 @@ export interface Measurement {
 // ─── API contracts (v1) ──────────────────────────────────────────────────────
 
 export interface HealthResponse {
-  status: "ok";
+  status: 'ok';
   version: string;
 }
 

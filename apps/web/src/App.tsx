@@ -6,16 +6,13 @@
  * activities list + one-activity drill-down with GPS/HR/power series.
  */
 
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import type {
-  Measurement,
-  Activity,
-} from "@stridash/types";
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import type { Measurement, Activity } from '@stridash/types';
 
 // ─── API client ──────────────────────────────────────────────────────────────
 
-const TOKEN_KEY = "stridash.accessToken";
-const REFRESH_KEY = "stridash.refreshToken";
+const TOKEN_KEY = 'stridash.accessToken';
+const REFRESH_KEY = 'stridash.refreshToken';
 
 /** "Remember me" puts both tokens in localStorage (survives the browser);
  * unchecked keeps them in sessionStorage (dies with the tab). */
@@ -60,9 +57,9 @@ async function tryRefresh(): Promise<boolean> {
     const rt = sessionStorage.getItem(REFRESH_KEY) ?? localStorage.getItem(REFRESH_KEY);
     if (!rt) return false;
     try {
-      const res = await fetch("/api/auth/refresh", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: rt }),
       });
       if (!res.ok) {
@@ -84,14 +81,19 @@ async function tryRefresh(): Promise<boolean> {
 
 async function api<T>(
   path: string,
-  opts: { method?: string; body?: unknown; token?: string | null; query?: Record<string, string> } = {},
+  opts: {
+    method?: string;
+    body?: unknown;
+    token?: string | null;
+    query?: Record<string, string>;
+  } = {},
 ): Promise<T> {
-  const qs = opts.query ? `?${new URLSearchParams(opts.query).toString()}` : "";
+  const qs = opts.query ? `?${new URLSearchParams(opts.query).toString()}` : '';
   const call = (tok: string | null | undefined) =>
     fetch(`/api${path}${qs}`, {
-      method: opts.method ?? "GET",
+      method: opts.method ?? 'GET',
       headers: {
-        ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
       },
       ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
@@ -100,14 +102,17 @@ async function api<T>(
   const json = (await res.json().catch(() => null)) as T & { error?: string; detail?: unknown };
   // A 401 mid-dashboard usually means the 15-minute access token ran out —
   // refresh once and replay before surfacing an error.
-  if (res.status === 401 && !path.startsWith("/auth/") && (await tryRefresh())) {
+  if (res.status === 401 && !path.startsWith('/auth/') && (await tryRefresh())) {
     const retry = await call(readToken());
-    const json2 = (await retry.json().catch(() => null)) as T & { error?: string; detail?: unknown };
+    const json2 = (await retry.json().catch(() => null)) as T & {
+      error?: string;
+      detail?: unknown;
+    };
     if (retry.ok) return json2;
     throw new Error(`${json2?.error ?? retry.statusText}`);
   }
   if (!res.ok) {
-    const detail = typeof json?.detail === "string" ? ` — ${json.detail}` : "";
+    const detail = typeof json?.detail === 'string' ? ` — ${json.detail}` : '';
     throw new Error(`${json?.error ?? res.statusText}${detail}`);
   }
   return json;
@@ -129,14 +134,27 @@ function summarizeSync(res: SyncResponseJson): string {
   if (r?.itemsUpdated) parts.push(`${r.itemsUpdated} updated`);
   if (res.wellness?.sleepUpserted) parts.push(`${res.wellness.sleepUpserted} sleep records`);
   if (res.wellness?.daysUpserted) parts.push(`${res.wellness.daysUpserted} daily records`);
-  return parts.length ? `synced — ${parts.join(" · ")}` : "synced — nothing new";
+  return parts.length ? `synced — ${parts.join(' · ')}` : 'synced — nothing new';
 }
 
 // ─── Small SVG chart (no chart deps — keeps bundle light and honest) ─────────
 
 type Point = { x: number; y: number };
 
-const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 function fmtDay(ms: number): string {
   const d = new Date(ms);
@@ -149,7 +167,7 @@ function fmtElapsed(ms: number): string {
   const hh = Math.floor(s / 3600);
   const mm = Math.floor((s % 3600) / 60);
   const ss = s % 60;
-  const pad = (v: number): string => String(v).padStart(2, "0");
+  const pad = (v: number): string => String(v).padStart(2, '0');
   return hh ? `${hh}:${pad(mm)}:${pad(ss)}` : `${mm}:${pad(ss)}`;
 }
 
@@ -157,7 +175,8 @@ function fmtTick(ms: number, spanDays: number, x0: number): string {
   const d = new Date(ms);
   if (spanDays < 1.5) return fmtElapsed(ms - x0); // activity-length spans: elapsed since start
   if (spanDays >= 545) return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-  if (spanDays >= 60) return `${MONTHS_SHORT[d.getUTCMonth()]} '${String(d.getUTCFullYear() % 100)}`;
+  if (spanDays >= 60)
+    return `${MONTHS_SHORT[d.getUTCMonth()]} '${String(d.getUTCFullYear() % 100)}`;
   return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 
@@ -181,7 +200,16 @@ function niceTicks(min: number, max: number, count: number): number[] {
 
 /** display colors for HR intensity zones (1 grey, 2 blue, 3 green, 4 yellow,
  * 5+ red) */
-const ZONE_COLORS = ["#9aa4b2", "#3e8ef7", "#30a46c", "#d29922", "#e5484d", "#e5484d", "#e5484d", "#e5484d"];
+const ZONE_COLORS = [
+  '#9aa4b2',
+  '#3e8ef7',
+  '#30a46c',
+  '#d29922',
+  '#e5484d',
+  '#e5484d',
+  '#e5484d',
+  '#e5484d',
+];
 
 function LineChart({
   points,
@@ -190,7 +218,7 @@ function LineChart({
   label,
   unit,
   zoneThresholds,
-  xMode = "time",
+  xMode = 'time',
 }: {
   points: Point[];
   color: string;
@@ -201,7 +229,7 @@ function LineChart({
    * the line is drawn segment-by-segment in the zone colors */
   zoneThresholds?: number[] | null;
   /** which X axis: elapsed time ("time", default) or distance in meters */
-  xMode?: "time" | "distance";
+  xMode?: 'time' | 'distance';
 }) {
   // hover index — declared before the early return so hook counts stay stable
   const [hover, setHover] = useState<number | null>(null);
@@ -218,8 +246,10 @@ function LineChart({
 
   const xs = points.map((p) => p.x);
   const ys = points.map((p) => p.y);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs);
-  const y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const x0 = Math.min(...xs),
+    x1 = Math.max(...xs);
+  const y0 = Math.min(...ys),
+    y1 = Math.max(...ys);
   const spanX = Math.max(1e-9, x1 - x0);
   const spanY = Math.max(1e-9, y1 - y0);
   const spanDays = spanX / 86_400_000;
@@ -227,17 +257,22 @@ function LineChart({
     padL + ((p.x - x0) / spanX) * plotW,
     padT + (1 - (p.y - y0) / spanY) * plotH,
   ];
-  const path = points.map((p, i) => {
-    const [x, y] = toXY(p);
-    return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+  const path = points
+    .map((p, i) => {
+      const [x, y] = toXY(p);
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
 
   const yTicks = niceTicks(y0, y1, 4);
   // distance mode ticks live in km space (nice numbers), plotted back in meters
-  const isDist = xMode === "distance";
+  const isDist = xMode === 'distance';
   const xTickCount = Math.max(2, Math.round(plotW / 170));
   const xTickMarks = isDist
-    ? niceTicks(x0 / 1000, x1 / 1000, Math.max(3, Math.round(plotW / 160))).map((km) => ({ x: km * 1000, label: fmtVal(km) }))
+    ? niceTicks(x0 / 1000, x1 / 1000, Math.max(3, Math.round(plotW / 160))).map((km) => ({
+        x: km * 1000,
+        label: fmtVal(km),
+      }))
     : Array.from({ length: xTickCount }, (_, i) => {
         const t = x0 + (spanX * i) / (xTickCount - 1);
         return { x: t, label: fmtTick(t, spanDays, x0) };
@@ -276,7 +311,8 @@ function LineChart({
         return k;
       }
     : null;
-  const zoneColor = (z: number): string => ZONE_COLORS[Math.min(z, ZONE_COLORS.length - 1)] ?? color;
+  const zoneColor = (z: number): string =>
+    ZONE_COLORS[Math.min(z, ZONE_COLORS.length - 1)] ?? color;
 
   // zoned line: each sample-span drawn in the zone color of its midpoint,
   // batched into one path per zone
@@ -295,54 +331,101 @@ function LineChart({
           byZone.set(z, arr);
         }
         return [...byZone.entries()]
-          .map(([z, parts]) => ({ z, d: parts.join(" "), fill: zoneColor(z) }))
+          .map(([z, parts]) => ({ z, d: parts.join(' '), fill: zoneColor(z) }))
           .sort((p, q) => p.z - q.z);
       })()
     : null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label={label} onMouseMove={svgMove} onMouseLeave={() => setHover(null)}>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="chart"
+      role="img"
+      aria-label={label}
+      onMouseMove={svgMove}
+      onMouseLeave={() => setHover(null)}
+    >
       {/* horizontal grid + Y tick labels */}
       {yTicks.map((t) => {
         const y = padT + (1 - (t - y0) / spanY) * plotH;
         return (
           <g key={`y${t}`}>
             <line x1={padL} x2={W - padR} y1={y} y2={y} className="chart-grid" />
-            <text x={padL - 6} y={y + 3.5} textAnchor="end" className="chart-axis">{fmtVal(t)}</text>
+            <text x={padL - 6} y={y + 3.5} textAnchor="end" className="chart-axis">
+              {fmtVal(t)}
+            </text>
           </g>
         );
       })}
       {/* X tick labels */}
       {xTickMarks.map((t) => (
-        <text key={`x${t.x}`} x={padL + ((t.x - x0) / spanX) * plotW} y={H - padB + 16} textAnchor="middle" className="chart-axis">
+        <text
+          key={`x${t.x}`}
+          x={padL + ((t.x - x0) / spanX) * plotW}
+          y={H - padB + 16}
+          textAnchor="middle"
+          className="chart-axis"
+        >
           {t.label}
         </text>
       ))}
       {/* axis titles */}
       {label && (
-        <text transform={`rotate(-90 13 ${padT + plotH / 2})`} x={13} y={padT + plotH / 2} textAnchor="middle" className="chart-axis-title">
+        <text
+          transform={`rotate(-90 13 ${padT + plotH / 2})`}
+          x={13}
+          y={padT + plotH / 2}
+          textAnchor="middle"
+          className="chart-axis-title"
+        >
           {label}
         </text>
       )}
       <text x={W - padR} y={H - 6} textAnchor="end" className="chart-axis-title">
-        {isDist ? "distance (km)" : spanDays < 1.5 ? "elapsed" : "date"}
+        {isDist ? 'distance (km)' : spanDays < 1.5 ? 'elapsed' : 'date'}
       </text>
-      {zonePaths
-        ? zonePaths.map((zp) => <path key={zp.z} d={zp.d} fill="none" stroke={zp.fill} strokeWidth={1.75} />)
-        : <path d={path} fill="none" stroke={color} strokeWidth={1.75} />}
-      {points.length <= 200 && points.map((p, i) => {
-        const [x, y] = toXY(p);
-        return <circle key={i} cx={x} cy={y} r={PointsRadius(points.length)} fill={zoneOf ? zoneColor(zoneOf(p.y)) : color} />;
-      })}
+      {zonePaths ? (
+        zonePaths.map((zp) => (
+          <path key={zp.z} d={zp.d} fill="none" stroke={zp.fill} strokeWidth={1.75} />
+        ))
+      ) : (
+        <path d={path} fill="none" stroke={color} strokeWidth={1.75} />
+      )}
+      {points.length <= 200 &&
+        points.map((p, i) => {
+          const [x, y] = toXY(p);
+          return (
+            <circle
+              key={i}
+              cx={x}
+              cy={y}
+              r={PointsRadius(points.length)}
+              fill={zoneOf ? zoneColor(zoneOf(p.y)) : color}
+            />
+          );
+        })}
       {/* hover: crosshair, highlighted point, tooltip with date + value */}
       {hp && (
         <g>
           <line x1={hx} x2={hx} y1={padT} y2={H - padB} className="chart-cross" />
-          <circle cx={hx} cy={hy} r={PointsRadius(points.length) + 2.5} fill={zoneOf ? zoneColor(zoneOf(hp.y)) : color} stroke="#14171f" strokeWidth={1.5} />
+          <circle
+            cx={hx}
+            cy={hy}
+            r={PointsRadius(points.length) + 2.5}
+            fill={zoneOf ? zoneColor(zoneOf(hp.y)) : color}
+            stroke="#14171f"
+            strokeWidth={1.5}
+          />
           <g transform={`translate(${tipX},${tipY})`}>
             <rect width={tipW} height={tipH} rx={6} className="chart-tip" />
-            <text x={8} y={14} className="chart-tip-date">{isDist ? fmtKm(hp.x) : spanDays < 1.5 ? fmtElapsed(hp.x - x0) : fmtDay(hp.x)}</text>
-            <text x={8} y={28} className="chart-tip-val">{fmtVal(hp.y)}{unit}{zoneOf ? ` · Z${zoneOf(hp.y) + 1}` : ""}</text>
+            <text x={8} y={14} className="chart-tip-date">
+              {isDist ? fmtKm(hp.x) : spanDays < 1.5 ? fmtElapsed(hp.x - x0) : fmtDay(hp.x)}
+            </text>
+            <text x={8} y={28} className="chart-tip-val">
+              {fmtVal(hp.y)}
+              {unit}
+              {zoneOf ? ` · Z${zoneOf(hp.y) + 1}` : ''}
+            </text>
           </g>
         </g>
       )}
@@ -455,11 +538,19 @@ function buildKmSplits(s: KmSplitsSeries): KmSplit[] | null {
 
   const rows: KmSplit[] = [];
   const fullKms = Math.floor(total / 1000);
-  const push = (k: number, label: string, dStart: number, dEnd: number, i0: number, i1: number, headTimeS: number): void => {
+  const push = (
+    k: number,
+    label: string,
+    dStart: number,
+    dEnd: number,
+    i0: number,
+    i1: number,
+    headTimeS: number,
+  ): void => {
     const distanceM = dEnd - dStart;
     const paceSec = distanceM > 0 ? headTimeS / (distanceM / 1000) : null;
-    const bestSpeed = windowStat(s.speedMs, i0, i1, 0.01, "max");
-    const voM = windowStat(s.verticalOscillationM, i0, i1, 0.001, "avg");
+    const bestSpeed = windowStat(s.speedMs, i0, i1, 0.01, 'max');
+    const voM = windowStat(s.verticalOscillationM, i0, i1, 0.001, 'avg');
     rows.push({
       km: k,
       label,
@@ -467,15 +558,15 @@ function buildKmSplits(s: KmSplitsSeries): KmSplit[] | null {
       timeS: headTimeS,
       paceSec,
       bestPaceSec: bestSpeed ? 1000 / bestSpeed : null,
-      avgHr: windowStat(s.hrBpm, i0, i1, 30, "avg"),
-      maxHr: windowStat(s.hrBpm, i0, i1, 30, "max"),
-      avgCadence: windowStat(s.cadenceRpm, i0, i1, 1, "avg"),
-      avgSpeedMs: windowStat(s.speedMs, i0, i1, 0, "avg"),
-      avgPowerW: windowStat(s.powerW, i0, i1, 1, "avg"),
-      avgStepM: windowStat(s.stepLengthM, i0, i1, 0.01, "avg"),
+      avgHr: windowStat(s.hrBpm, i0, i1, 30, 'avg'),
+      maxHr: windowStat(s.hrBpm, i0, i1, 30, 'max'),
+      avgCadence: windowStat(s.cadenceRpm, i0, i1, 1, 'avg'),
+      avgSpeedMs: windowStat(s.speedMs, i0, i1, 0, 'avg'),
+      avgPowerW: windowStat(s.powerW, i0, i1, 1, 'avg'),
+      avgStepM: windowStat(s.stepLengthM, i0, i1, 0.01, 'avg'),
       avgVoCm: voM == null ? null : voM * 100,
-      avgVertRatioPct: windowStat(s.verticalRatioPct, i0, i1, 0.1, "avg"),
-      avgGctPct: windowStat(s.stanceTimePct, i0, i1, 1, "avg"),
+      avgVertRatioPct: windowStat(s.verticalRatioPct, i0, i1, 0.1, 'avg'),
+      avgGctPct: windowStat(s.stanceTimePct, i0, i1, 1, 'avg'),
       elevM: s.altitudeM ? windowElevGain(s.altitudeM, i0, i1) : null,
     });
   };
@@ -492,7 +583,15 @@ function buildKmSplits(s: KmSplitsSeries): KmSplit[] | null {
     const dStart = base + 1000 * fullKms;
     const i0 = kmBisect(dist, dStart);
     const dEnd = dist[n - 1] ?? dStart;
-    push(-1, `last (${((dEnd - dStart) / 1000).toFixed(2)} km)`, dStart, dEnd, i0, n, Math.max(0, ((ts[n - 1] ?? 0) - timeAt(dStart)) / 1000));
+    push(
+      -1,
+      `last (${((dEnd - dStart) / 1000).toFixed(2)} km)`,
+      dStart,
+      dEnd,
+      i0,
+      n,
+      Math.max(0, ((ts[n - 1] ?? 0) - timeAt(dStart)) / 1000),
+    );
   }
   return rows;
 }
@@ -504,7 +603,7 @@ function windowStat(
   i0: number,
   i1: number,
   min: number,
-  mode: "avg" | "max",
+  mode: 'avg' | 'max',
 ): number | null {
   if (!arr?.length) return null;
   let sum = 0;
@@ -518,7 +617,7 @@ function windowStat(
     if (best === null || v > best) best = v;
   }
   if (!count || best === null) return null;
-  return mode === "avg" ? sum / count : best;
+  return mode === 'avg' ? sum / count : best;
 }
 
 /** meters climbed between samples j−1→j for j in [i0, i1) */
@@ -536,7 +635,22 @@ function windowElevGain(alt: number[], i0: number, i1: number): number {
 
 // ─── Shared bits — pure display helpers live in lib/format.ts ────────────────
 
-import { fmtKm, fmtMin, fmtSpeed, fmtPace, fmtSplitTime, fmtDate, TYPE_EMOJI, FEED_TYPES, FEED_PROVIDERS, keyOf, pick, isoDate, parseRoute, type Route } from "./lib/format";
+import {
+  fmtKm,
+  fmtMin,
+  fmtSpeed,
+  fmtPace,
+  fmtSplitTime,
+  fmtDate,
+  TYPE_EMOJI,
+  FEED_TYPES,
+  FEED_PROVIDERS,
+  keyOf,
+  pick,
+  isoDate,
+  parseRoute,
+  type Route,
+} from './lib/format';
 
 // ─── Activity page (/activity/<id> — every scrap of info for one activity) ───
 
@@ -565,17 +679,17 @@ interface ActivitySeriesRow {
 
 /** labeled stream charts for the activity page, in display order */
 const SERIES_CHANNELS: Array<[string, string, string, string]> = [
-  ["speedMs", "Speed", "#30a46c", " m/s"],
-  ["hrBpm", "Heart rate", "#e5484d", " bpm"],
-  ["powerW", "Power", "#6e56cf", " W"],
-  ["cadenceRpm", "Cadence", "#0091ff", " rpm"],
-  ["altitudeM", "Altitude", "#b8860b", " m"],
-  ["respirationRate", "Respiration", "#d6409f", " br/min"],
-  ["staminaPct", "Stamina", "#d29922", " %"],
-  ["stepLengthM", "Step length", "#80a9a0", " m"],
-  ["verticalOscillationM", "Vertical oscillation", "#9c6ade", " m"],
-  ["stanceTimePct", "Ground contact %", "#bf7f26", " %"],
-  ["verticalRatioPct", "Vertical ratio", "#bf7f26", " %"],
+  ['speedMs', 'Speed', '#30a46c', ' m/s'],
+  ['hrBpm', 'Heart rate', '#e5484d', ' bpm'],
+  ['powerW', 'Power', '#6e56cf', ' W'],
+  ['cadenceRpm', 'Cadence', '#0091ff', ' rpm'],
+  ['altitudeM', 'Altitude', '#b8860b', ' m'],
+  ['respirationRate', 'Respiration', '#d6409f', ' br/min'],
+  ['staminaPct', 'Stamina', '#d29922', ' %'],
+  ['stepLengthM', 'Step length', '#80a9a0', ' m'],
+  ['verticalOscillationM', 'Vertical oscillation', '#9c6ade', ' m'],
+  ['stanceTimePct', 'Ground contact %', '#bf7f26', ' %'],
+  ['verticalRatioPct', 'Vertical ratio', '#bf7f26', ' %'],
 ];
 
 function ActivityDetail({
@@ -595,15 +709,17 @@ function ActivityDetail({
   const [rows, setRows] = useState<ActivitySeriesRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** shared X axis for the stream charts: elapsed time (default) or distance */
-  const [xAxis, setXAxis] = useState<"time" | "distance">(() => new URLSearchParams(window.location.search).get("x") === "distance" ? "distance" : "time");
+  const [xAxis, setXAxis] = useState<'time' | 'distance'>(() =>
+    new URLSearchParams(window.location.search).get('x') === 'distance' ? 'distance' : 'time',
+  );
 
   // keep the choice in the URL so axis-shared activity links match the view
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-    if (xAxis === "distance") q.set("x", "distance");
-    else q.delete("x");
+    if (xAxis === 'distance') q.set('x', 'distance');
+    else q.delete('x');
     const s = q.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${s ? `?${s}` : ""}`);
+    window.history.replaceState(null, '', `${window.location.pathname}${s ? `?${s}` : ''}`);
   }, [xAxis]);
 
   useEffect(() => {
@@ -611,22 +727,25 @@ function ActivityDetail({
     setRows(null);
     setError(null);
     setAct(preview);
-    api<{ items: Array<Activity & { series: ActivitySeriesRow[] }> }>(
-      `/activities/${id}`,
-      { token },
-    )
+    api<{ items: Array<Activity & { series: ActivitySeriesRow[] }> }>(`/activities/${id}`, {
+      token,
+    })
       .then((r) => {
         if (!alive) return;
         const item = r.items[0];
         if (!item) {
-          setError("activity not found");
+          setError('activity not found');
           return;
         }
         setAct(item);
         setRows(item.series);
       })
-      .catch((e) => { if (alive) setError(String(e)); });
-    return () => { alive = false; };
+      .catch((e) => {
+        if (alive) setError(String(e));
+      });
+    return () => {
+      alive = false;
+    };
   }, [id, token, preview]);
 
   // streams come back as labeled numeric arrays aligned with timeMs — plot
@@ -638,8 +757,15 @@ function ActivityDetail({
     const ts = s?.timeMs ?? [];
     if (!s || ts.length < 2) return [];
     const dist = s.distanceM ?? [];
-    const byDistance = xAxis === "distance" && dist.length === ts.length;
-    const out: Array<{ key: string; title: string; color: string; points: Point[]; unit: string; zones: number[] | null }> = [];
+    const byDistance = xAxis === 'distance' && dist.length === ts.length;
+    const out: Array<{
+      key: string;
+      title: string;
+      color: string;
+      points: Point[];
+      unit: string;
+      zones: number[] | null;
+    }> = [];
     for (const [key, title, color, unit] of SERIES_CHANNELS) {
       const vals = (s as Record<string, number[] | undefined>)[key];
       if (!vals?.length) continue;
@@ -648,8 +774,11 @@ function ActivityDetail({
         title,
         color,
         unit,
-        zones: key === "hrBpm" ? hrZoneThresholds(vals, act?.hrZonesMin ?? null) : null,
-        points: vals.map((v, i) => ({ x: byDistance && dist[i] !== undefined ? dist[i] : ts[i] ?? i, y: v })),
+        zones: key === 'hrBpm' ? hrZoneThresholds(vals, act?.hrZonesMin ?? null) : null,
+        points: vals.map((v, i) => ({
+          x: byDistance && dist[i] !== undefined ? dist[i] : (ts[i] ?? i),
+          y: v,
+        })),
       });
     }
     return out;
@@ -670,21 +799,73 @@ function ActivityDetail({
     const rs = splits ?? [];
     const has = (pick: (r: KmSplit) => number | null): boolean => rs.some((r) => pick(r) != null);
     const cols: Array<{ key: string; head: string; cell: (r: KmSplit) => string | null }> = [
-      { key: "km", head: "km", cell: (r) => r.label },
-      { key: "time", head: "time", cell: (r) => fmtSplitTime(r.timeS) },
+      { key: 'km', head: 'km', cell: (r) => r.label },
+      { key: 'time', head: 'time', cell: (r) => fmtSplitTime(r.timeS) },
     ];
-    if (has((r) => r.bestPaceSec)) cols.push({ key: "bp", head: "best pace", cell: (r) => fmtPace(r.bestPaceSec) });
-    if (has((r) => r.paceSec)) cols.push({ key: "pace", head: "pace", cell: (r) => fmtPace(r.paceSec) });
-    if (has((r) => r.avgHr)) cols.push({ key: "hr", head: "avg HR", cell: (r) => (r.avgHr != null ? `${Math.round(r.avgHr)} bpm` : null) });
-    if (has((r) => r.maxHr)) cols.push({ key: "hrm", head: "max HR", cell: (r) => (r.maxHr != null ? `${Math.round(r.maxHr)} bpm` : null) });
-    if (has((r) => r.avgCadence)) cols.push({ key: "cad", head: "cadence", cell: (r) => (r.avgCadence != null ? `${Math.round(r.avgCadence)}` : null) });
-    if (has((r) => r.avgSpeedMs)) cols.push({ key: "spd", head: "speed", cell: (r) => (r.avgSpeedMs != null ? `${(r.avgSpeedMs * 3.6).toFixed(1)} km/h` : null) });
-    if (has((r) => r.avgPowerW)) cols.push({ key: "pw", head: "power", cell: (r) => (r.avgPowerW != null ? `${Math.round(r.avgPowerW)} W` : null) });
-    if (has((r) => r.avgStepM)) cols.push({ key: "step", head: "step (m)", cell: (r) => (r.avgStepM != null ? r.avgStepM.toFixed(2) : null) });
-    if (has((r) => r.avgVoCm)) cols.push({ key: "vo", head: "vert osc (cm)", cell: (r) => (r.avgVoCm != null ? r.avgVoCm.toFixed(1) : null) });
-    if (has((r) => r.avgVertRatioPct)) cols.push({ key: "vr", head: "vert ratio (%)", cell: (r) => (r.avgVertRatioPct != null ? r.avgVertRatioPct.toFixed(1) : null) });
-    if (has((r) => r.avgGctPct)) cols.push({ key: "gct", head: "GCT (%)", cell: (r) => (r.avgGctPct != null ? r.avgGctPct.toFixed(1) : null) });
-    if (has((r) => r.elevM)) cols.push({ key: "el", head: "elev ▲", cell: (r) => (r.elevM != null ? `${Math.round(r.elevM)} m` : null) });
+    if (has((r) => r.bestPaceSec))
+      cols.push({ key: 'bp', head: 'best pace', cell: (r) => fmtPace(r.bestPaceSec) });
+    if (has((r) => r.paceSec))
+      cols.push({ key: 'pace', head: 'pace', cell: (r) => fmtPace(r.paceSec) });
+    if (has((r) => r.avgHr))
+      cols.push({
+        key: 'hr',
+        head: 'avg HR',
+        cell: (r) => (r.avgHr != null ? `${Math.round(r.avgHr)} bpm` : null),
+      });
+    if (has((r) => r.maxHr))
+      cols.push({
+        key: 'hrm',
+        head: 'max HR',
+        cell: (r) => (r.maxHr != null ? `${Math.round(r.maxHr)} bpm` : null),
+      });
+    if (has((r) => r.avgCadence))
+      cols.push({
+        key: 'cad',
+        head: 'cadence',
+        cell: (r) => (r.avgCadence != null ? `${Math.round(r.avgCadence)}` : null),
+      });
+    if (has((r) => r.avgSpeedMs))
+      cols.push({
+        key: 'spd',
+        head: 'speed',
+        cell: (r) => (r.avgSpeedMs != null ? `${(r.avgSpeedMs * 3.6).toFixed(1)} km/h` : null),
+      });
+    if (has((r) => r.avgPowerW))
+      cols.push({
+        key: 'pw',
+        head: 'power',
+        cell: (r) => (r.avgPowerW != null ? `${Math.round(r.avgPowerW)} W` : null),
+      });
+    if (has((r) => r.avgStepM))
+      cols.push({
+        key: 'step',
+        head: 'step (m)',
+        cell: (r) => (r.avgStepM != null ? r.avgStepM.toFixed(2) : null),
+      });
+    if (has((r) => r.avgVoCm))
+      cols.push({
+        key: 'vo',
+        head: 'vert osc (cm)',
+        cell: (r) => (r.avgVoCm != null ? r.avgVoCm.toFixed(1) : null),
+      });
+    if (has((r) => r.avgVertRatioPct))
+      cols.push({
+        key: 'vr',
+        head: 'vert ratio (%)',
+        cell: (r) => (r.avgVertRatioPct != null ? r.avgVertRatioPct.toFixed(1) : null),
+      });
+    if (has((r) => r.avgGctPct))
+      cols.push({
+        key: 'gct',
+        head: 'GCT (%)',
+        cell: (r) => (r.avgGctPct != null ? r.avgGctPct.toFixed(1) : null),
+      });
+    if (has((r) => r.elevM))
+      cols.push({
+        key: 'el',
+        head: 'elev ▲',
+        cell: (r) => (r.elevM != null ? `${Math.round(r.elevM)} m` : null),
+      });
     return cols;
   }, [splits]);
 
@@ -693,15 +874,24 @@ function ActivityDetail({
 
   return (
     <div>
-      <button className="btn" onClick={onBack}>← back to dashboard</button>
-      <h2>{TYPE_EMOJI[act.type] ?? "⌚"} {act.headline}</h2>
+      <button className="btn" onClick={onBack}>
+        ← back to dashboard
+      </button>
+      <h2>
+        {TYPE_EMOJI[act.type] ?? '⌚'} {act.headline}
+      </h2>
       {act.workoutName && <p className="conn-sub">workout: {act.workoutName}</p>}
       <div className="metric-tabs">
-        <button className={`btn ghost ${xAxis === "time" ? "active" : ""}`} onClick={() => setXAxis("time")}>time</button>
         <button
-          className={`btn ghost ${xAxis === "distance" ? "active" : ""}`}
+          className={`btn ghost ${xAxis === 'time' ? 'active' : ''}`}
+          onClick={() => setXAxis('time')}
+        >
+          time
+        </button>
+        <button
+          className={`btn ghost ${xAxis === 'distance' ? 'active' : ''}`}
           disabled={!hasDistance}
-          onClick={() => setXAxis("distance")}
+          onClick={() => setXAxis('distance')}
         >
           distance
         </button>
@@ -711,14 +901,56 @@ function ActivityDetail({
         <Card label="Distance" value={fmtKm(act.distanceM)} />
         <Card label="Duration" value={fmtMin(act.durationS)} />
         <Card label="Moving" value={fmtMin(act.movingTimeS)} />
-        <Card label="Avg / max HR" value={has(act.avgHr) || has(act.maxHr) ? `${act.avgHr ?? "—"} / ${act.maxHr ?? "—"} bpm` : "—"} />
-        <Card label="Avg / max power" value={has(act.avgPowerW) || has(act.maxPowerW) ? `${act.avgPowerW ?? "—"} / ${act.maxPowerW ?? "—"} W` : "—"} />
-        <Card label="Avg / max speed" value={has(act.avgSpeedMs) || has(act.maxSpeedMs) ? `${fmtSpeed(act.avgSpeedMs)} / ${fmtSpeed(act.maxSpeedMs)}` : "—"} />
-        <Card label="Avg / max cadence" value={has(act.avgCadence) || has(act.maxCadence) ? `${act.avgCadence ?? "—"} / ${act.maxCadence ?? "—"} rpm` : "—"} />
-        <Card label="Ascent / descent" value={has(act.totalAscentM) || has(act.totalDescentM) ? `${act.totalAscentM ?? "—"} / ${act.totalDescentM ?? "—"} m` : "—"} />
-        <Card label="Elev high / low" value={has(act.elevationHighM) || has(act.elevationLowM) ? `${act.elevationLowM ?? "—"} / ${act.elevationHighM ?? "—"} m` : "—"} />
-        <Card label="Calories" value={asStr(act.caloriesKcal, " kcal")} />
-        {act.trainingLoad != null ? <Card label="Training load" value={String(act.trainingLoad)} /> : null}
+        <Card
+          label="Avg / max HR"
+          value={
+            has(act.avgHr) || has(act.maxHr) ? `${act.avgHr ?? '—'} / ${act.maxHr ?? '—'} bpm` : '—'
+          }
+        />
+        <Card
+          label="Avg / max power"
+          value={
+            has(act.avgPowerW) || has(act.maxPowerW)
+              ? `${act.avgPowerW ?? '—'} / ${act.maxPowerW ?? '—'} W`
+              : '—'
+          }
+        />
+        <Card
+          label="Avg / max speed"
+          value={
+            has(act.avgSpeedMs) || has(act.maxSpeedMs)
+              ? `${fmtSpeed(act.avgSpeedMs)} / ${fmtSpeed(act.maxSpeedMs)}`
+              : '—'
+          }
+        />
+        <Card
+          label="Avg / max cadence"
+          value={
+            has(act.avgCadence) || has(act.maxCadence)
+              ? `${act.avgCadence ?? '—'} / ${act.maxCadence ?? '—'} rpm`
+              : '—'
+          }
+        />
+        <Card
+          label="Ascent / descent"
+          value={
+            has(act.totalAscentM) || has(act.totalDescentM)
+              ? `${act.totalAscentM ?? '—'} / ${act.totalDescentM ?? '—'} m`
+              : '—'
+          }
+        />
+        <Card
+          label="Elev high / low"
+          value={
+            has(act.elevationHighM) || has(act.elevationLowM)
+              ? `${act.elevationLowM ?? '—'} / ${act.elevationHighM ?? '—'} m`
+              : '—'
+          }
+        />
+        <Card label="Calories" value={asStr(act.caloriesKcal, ' kcal')} />
+        {act.trainingLoad != null ? (
+          <Card label="Training load" value={String(act.trainingLoad)} />
+        ) : null}
         {act.indoor ? <Card label="Mode" value="indoor" /> : null}
       </div>
       {error && <p className="error">{error}</p>}
@@ -729,7 +961,11 @@ function ActivityDetail({
           <div className="table-scroll">
             <table className="list splits">
               <thead>
-                <tr>{splitCols.map((c) => <th key={c.key}>{c.head}</th>)}</tr>
+                <tr>
+                  {splitCols.map((c) => (
+                    <th key={c.key}>{c.head}</th>
+                  ))}
+                </tr>
               </thead>
               <tbody>
                 {splits.map((s) => (
@@ -749,12 +985,22 @@ function ActivityDetail({
       {charts.map((c) => (
         <section key={c.key}>
           <h3>{c.title}</h3>
-          <LineChart points={c.points} color={c.color} label={c.title} unit={c.unit} zoneThresholds={c.zones} xMode={xAxis === "distance" && hasDistance ? "distance" : "time"} />
-          {c.key === "hrBpm" && c.zones ? (
+          <LineChart
+            points={c.points}
+            color={c.color}
+            label={c.title}
+            unit={c.unit}
+            zoneThresholds={c.zones}
+            xMode={xAxis === 'distance' && hasDistance ? 'distance' : 'time'}
+          />
+          {c.key === 'hrBpm' && c.zones ? (
             <div className="zone-legend">
               {Array.from({ length: c.zones.length + 1 }, (_, i) => (
                 <span key={i} className="zone-item">
-                  <span className="zone-sw" style={{ background: ZONE_COLORS[Math.min(i, ZONE_COLORS.length - 1)] }} />
+                  <span
+                    className="zone-sw"
+                    style={{ background: ZONE_COLORS[Math.min(i, ZONE_COLORS.length - 1)] }}
+                  />
                   Z{i + 1}
                 </span>
               ))}
@@ -771,18 +1017,29 @@ function ActivityDetail({
           <h3>Heart-rate zones</h3>
           <table className="list">
             <thead>
-              <tr><th>zone</th><th>minutes</th></tr>
+              <tr>
+                <th>zone</th>
+                <th>minutes</th>
+              </tr>
             </thead>
             <tbody>
               {act.hrZonesMin.map((min, i) => (
-                <tr key={i}><td>{i + 1}</td><td>{min} min</td></tr>
+                <tr key={i}>
+                  <td>{i + 1}</td>
+                  <td>{min} min</td>
+                </tr>
               ))}
             </tbody>
           </table>
         </section>
       ) : null}
 
-      {act.notes ? <section><h3>Notes</h3><p>{act.notes}</p></section> : null}
+      {act.notes ? (
+        <section>
+          <h3>Notes</h3>
+          <p>{act.notes}</p>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -846,7 +1103,7 @@ function Card({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="card">
       <div className="card-label">{label}</div>
-      <div className="card-value">{value ?? "—"}</div>
+      <div className="card-value">{value ?? '—'}</div>
     </div>
   );
 }
@@ -854,12 +1111,12 @@ function Card({ label, value }: { label: string; value: React.ReactNode }) {
 // ─── Connections page (/connections — manage + create provider links) ────────
 
 const PROVIDER_LABEL: Record<string, string> = {
-  OMRON: "Omron",
-  IGPSPORT: "iGPSPORT",
-  GARMIN: "Garmin",
-  ZWIFT: "Zwift",
+  OMRON: 'Omron',
+  IGPSPORT: 'iGPSPORT',
+  GARMIN: 'Garmin',
+  ZWIFT: 'Zwift',
 };
-type ProviderKey = "omron" | "igpsport" | "garmin" | "zwift";
+type ProviderKey = 'omron' | 'igpsport' | 'garmin' | 'zwift';
 
 type ConnectResponseJson = {
   mfaRequired?: boolean;
@@ -877,31 +1134,31 @@ function ConnectionsSection(props: {
 }) {
   const { conn, token, syncingId, syncConnection, reload, onBack } = props;
   // add-connection form
-  const [provider, setProvider] = useState<ProviderKey>("omron");
-  const [identifier, setIdentifier] = useState("");
-  const [password, setPassword] = useState("");
-  const [country, setCountry] = useState("AR");
+  const [provider, setProvider] = useState<ProviderKey>('omron');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [country, setCountry] = useState('AR');
   const [connectBusy, setConnectBusy] = useState(false);
   const [connectMsg, setConnectMsg] = useState<string | null>(null);
   // garmin second factor: the connect call answers 202 when the code step is due
   const [mfa, setMfa] = useState<{ id: string; method: string } | null>(null);
-  const [mfaCode, setMfaCode] = useState("");
+  const [mfaCode, setMfaCode] = useState('');
   // delete confirmation + per-card sync result lines
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [syncMsg, setSyncMsg] = useState<Record<string, string>>({});
 
   async function runSync(id: string): Promise<void> {
     const out = await syncConnection(id);
-    setSyncMsg((m) => ({ ...m, [id]: `${out.ok ? "" : "sync failed — "}${out.text}` }));
+    setSyncMsg((m) => ({ ...m, [id]: `${out.ok ? '' : 'sync failed — '}${out.text}` }));
   }
 
   async function del(id: string): Promise<void> {
     try {
-      await api(`/connections/${id}`, { method: "DELETE", token });
+      await api(`/connections/${id}`, { method: 'DELETE', token });
       setConfirmDel(null);
       reload();
     } catch (err) {
-      setConnectMsg(String(err).replace(/^Error: /, ""));
+      setConnectMsg(String(err).replace(/^Error: /, ''));
     }
   }
 
@@ -910,27 +1167,31 @@ function ConnectionsSection(props: {
     setConnectMsg(null);
     try {
       const body =
-        provider === "omron"
-          ? { provider: "OMRON", identifier, password, country }
-          : provider === "igpsport"
-            ? { provider: "IGPSPORT", username: identifier, password, region: "intl" }
-            : provider === "zwift"
-              ? { provider: "ZWIFT", username: identifier, password }
-              : { provider: "GARMIN", email: identifier, password };
-      const res = await api<ConnectResponseJson>("/connections", { method: "POST", body, token });
+        provider === 'omron'
+          ? { provider: 'OMRON', identifier, password, country }
+          : provider === 'igpsport'
+            ? { provider: 'IGPSPORT', username: identifier, password, region: 'intl' }
+            : provider === 'zwift'
+              ? { provider: 'ZWIFT', username: identifier, password }
+              : { provider: 'GARMIN', email: identifier, password };
+      const res = await api<ConnectResponseJson>('/connections', { method: 'POST', body, token });
       if (res.mfaRequired) {
-        setMfa({ id: res.connection?.id ?? "", method: res.method ?? "code" });
-        setConnectMsg(`Garmin wants a second-factor code (via ${res.method ?? "your trusted device"}) — enter it below`);
+        setMfa({ id: res.connection?.id ?? '', method: res.method ?? 'code' });
+        setConnectMsg(
+          `Garmin wants a second-factor code (via ${res.method ?? 'your trusted device'}) — enter it below`,
+        );
         reload(); // the pending connection shows up in the list
         return;
       }
-      setIdentifier("");
-      setPassword("");
+      setIdentifier('');
+      setPassword('');
       setMfa(null);
-      setConnectMsg(`${PROVIDER_LABEL[provider.toUpperCase()] ?? provider} connected — data flows in on the next sync`);
+      setConnectMsg(
+        `${PROVIDER_LABEL[provider.toUpperCase()] ?? provider} connected — data flows in on the next sync`,
+      );
       reload();
     } catch (err) {
-      setConnectMsg(String(err).replace(/^Error: /, ""));
+      setConnectMsg(String(err).replace(/^Error: /, ''));
     } finally {
       setConnectBusy(false);
     }
@@ -941,41 +1202,47 @@ function ConnectionsSection(props: {
     setConnectBusy(true);
     setConnectMsg(null);
     try {
-      await api(`/connections/${mfa.id}/mfa`, { method: "POST", body: { code: mfaCode }, token });
+      await api(`/connections/${mfa.id}/mfa`, { method: 'POST', body: { code: mfaCode }, token });
       setMfa(null);
-      setMfaCode("");
-      setConnectMsg("Garmin connected — data flows in on the next sync");
+      setMfaCode('');
+      setConnectMsg('Garmin connected — data flows in on the next sync');
       reload();
     } catch (err) {
-      setConnectMsg(String(err).replace(/^Error: /, ""));
+      setConnectMsg(String(err).replace(/^Error: /, ''));
     } finally {
       setConnectBusy(false);
     }
   }
 
   const identifierLabel =
-    provider === "omron"
-      ? "Omron email or username"
-      : provider === "igpsport"
-        ? "iGPSPORT username"
-        : provider === "zwift"
-          ? "Zwift account email"
-          : "Garmin email";
+    provider === 'omron'
+      ? 'Omron email or username'
+      : provider === 'igpsport'
+        ? 'iGPSPORT username'
+        : provider === 'zwift'
+          ? 'Zwift account email'
+          : 'Garmin email';
 
   return (
     <section className="connections-page">
-      <button type="button" className="btn ghost small" onClick={onBack}>← dashboard</button>
+      <button type="button" className="btn ghost small" onClick={onBack}>
+        ← dashboard
+      </button>
 
       <h2>Connections</h2>
       <p className="page-hint">
-        Each link is stored server-side — providers are synced by your Stridash instance, never from a browser.
+        Each link is stored server-side — providers are synced by your Stridash instance, never from
+        a browser.
       </p>
 
       <div className="conn-list">
         {conn.map((c) => {
           const busy = syncingId === c.id;
           return (
-            <div key={c.id} className={`conn-card ${c.status.toLowerCase()} ${busy ? "syncing" : ""}`}>
+            <div
+              key={c.id}
+              className={`conn-card ${c.status.toLowerCase()} ${busy ? 'syncing' : ''}`}
+            >
               <div className="conn-head">
                 <span className="conn-provider">{PROVIDER_LABEL[c.provider] ?? c.provider}</span>
                 <span className="conn-status">{c.status.toLowerCase()}</span>
@@ -985,25 +1252,39 @@ function ConnectionsSection(props: {
                   </span>
                 )}
               </div>
-              <div className="conn-sub">{c.providerUserId || "—"}</div>
-              <div className="conn-sub">last sync {c.lastSyncedAt ? fmtDate(c.lastSyncedAt) : "never"}</div>
+              <div className="conn-sub">{c.providerUserId || '—'}</div>
+              <div className="conn-sub">
+                last sync {c.lastSyncedAt ? fmtDate(c.lastSyncedAt) : 'never'}
+              </div>
               {(() => {
                 const msg = syncMsg[c.id];
-                return msg ? <p className={msg.startsWith("sync failed") ? "conn-msg err" : "conn-msg"}>{msg}</p> : null;
+                return msg ? (
+                  <p className={msg.startsWith('sync failed') ? 'conn-msg err' : 'conn-msg'}>
+                    {msg}
+                  </p>
+                ) : null;
               })()}
-              {c.status === "ERROR" && (
-                <p className="conn-msg err">the stored token was rejected by the provider — delete and reconnect below</p>
+              {c.status === 'ERROR' && (
+                <p className="conn-msg err">
+                  the stored token was rejected by the provider — delete and reconnect below
+                </p>
               )}
-              {c.status === "REVOKED" && (
-                <p className="conn-msg err">this link was deleted — re-add the account in the form below (pulled data is kept)</p>
+              {c.status === 'REVOKED' && (
+                <p className="conn-msg err">
+                  this link was deleted — re-add the account in the form below (pulled data is kept)
+                </p>
               )}
               <div className="conn-actions">
                 <button
                   type="button"
                   className="btn ghost small"
                   onClick={() => void runSync(c.id)}
-                  disabled={syncingId != null || c.status === "PENDING" || c.status === "REVOKED"}
-                  title={c.status === "PENDING" ? "awaiting MFA — finish the connect form first" : "sync this provider now"}
+                  disabled={syncingId != null || c.status === 'PENDING' || c.status === 'REVOKED'}
+                  title={
+                    c.status === 'PENDING'
+                      ? 'awaiting MFA — finish the connect form first'
+                      : 'sync this provider now'
+                  }
                 >
                   ↻ sync now
                 </button>
@@ -1019,14 +1300,28 @@ function ConnectionsSection(props: {
               {confirmDel === c.id && (
                 <div className="conn-confirm">
                   <span>delete this connection? data already pulled stays.</span>
-                  <button type="button" className="btn ghost small danger" onClick={() => void del(c.id)}>yes, delete</button>
-                  <button type="button" className="btn ghost small" onClick={() => setConfirmDel(null)}>keep it</button>
+                  <button
+                    type="button"
+                    className="btn ghost small danger"
+                    onClick={() => void del(c.id)}
+                  >
+                    yes, delete
+                  </button>
+                  <button
+                    type="button"
+                    className="btn ghost small"
+                    onClick={() => setConfirmDel(null)}
+                  >
+                    keep it
+                  </button>
                 </div>
               )}
             </div>
           );
         })}
-        {conn.length === 0 && <p className="conn-sub">no providers linked yet — add the first one below.</p>}
+        {conn.length === 0 && (
+          <p className="conn-sub">no providers linked yet — add the first one below.</p>
+        )}
       </div>
 
       <h2>Add a connection</h2>
@@ -1037,7 +1332,14 @@ function ConnectionsSection(props: {
           void connect();
         }}
       >
-        <select value={provider} onChange={(e) => { setProvider(e.target.value as ProviderKey); setMfa(null); setConnectMsg(null); }}>
+        <select
+          value={provider}
+          onChange={(e) => {
+            setProvider(e.target.value as ProviderKey);
+            setMfa(null);
+            setConnectMsg(null);
+          }}
+        >
           <option value="omron">Omron — body scale / blood pressure (KRD-703T and friends)</option>
           <option value="igpsport">iGPSPORT — rides</option>
           <option value="garmin">Garmin — activities, sleep, daily metrics</option>
@@ -1058,7 +1360,7 @@ function ConnectionsSection(props: {
           autoComplete="off"
           required
         />
-        {provider === "omron" && (
+        {provider === 'omron' && (
           <label className="conn-field-hint">
             Omron Connect country code (where the account lives)
             <input
@@ -1072,13 +1374,18 @@ function ConnectionsSection(props: {
           </label>
         )}
         <button className="btn" type="submit" disabled={connectBusy}>
-          {connectBusy ? "connecting…" : "connect"}
+          {connectBusy ? 'connecting…' : 'connect'}
         </button>
         {mfa && (
           <div className="mfa-row">
             <label>
               {mfa.method} code
-              <input value={mfaCode} onChange={(e) => setMfaCode(e.target.value)} inputMode="numeric" placeholder="123456" />
+              <input
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                inputMode="numeric"
+                placeholder="123456"
+              />
             </label>
             <button
               className="btn"
@@ -1092,7 +1399,15 @@ function ConnectionsSection(props: {
             </button>
           </div>
         )}
-        {connectMsg && <p className={/failed|rejected|invalid|error/i.test(connectMsg) ? "conn-msg err" : "conn-msg"}>{connectMsg}</p>}
+        {connectMsg && (
+          <p
+            className={
+              /failed|rejected|invalid|error/i.test(connectMsg) ? 'conn-msg err' : 'conn-msg'
+            }
+          >
+            {connectMsg}
+          </p>
+        )}
       </form>
     </section>
   );
@@ -1101,10 +1416,20 @@ function ConnectionsSection(props: {
 // ─── Calendar date picker (no deps — a small month-grid popover) ─────────────
 
 const DP_MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
-const DP_WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+const DP_WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
 /** Midnight-UTC of the 1st of the month containing `d` (day keys are UTC; the
  * server data + presets use toISOString().slice(0,10) everywhere). */
@@ -1130,7 +1455,9 @@ function DatePicker({
   max?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<Date>(() => dpMonthStart(value ? new Date(`${value}T00:00:00Z`) : new Date()));
+  const [view, setView] = useState<Date>(() =>
+    dpMonthStart(value ? new Date(`${value}T00:00:00Z`) : new Date()),
+  );
   const rootRef = useRef<HTMLDivElement>(null);
 
   // click outside (or Escape) closes the popover
@@ -1139,12 +1466,12 @@ function DatePicker({
     const onDoc = (e: MouseEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
     };
   }, [open]);
 
@@ -1156,43 +1483,66 @@ function DatePicker({
   // 6×7 grid covering the viewed month (Monday-first, matching DP_WEEKDAYS)
   const firstWeekday = (view.getUTCDay() + 6) % 7; // Sun=0 → Mon=0
   const gridStart = new Date(view.getTime() - firstWeekday * 86_400_000);
-  const cells: Date[] = Array.from({ length: 42 }, (_, i) => new Date(gridStart.getTime() + i * 86_400_000));
+  const cells: Date[] = Array.from(
+    { length: 42 },
+    (_, i) => new Date(gridStart.getTime() + i * 86_400_000),
+  );
   const todayIso = dpIso(new Date());
 
   return (
     <div className="dp" ref={rootRef}>
       <button
         type="button"
-        className={`dp-btn ${open ? "open" : ""}`}
+        className={`dp-btn ${open ? 'open' : ''}`}
         onClick={toggle}
         aria-haspopup="true"
         aria-expanded={open}
       >
-        <span className={`dp-value ${value ? "" : "dp-empty"}`}>{value || placeholder}</span>
+        <span className={`dp-value ${value ? '' : 'dp-empty'}`}>{value || placeholder}</span>
         <span className="dp-icon">📅</span>
       </button>
       {open && (
         <div className="dp-pop" role="dialog" aria-label={placeholder}>
           <div className="dp-head">
-            <button type="button" className="dp-nav" onClick={() => setView(dpMonthStart(new Date(view.getTime() - 15 * 86_400_000)))} aria-label="previous month">‹</button>
-            <span className="dp-month">{DP_MONTHS[view.getUTCMonth()]} {view.getUTCFullYear()}</span>
-            <button type="button" className="dp-nav" onClick={() => setView(dpMonthStart(new Date(view.getTime() + 31 * 86_400_000)))} aria-label="next month">›</button>
+            <button
+              type="button"
+              className="dp-nav"
+              onClick={() => setView(dpMonthStart(new Date(view.getTime() - 15 * 86_400_000)))}
+              aria-label="previous month"
+            >
+              ‹
+            </button>
+            <span className="dp-month">
+              {DP_MONTHS[view.getUTCMonth()]} {view.getUTCFullYear()}
+            </span>
+            <button
+              type="button"
+              className="dp-nav"
+              onClick={() => setView(dpMonthStart(new Date(view.getTime() + 31 * 86_400_000)))}
+              aria-label="next month"
+            >
+              ›
+            </button>
           </div>
           <div className="dp-grid">
             {DP_WEEKDAYS.map((w) => (
-              <span key={w} className="dp-wd">{w}</span>
+              <span key={w} className="dp-wd">
+                {w}
+              </span>
             ))}
             {cells.map((d) => {
               const iso = dpIso(d);
               const outOfMonth = d.getUTCMonth() !== view.getUTCMonth();
               const disabled = (min !== undefined && iso < min) || (max !== undefined && iso > max);
               const cls = [
-                "dp-day",
-                outOfMonth ? "dp-out" : "",
-                iso === value ? "sel" : "",
-                iso === todayIso ? "today" : "",
-                disabled ? "disabled" : "",
-              ].filter(Boolean).join(" ");
+                'dp-day',
+                outOfMonth ? 'dp-out' : '',
+                iso === value ? 'sel' : '',
+                iso === todayIso ? 'today' : '',
+                disabled ? 'disabled' : '',
+              ]
+                .filter(Boolean)
+                .join(' ');
               return (
                 <button
                   key={iso}
@@ -1214,10 +1564,10 @@ function DatePicker({
               type="button"
               className="dp-clear"
               onClick={() => {
-                onChange("");
+                onChange('');
                 setOpen(false);
               }}
-              disabled={value === ""}
+              disabled={value === ''}
             >
               clear
             </button>
@@ -1239,49 +1589,73 @@ function DatePicker({
 }
 
 const has = (v: unknown): boolean => v !== null && v !== undefined;
-const asStr = (v: unknown, suffix = ""): string | null =>
-  has(v) ? `${String(v)}${suffix}` : null;
+const asStr = (v: unknown, suffix = ''): string | null => (has(v) ? `${String(v)}${suffix}` : null);
 
 // ⟵ body-composition chart channel descriptors
 const BODY_METRIC: Record<
-  "weightKg" | "bodyFatPct" | "visceralFatLevel" | "skeletalMusclePct",
+  'weightKg' | 'bodyFatPct' | 'visceralFatLevel' | 'skeletalMusclePct',
   { label: string; unit: string }
 > = {
-  weightKg: { label: "Weight", unit: " kg" },
-  bodyFatPct: { label: "Body fat", unit: "%" },
-  visceralFatLevel: { label: "Visceral fat level", unit: "" },
-  skeletalMusclePct: { label: "Skeletal muscle", unit: "%" },
+  weightKg: { label: 'Weight', unit: ' kg' },
+  bodyFatPct: { label: 'Body fat', unit: '%' },
+  visceralFatLevel: { label: 'Visceral fat level', unit: '' },
+  skeletalMusclePct: { label: 'Skeletal muscle', unit: '%' },
 };
 
 // ⟵ sleep + daily-metric chart channel descriptors
 const SLEEP_METRIC: Record<
-  "hours" | "score" | "hrv" | "sleepHr" | "battery",
+  'hours' | 'score' | 'hrv' | 'sleepHr' | 'battery',
   { fn: (s: SleepRow) => number | null; color: string; unit: string; label: string }
 > = {
-  hours: { fn: (s) => (s.totalSleepS !== null ? s.totalSleepS / 3600 : null), color: "#3b5bd6", unit: " h", label: "Sleep duration" },
-  score: { fn: (s) => s.sleepScore, color: "#9c6ade", unit: "", label: "Sleep score" },
-  hrv: { fn: (s) => s.hrvAvg, color: "#d6409f", unit: " ms", label: "Overnight HRV" },
-  sleepHr: { fn: (s) => s.avgHr, color: "#e5484d", unit: " bpm", label: "Avg sleep HR" },
-  battery: { fn: (s) => s.bodyBatteryChange, color: "#30a46c", unit: "", label: "Body battery change" },
+  hours: {
+    fn: (s) => (s.totalSleepS !== null ? s.totalSleepS / 3600 : null),
+    color: '#3b5bd6',
+    unit: ' h',
+    label: 'Sleep duration',
+  },
+  score: { fn: (s) => s.sleepScore, color: '#9c6ade', unit: '', label: 'Sleep score' },
+  hrv: { fn: (s) => s.hrvAvg, color: '#d6409f', unit: ' ms', label: 'Overnight HRV' },
+  sleepHr: { fn: (s) => s.avgHr, color: '#e5484d', unit: ' bpm', label: 'Avg sleep HR' },
+  battery: {
+    fn: (s) => s.bodyBatteryChange,
+    color: '#30a46c',
+    unit: '',
+    label: 'Body battery change',
+  },
 };
 
 const DAILY_METRIC: Record<
-  "steps" | "restingHr" | "stressAvg" | "battery" | "activeCal" | "floors",
+  'steps' | 'restingHr' | 'stressAvg' | 'battery' | 'activeCal' | 'floors',
   { fn: (w: DailyWellnessRow) => number | null; color: string; unit: string; label: string }
 > = {
-  steps: { fn: (w) => w.steps, color: "#6e56cf", unit: "", label: "Steps" },
-  restingHr: { fn: (w) => w.restingHr, color: "#e5484d", unit: " bpm", label: "Resting heart rate" },
-  stressAvg: { fn: (w) => w.stressAvg, color: "#d29922", unit: "", label: "Average stress" },
-  battery: { fn: (w) => w.batteryLatest, color: "#30a46c", unit: "", label: "Body battery (latest)" },
-  activeCal: { fn: (w) => w.activeCal, color: "#d6409f", unit: " kcal", label: "Active calories" },
-  floors: { fn: (w) => (w.floorsAsc !== null ? w.floorsAsc : null), color: "#0091ff", unit: "", label: "Floors ascended" },
+  steps: { fn: (w) => w.steps, color: '#6e56cf', unit: '', label: 'Steps' },
+  restingHr: {
+    fn: (w) => w.restingHr,
+    color: '#e5484d',
+    unit: ' bpm',
+    label: 'Resting heart rate',
+  },
+  stressAvg: { fn: (w) => w.stressAvg, color: '#d29922', unit: '', label: 'Average stress' },
+  battery: {
+    fn: (w) => w.batteryLatest,
+    color: '#30a46c',
+    unit: '',
+    label: 'Body battery (latest)',
+  },
+  activeCal: { fn: (w) => w.activeCal, color: '#d6409f', unit: ' kcal', label: 'Active calories' },
+  floors: {
+    fn: (w) => (w.floorsAsc !== null ? w.floorsAsc : null),
+    color: '#0091ff',
+    unit: '',
+    label: 'Floors ascended',
+  },
 };
 
 // ─── URL state (every filter keeps the link shareable) ───────────────────────
 
-type BodyMetricKey = "weightKg" | "bodyFatPct" | "visceralFatLevel" | "skeletalMusclePct";
-type SleepMetricKey = "hours" | "score" | "hrv" | "sleepHr" | "battery";
-type DailyMetricKey = "steps" | "restingHr" | "stressAvg" | "battery" | "activeCal" | "floors";
+type BodyMetricKey = 'weightKg' | 'bodyFatPct' | 'visceralFatLevel' | 'skeletalMusclePct';
+type SleepMetricKey = 'hours' | 'score' | 'hrv' | 'sleepHr' | 'battery';
+type DailyMetricKey = 'steps' | 'restingHr' | 'stressAvg' | 'battery' | 'activeCal' | 'floors';
 
 /** Filters the page boots with — parsed once from ?from&to&body&sleep&daily.
  * Missing/invalid params fall back to the 7-day window + default metrics. */
@@ -1289,14 +1663,13 @@ const BOOT_URL = (() => {
   const q = new URLSearchParams(window.location.search);
   return {
     fromDate:
-      isoDate(q.get("from")) ??
-      new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10),
-    toDate: isoDate(q.get("to")) ?? new Date().toISOString().slice(0, 10),
-    body: keyOf(Object.keys(BODY_METRIC), q.get("body"), "weightKg"),
-    sleep: keyOf(Object.keys(SLEEP_METRIC), q.get("sleep"), "hours"),
-    daily: keyOf(Object.keys(DAILY_METRIC), q.get("daily"), "steps"),
-    feedType: pick(FEED_TYPES, q.get("type")),
-    feedProv: pick(FEED_PROVIDERS, q.get("prov")),
+      isoDate(q.get('from')) ?? new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10),
+    toDate: isoDate(q.get('to')) ?? new Date().toISOString().slice(0, 10),
+    body: keyOf(Object.keys(BODY_METRIC), q.get('body'), 'weightKg'),
+    sleep: keyOf(Object.keys(SLEEP_METRIC), q.get('sleep'), 'hours'),
+    daily: keyOf(Object.keys(DAILY_METRIC), q.get('daily'), 'steps'),
+    feedType: pick(FEED_TYPES, q.get('type')),
+    feedProv: pick(FEED_PROVIDERS, q.get('prov')),
   };
 })();
 
@@ -1304,8 +1677,8 @@ const BOOT_URL = (() => {
 
 export default function App() {
   const [token, setToken] = useState<string | null>(() => readToken());
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const [connections, setConnections] = useState<ConnectionRow[]>([]);
@@ -1330,8 +1703,8 @@ export default function App() {
     try {
       // measurements newest-first already; charts want oldest-first
       const [conns, meas] = await Promise.all([
-        api<{ items: ConnectionRow[] }>("/connections", { token: tok }),
-        api<{ items: Measurement[] }>("/measurements", { token: tok, body: undefined }),
+        api<{ items: ConnectionRow[] }>('/connections', { token: tok }),
+        api<{ items: Measurement[] }>('/measurements', { token: tok, body: undefined }),
       ]);
       setConnections(conns.items);
       setMeasurements(meas.items);
@@ -1341,9 +1714,9 @@ export default function App() {
       const acts: Activity[] = [];
       let cursor: string | undefined;
       for (let page = 0; page < 50; page++) {
-        const r = await api<{ items: Activity[]; nextCursor: string | null }>("/activities", {
+        const r = await api<{ items: Activity[]; nextCursor: string | null }>('/activities', {
           token: tok,
-          query: { limit: "100", ...(cursor ? { cursor } : {}) },
+          query: { limit: '100', ...(cursor ? { cursor } : {}) },
         });
         acts.push(...r.items);
         if (!r.nextCursor) break;
@@ -1353,13 +1726,15 @@ export default function App() {
 
       // sleep + daily wellness: newest-first pages of 200, walk back with
       // the `to` date filter (rows keyed by calendar date)
-      const fetchDateKeyedAll = async <T extends { dateKey: string }>(path: string): Promise<T[]> => {
+      const fetchDateKeyedAll = async <T extends { dateKey: string }>(
+        path: string,
+      ): Promise<T[]> => {
         const out: T[] = [];
         let to: string | undefined;
         for (let page = 0; page < 30; page++) {
           const r = await api<{ items: T[] }>(path, {
             token: tok,
-            query: { limit: "200", ...(to ? { to } : {}) },
+            query: { limit: '200', ...(to ? { to } : {}) },
           });
           if (r.items.length === 0) break;
           const last = r.items[r.items.length - 1];
@@ -1371,14 +1746,14 @@ export default function App() {
         return out.reverse(); // charts want oldest-first
       };
       const [sRows, wRows] = await Promise.all([
-        fetchDateKeyedAll<SleepRow>("/sleeps"),
-        fetchDateKeyedAll<DailyWellnessRow>("/wellness"),
+        fetchDateKeyedAll<SleepRow>('/sleeps'),
+        fetchDateKeyedAll<DailyWellnessRow>('/wellness'),
       ]);
       setSleep(sRows);
       setWellness(wRows);
     } catch (e) {
       setError(String(e));
-      if (String(e).includes("401") || String(e).includes("Unauthorized")) {
+      if (String(e).includes('401') || String(e).includes('Unauthorized')) {
         clearTokens();
         setToken(null);
       }
@@ -1396,16 +1771,16 @@ export default function App() {
   // browser back/forward between the dashboard and activity pages
   useEffect(() => {
     const onPop = () => setRoute(parseRoute(window.location.pathname));
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   }, []);
 
   async function login(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     try {
-      const r = await api<{ accessToken: string; refreshToken: string }>("/auth/login", {
-        method: "POST",
+      const r = await api<{ accessToken: string; refreshToken: string }>('/auth/login', {
+        method: 'POST',
         body: { email, password },
       });
       saveTokens(r.accessToken, r.refreshToken, rememberMe);
@@ -1421,19 +1796,25 @@ export default function App() {
   const [fromDate, setFromDate] = useState<string>(BOOT_URL.fromDate);
   const [toDate, setToDate] = useState<string>(BOOT_URL.toDate);
 
-  const range = useMemo(() => ({
-    from: fromDate ? new Date(`${fromDate}T00:00:00.000Z`).getTime() : null,
-    to: toDate ? new Date(`${toDate}T23:59:59.999Z`).getTime() : null,
-  }), [fromDate, toDate]);
+  const range = useMemo(
+    () => ({
+      from: fromDate ? new Date(`${fromDate}T00:00:00.000Z`).getTime() : null,
+      to: toDate ? new Date(`${toDate}T23:59:59.999Z`).getTime() : null,
+    }),
+    [fromDate, toDate],
+  );
 
   /** true when a timestamp (ms or ISO string) falls inside [from, to]; empty
    * bounds mean "no limit on that side". */
-  const inRange = useCallback((ts: number | string | null | undefined): boolean => {
-    if (ts === null || ts === undefined) return false;
-    const t = typeof ts === "number" ? ts : new Date(ts).getTime();
-    if (!Number.isFinite(t)) return false;
-    return (range.from === null || t >= range.from) && (range.to === null || t <= range.to);
-  }, [range]);
+  const inRange = useCallback(
+    (ts: number | string | null | undefined): boolean => {
+      if (ts === null || ts === undefined) return false;
+      const t = typeof ts === 'number' ? ts : new Date(ts).getTime();
+      if (!Number.isFinite(t)) return false;
+      return (range.from === null || t >= range.from) && (range.to === null || t <= range.to);
+    },
+    [range],
+  );
 
   /** preset chips: exact-match highlight (from = today − days, to = today);
    * null = "all", undefined = custom dates don't map to a preset */
@@ -1449,8 +1830,8 @@ export default function App() {
 
   function applyPreset(days: number | null): void {
     if (days === null) {
-      setFromDate("");
-      setToDate("");
+      setFromDate('');
+      setToDate('');
       return;
     }
     const today = new Date().toISOString().slice(0, 10);
@@ -1459,27 +1840,27 @@ export default function App() {
   }
 
   function openActivity(id: string): void {
-    window.history.pushState(null, "", `/activity/${id}`);
-    setRoute({ name: "activity", id });
+    window.history.pushState(null, '', `/activity/${id}`);
+    setRoute({ name: 'activity', id });
   }
   // the query string is rewritten by the filter-sync effect once we're back
   function goHome(): void {
-    window.history.pushState(null, "", "/");
-    setRoute({ name: "dashboard" });
+    window.history.pushState(null, '', '/');
+    setRoute({ name: 'dashboard' });
   }
   function openConnections(): void {
-    window.history.pushState(null, "", "/connections");
-    setRoute({ name: "connections" });
+    window.history.pushState(null, '', '/connections');
+    setRoute({ name: 'connections' });
   }
 
   /** force-sync one connection; one at a time so a slow Garmin history scan
    * doesn't hammer providers in parallel. Returns what happened so the
    * connections page can show it on the card that was tapped. */
   async function syncConnection(id: string): Promise<{ ok: boolean; text: string }> {
-    if (!token || syncingId) return { ok: false, text: "another sync is already running" };
+    if (!token || syncingId) return { ok: false, text: 'another sync is already running' };
     setSyncingId(id);
     try {
-      const res = await api<SyncResponseJson>(`/connections/${id}/sync`, { method: "POST", token });
+      const res = await api<SyncResponseJson>(`/connections/${id}/sync`, { method: 'POST', token });
       // pull the fresh rows + lastSyncedAt into the dashboard
       await load(token);
       return { ok: true, text: summarizeSync(res) };
@@ -1487,7 +1868,7 @@ export default function App() {
       // rejected credentials flip the connection to ERROR server-side —
       // reload so the card/pill shows red instead of a stale ACTIVE state
       await load(token).catch(() => undefined);
-      const msg = err instanceof Error ? err.message.replace(/^Error: /, "") : String(err);
+      const msg = err instanceof Error ? err.message.replace(/^Error: /, '') : String(err);
       return { ok: false, text: msg };
     } finally {
       setSyncingId(null);
@@ -1498,32 +1879,56 @@ export default function App() {
   // the exact dashboard view (range + selected chart metrics + feed filters).
   // Skipped on the activity route so deep links to /activity/<id> keep their path.
   useEffect(() => {
-    if (route.name !== "dashboard") return;
+    if (route.name !== 'dashboard') return;
     const q = new URLSearchParams();
-    if (fromDate) q.set("from", fromDate);
-    if (toDate) q.set("to", toDate);
-    if (bodyMetric !== "weightKg") q.set("body", bodyMetric);
-    if (sleepMetric !== "hours") q.set("sleep", sleepMetric);
-    if (dailyMetric !== "steps") q.set("daily", dailyMetric);
-    if (feedType) q.set("type", feedType);
-    if (feedProv) q.set("prov", feedProv);
+    if (fromDate) q.set('from', fromDate);
+    if (toDate) q.set('to', toDate);
+    if (bodyMetric !== 'weightKg') q.set('body', bodyMetric);
+    if (sleepMetric !== 'hours') q.set('sleep', sleepMetric);
+    if (dailyMetric !== 'steps') q.set('daily', dailyMetric);
+    if (feedType) q.set('type', feedType);
+    if (feedProv) q.set('prov', feedProv);
     const s = q.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${s ? `?${s}` : ""}${window.location.hash}`);
+    window.history.replaceState(
+      null,
+      '',
+      `${window.location.pathname}${s ? `?${s}` : ''}${window.location.hash}`,
+    );
   }, [route, fromDate, toDate, bodyMetric, sleepMetric, dailyMetric, feedType, feedProv]);
 
-  const weighIns = useMemo(() => [...measurements].sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime()), [measurements]);
+  const weighIns = useMemo(
+    () =>
+      [...measurements].sort(
+        (a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime(),
+      ),
+    [measurements],
+  );
 
   // everything on the page is driven by the filtered arrays
-  const weighInsIn = useMemo(() => weighIns.filter((m) => inRange(m.measuredAt)), [weighIns, inRange]);
-  const sleepIn = useMemo(() => sleep.filter((s) => inRange(`${s.dateKey}T00:00:00.000Z`)), [sleep, inRange]);
-  const wellnessIn = useMemo(() => wellness.filter((w) => inRange(`${w.dateKey}T00:00:00.000Z`)), [wellness, inRange]);
-  const activitiesIn = useMemo(() => activities.filter((a) => inRange(a.startTime)), [activities, inRange]);
+  const weighInsIn = useMemo(
+    () => weighIns.filter((m) => inRange(m.measuredAt)),
+    [weighIns, inRange],
+  );
+  const sleepIn = useMemo(
+    () => sleep.filter((s) => inRange(`${s.dateKey}T00:00:00.000Z`)),
+    [sleep, inRange],
+  );
+  const wellnessIn = useMemo(
+    () => wellness.filter((w) => inRange(`${w.dateKey}T00:00:00.000Z`)),
+    [wellness, inRange],
+  );
+  const activitiesIn = useMemo(
+    () => activities.filter((a) => inRange(a.startTime)),
+    [activities, inRange],
+  );
   // the feed's own filters (type / provider) sit on top of the range filter and
   // affect the table only — the stat card keeps counting the whole range
   const activitiesFeed = useMemo(
     () =>
       activitiesIn.filter(
-        (a) => (!feedType || a.type === feedType) && (!feedProv || (a.providers ?? []).includes(feedProv)),
+        (a) =>
+          (!feedType || a.type === feedType) &&
+          (!feedProv || (a.providers ?? []).includes(feedProv)),
       ),
     [activitiesIn, feedType, feedProv],
   );
@@ -1536,7 +1941,10 @@ export default function App() {
     () => FEED_PROVIDERS.filter((p) => activitiesIn.some((a) => (a.providers ?? []).includes(p))),
     [activitiesIn],
   );
-  const measurementsIn = useMemo(() => measurements.filter((m) => inRange(m.measuredAt)), [measurements, inRange]);
+  const measurementsIn = useMemo(
+    () => measurements.filter((m) => inRange(m.measuredAt)),
+    [measurements, inRange],
+  );
 
   // newest row in range for the headline cards (arrays are oldest-first)
   const latest = weighInsIn[weighInsIn.length - 1];
@@ -1554,13 +1962,29 @@ export default function App() {
         <form onSubmit={login} className="login-card">
           <h1>🦾 Stridash</h1>
           <p>One dashboard for every stride.</p>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="email" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="password" />
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            type="email"
+            placeholder="email"
+          />
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+            placeholder="password"
+          />
           <label className="remember-me">
-            <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+            />
             <span>remember me on this device</span>
           </label>
-          <button className="btn" type="submit">Sign in</button>
+          <button className="btn" type="submit">
+            Sign in
+          </button>
           {error && <p className="error">{error}</p>}
         </form>
       </main>
@@ -1577,30 +2001,49 @@ export default function App() {
             className={`pill ${c.status.toLowerCase()}`}
             href="/connections"
             title="manage connections"
-            onClick={(e) => { e.preventDefault(); openConnections(); }}
+            onClick={(e) => {
+              e.preventDefault();
+              openConnections();
+            }}
           >
-            {c.provider.toLowerCase()} · {c.status.toLowerCase()}{c.lastSyncedAt ? ` · ${fmtDate(c.lastSyncedAt)}` : ""}
+            {c.provider.toLowerCase()} · {c.status.toLowerCase()}
+            {c.lastSyncedAt ? ` · ${fmtDate(c.lastSyncedAt)}` : ''}
           </a>
         ))}
         {connections.length === 0 && (
-          <a className="pill" href="/connections" onClick={(e) => { e.preventDefault(); openConnections(); }}>
+          <a
+            className="pill"
+            href="/connections"
+            onClick={(e) => {
+              e.preventDefault();
+              openConnections();
+            }}
+          >
             no connections yet — add one on the connections page
           </a>
         )}
       </div>
-      <button className="btn ghost" onClick={() => { clearTokens(); setToken(null); }}>sign out</button>
+      <button
+        className="btn ghost"
+        onClick={() => {
+          clearTokens();
+          setToken(null);
+        }}
+      >
+        sign out
+      </button>
     </header>
   );
   const footer = <footer>Stridash · all data read from your own Stridash instance</footer>;
 
   // the activity page is its own URL: /activity/<id>, shareable like the filters
-  if (route.name === "activity") {
+  if (route.name === 'activity') {
     return (
       <main>
         {header}
         <ActivityDetail
           id={route.id}
-          token={token ?? ""}
+          token={token ?? ''}
           preview={activities.find((a) => a.id === route.id) ?? null}
           onBack={goHome}
         />
@@ -1611,7 +2054,7 @@ export default function App() {
   }
 
   // the connections page is its own URL: /connections
-  if (route.name === "connections") {
+  if (route.name === 'connections') {
     return (
       <main>
         {header}
@@ -1621,7 +2064,9 @@ export default function App() {
           token={token}
           syncingId={syncingId}
           syncConnection={syncConnection}
-          reload={() => { void load(token); }}
+          reload={() => {
+            void load(token);
+          }}
           onBack={goHome}
         />
         {loading && <p>Loading…</p>}
@@ -1641,14 +2086,14 @@ export default function App() {
         {[7, 30, 90, 365].map((d) => (
           <button
             key={d}
-            className={`btn ghost small ${activePreset === d ? "active" : ""}`}
+            className={`btn ghost small ${activePreset === d ? 'active' : ''}`}
             onClick={() => applyPreset(d)}
           >
-            {d === 365 ? "1y" : `${d}d`}
+            {d === 365 ? '1y' : `${d}d`}
           </button>
         ))}
         <button
-          className={`btn ghost small ${activePreset === null ? "active" : ""}`}
+          className={`btn ghost small ${activePreset === null ? 'active' : ''}`}
           onClick={() => applyPreset(null)}
         >
           all
@@ -1667,35 +2112,37 @@ export default function App() {
           min={fromDate || undefined}
         />
         {(fromDate || toDate) && (
-          <button className="btn ghost small" onClick={() => applyPreset(null)}>clear</button>
+          <button className="btn ghost small" onClick={() => applyPreset(null)}>
+            clear
+          </button>
         )}
       </div>
 
       <div className="cards">
-        <Card label="Latest weight" value={asStr(latest?.weightKg, " kg") ?? "no weigh-in yet"} />
-        <Card label="Body fat" value={asStr(latest?.bodyFatPct, "%")} />
+        <Card label="Latest weight" value={asStr(latest?.weightKg, ' kg') ?? 'no weigh-in yet'} />
+        <Card label="Body fat" value={asStr(latest?.bodyFatPct, '%')} />
         <Card label="Visceral fat" value={asStr(latest?.visceralFatLevel)} />
-        <Card label="Muscle mass" value={asStr(latest?.skeletalMuscleMassKg, " kg")} />
+        <Card label="Muscle mass" value={asStr(latest?.skeletalMuscleMassKg, ' kg')} />
         <Card
           label="Latest sleep"
           value={
             lastSleep ? (
               <>
                 {((lastSleep.totalSleepS ?? 0) / 3600).toFixed(1)} h
-                {lastSleep.sleepScore !== null ? ` · score ${lastSleep.sleepScore}` : ""}
+                {lastSleep.sleepScore !== null ? ` · score ${lastSleep.sleepScore}` : ''}
               </>
             ) : (
-              "no sleep in range"
+              'no sleep in range'
             )
           }
         />
         <Card
           label="Latest steps"
-          value={latestWellness ? latestWellness.steps?.toLocaleString() : "no steps in range"}
+          value={latestWellness ? latestWellness.steps?.toLocaleString() : 'no steps in range'}
         />
         <Card
           label="Resting HR"
-          value={latestRestingHr?.restingHr != null ? `${latestRestingHr.restingHr} bpm` : "—"}
+          value={latestRestingHr?.restingHr != null ? `${latestRestingHr.restingHr} bpm` : '—'}
         />
         <Card label="Activities" value={activitiesIn.length} />
         <Card label="Weigh-ins" value={measurementsIn.length} />
@@ -1704,20 +2151,25 @@ export default function App() {
       <section>
         <h2>Body composition</h2>
         <div className="metric-tabs">
-          {(["weightKg", "bodyFatPct", "visceralFatLevel", "skeletalMusclePct"] as const).map((m) => (
-            <button
-              key={m}
-              className={`btn ghost ${bodyMetric === m ? "active" : ""}`}
-              onClick={() => setBodyMetric(m)}
-            >
-              {BODY_METRIC[m].label}
-            </button>
-          ))}
+          {(['weightKg', 'bodyFatPct', 'visceralFatLevel', 'skeletalMusclePct'] as const).map(
+            (m) => (
+              <button
+                key={m}
+                className={`btn ghost ${bodyMetric === m ? 'active' : ''}`}
+                onClick={() => setBodyMetric(m)}
+              >
+                {BODY_METRIC[m].label}
+              </button>
+            ),
+          )}
         </div>
         <LineChart
           points={weighInsIn
             .filter((m) => has((m as unknown as Record<string, unknown>)[bodyMetric]))
-            .map((m) => ({ x: new Date(m.measuredAt).getTime(), y: Number((m as unknown as Record<string, unknown>)[bodyMetric]) }))}
+            .map((m) => ({
+              x: new Date(m.measuredAt).getTime(),
+              y: Number((m as unknown as Record<string, unknown>)[bodyMetric]),
+            }))}
           color="#6e56cf"
           label={BODY_METRIC[bodyMetric].label}
           unit={BODY_METRIC[bodyMetric].unit}
@@ -1729,16 +2181,16 @@ export default function App() {
         <div className="metric-tabs">
           {(
             [
-              ["hours", "Duration (h)"],
-              ["score", "Score"],
-              ["hrv", "Night HRV"],
-              ["sleepHr", "Sleep HR"],
-              ["battery", "Battery change"],
+              ['hours', 'Duration (h)'],
+              ['score', 'Score'],
+              ['hrv', 'Night HRV'],
+              ['sleepHr', 'Sleep HR'],
+              ['battery', 'Battery change'],
             ] as const
           ).map(([m, label]) => (
             <button
               key={m}
-              className={`btn ghost ${sleepMetric === m ? "active" : ""}`}
+              className={`btn ghost ${sleepMetric === m ? 'active' : ''}`}
               onClick={() => setSleepMetric(m)}
             >
               {label}
@@ -1748,7 +2200,10 @@ export default function App() {
         <LineChart
           points={sleepIn
             .filter((s) => has(SLEEP_METRIC[sleepMetric].fn(s)))
-            .map((s) => ({ x: new Date(`${s.dateKey}T00:00:00.000Z`).getTime(), y: SLEEP_METRIC[sleepMetric].fn(s)! }))}
+            .map((s) => ({
+              x: new Date(`${s.dateKey}T00:00:00.000Z`).getTime(),
+              y: SLEEP_METRIC[sleepMetric].fn(s)!,
+            }))}
           color={SLEEP_METRIC[sleepMetric].color}
           unit={SLEEP_METRIC[sleepMetric].unit}
           label={SLEEP_METRIC[sleepMetric].label}
@@ -1760,17 +2215,17 @@ export default function App() {
         <div className="metric-tabs">
           {(
             [
-              ["steps", "Steps"],
-              ["restingHr", "Resting HR"],
-              ["stressAvg", "Stress (avg)"],
-              ["battery", "Body battery"],
-              ["activeCal", "Active kcal"],
-              ["floors", "Floors"],
+              ['steps', 'Steps'],
+              ['restingHr', 'Resting HR'],
+              ['stressAvg', 'Stress (avg)'],
+              ['battery', 'Body battery'],
+              ['activeCal', 'Active kcal'],
+              ['floors', 'Floors'],
             ] as const
           ).map(([m, label]) => (
             <button
               key={m}
-              className={`btn ghost ${dailyMetric === m ? "active" : ""}`}
+              className={`btn ghost ${dailyMetric === m ? 'active' : ''}`}
               onClick={() => setDailyMetric(m)}
             >
               {label}
@@ -1780,7 +2235,10 @@ export default function App() {
         <LineChart
           points={wellnessIn
             .filter((w) => has(DAILY_METRIC[dailyMetric].fn(w)))
-            .map((w) => ({ x: new Date(`${w.dateKey}T00:00:00.000Z`).getTime(), y: DAILY_METRIC[dailyMetric].fn(w)! }))}
+            .map((w) => ({
+              x: new Date(`${w.dateKey}T00:00:00.000Z`).getTime(),
+              y: DAILY_METRIC[dailyMetric].fn(w)!,
+            }))}
           color={DAILY_METRIC[dailyMetric].color}
           unit={DAILY_METRIC[dailyMetric].unit}
           label={DAILY_METRIC[dailyMetric].label}
@@ -1797,7 +2255,9 @@ export default function App() {
           >
             <option value="">all types</option>
             {feedTypeOptions.map((t) => (
-              <option key={t} value={t}>{TYPE_EMOJI[t] ?? "⌚"} {t.toLowerCase().replace("_", " ")}</option>
+              <option key={t} value={t}>
+                {TYPE_EMOJI[t] ?? '⌚'} {t.toLowerCase().replace('_', ' ')}
+              </option>
             ))}
           </select>
           <select
@@ -1807,33 +2267,60 @@ export default function App() {
           >
             <option value="">all providers</option>
             {feedProvOptions.map((p) => (
-              <option key={p} value={p}>{p.toLowerCase()}</option>
+              <option key={p} value={p}>
+                {p.toLowerCase()}
+              </option>
             ))}
           </select>
         </div>
         {activitiesFeed.length === 0 && (
-          <p className="empty">{activitiesIn.length ? "No activities match these filters." : "No activities in range."}</p>
+          <p className="empty">
+            {activitiesIn.length ? 'No activities match these filters.' : 'No activities in range.'}
+          </p>
         )}
         <table className="list">
           <thead>
             <tr>
-              <th></th><th>when</th><th>type</th><th>provider</th><th>workout</th><th>distance</th><th>time</th><th>avg speed</th><th>HR</th><th>power</th><th></th>
+              <th></th>
+              <th>when</th>
+              <th>type</th>
+              <th>provider</th>
+              <th>workout</th>
+              <th>distance</th>
+              <th>time</th>
+              <th>avg speed</th>
+              <th>HR</th>
+              <th>power</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {activitiesFeed.map((a) => (
               <tr key={a.id}>
-                <td>{TYPE_EMOJI[a.type] ?? "⌚"}</td>
+                <td>{TYPE_EMOJI[a.type] ?? '⌚'}</td>
                 <td>{fmtDate(a.startTime)}</td>
                 <td>{a.type}</td>
-                <td>{(a.providers ?? []).map((p) => p.toLowerCase()).join(", ")}</td>
-                <td>{a.workoutName ?? "—"}</td>
+                <td>{(a.providers ?? []).map((p) => p.toLowerCase()).join(', ')}</td>
+                <td>{a.workoutName ?? '—'}</td>
                 <td>{fmtKm(a.distanceM)}</td>
                 <td>{fmtMin(a.durationS)}</td>
                 <td>{fmtSpeed(a.avgSpeedMs)}</td>
-                <td>{a.avgHr ?? "—"}</td>
-                <td>{a.avgPowerW ?? "—"}{has(a.avgPowerW) ? " W" : ""}</td>
-                <td><a href={`/activity/${a.id}`} onClick={(e) => { e.preventDefault(); openActivity(a.id); }}>details</a></td>
+                <td>{a.avgHr ?? '—'}</td>
+                <td>
+                  {a.avgPowerW ?? '—'}
+                  {has(a.avgPowerW) ? ' W' : ''}
+                </td>
+                <td>
+                  <a
+                    href={`/activity/${a.id}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openActivity(a.id);
+                    }}
+                  >
+                    details
+                  </a>
+                </td>
               </tr>
             ))}
           </tbody>

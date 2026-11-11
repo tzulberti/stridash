@@ -18,6 +18,6 @@ jobs:
       - name: Prisma generate
         run: npm run prisma:generate -w @stridash/server
         env:
-          DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+          DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
       - name: Typecheck
         run: npm run typecheck
