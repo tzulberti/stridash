@@ -1,7 +1,7 @@
 /** Garmin list-row → activity mapping (FIT-free parts). */
 import { describe, expect, it } from 'vitest';
-import { mapType, rowToActivity } from '../src/providers/garmin/normalize.js';
-import type { GarminActivityRow } from '../src/providers/garmin/api.js';
+import { mapType, rowToActivity, mapGearRow } from '../src/providers/garmin/normalize.js';
+import type { GarminActivityRow, GarminGearRow } from '../src/providers/garmin/api.js';
 
 const row = (over: Partial<GarminActivityRow> = {}): GarminActivityRow => ({
   activityId: 99887766,
@@ -48,5 +48,49 @@ describe('rowToActivity', () => {
     const a = rowToActivity(row({ activityName: undefined }));
     expect(a.headline).toBe('Garmin activity');
     expect((a.raw as Record<string, unknown>).activityId).toBe(99887766);
+  });
+});
+
+describe('mapGearRow', () => {
+  const gearRow = (over: Partial<GarminGearRow> = {}): GarminGearRow => ({
+    uuid: 'e496727e-dc6f-46c5-89c5-c429e9e35a61',
+    gearType: 'SHOES',
+    status: 'ACTIVE',
+    brand: 'Kiprun Kipride Max',
+    usageType: 'DISTANCE',
+    maxUsageDistanceMeters: 643_738,
+    firstUseDate: '2026-01-01',
+    numActivitiesLinked: 29,
+    ...over,
+  });
+
+  it('maps the v2 gear payload to an upsert input', () => {
+    const g = mapGearRow('user-1', gearRow())!;
+    expect(g.userId).toBe('user-1');
+    expect(g.name).toBe('Kiprun Kipride Max');
+    expect(g.kind).toBe('SHOES');
+    expect(g.provider).toBe('GARMIN');
+    expect(g.sourceGearId).toBe('e496727e-dc6f-46c5-89c5-c429e9e35a61');
+    expect(g.firstUsedAt?.toISOString()).toBe('2026-01-01T00:00:00.000Z');
+    expect(g.retiredAt).toBeNull();
+    expect(g.usageType).toBe('DISTANCE');
+    expect(g.thresholdM).toBe(643_738);
+    expect((g.raw as Record<string, unknown>).provider).toBe('GARMIN');
+  });
+
+  it('maps a bike and derives OTHER for unknown gear types', () => {
+    expect(mapGearRow('u', gearRow({ gearType: 'BIKE' }))!.kind).toBe('BIKE');
+    expect(mapGearRow('u', gearRow({ gearType: 'SKIS' }))!.kind).toBe('OTHER');
+  });
+
+  it('marks RETIRED gear and falls back through the name fields', () => {
+    const g = mapGearRow('u', gearRow({ status: 'RETIRED', brand: undefined, model: 'A-Flash' }))!;
+    expect(g.retiredAt).toBeInstanceOf(Date);
+    expect(g.name).toBe('A-Flash');
+    expect(mapGearRow('u', gearRow({ brand: undefined, model: undefined }))!.name).toBe('SHOES');
+  });
+
+  it('rejects a row without a uuid', () => {
+    expect(mapGearRow('u', gearRow({ uuid: undefined as never }))).toBeNull();
   });
 });

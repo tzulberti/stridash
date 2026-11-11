@@ -210,5 +210,181 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     });
   });
 
+  // ─── Gear (provider-synced gear + Stridash-managed components) ─────────────
+
+  /** Usage aggregation for one gear: activities linked to it, with the
+   * component's install/retire window applied. Called per gear (small N). */
+  function usageOf(
+    activities: { distanceM: unknown; durationS: number; startTime: Date }[],
+    from: Date | null,
+    to: Date | null,
+  ): { distanceM: number; durationS: number; count: number } {
+    let distanceM = 0;
+    let durationS = 0;
+    let count = 0;
+    for (const a of activities) {
+      if (from && a.startTime < from) continue;
+      if (to && a.startTime > to) continue;
+      count++;
+      durationS += a.durationS;
+      const d = a.distanceM as { toFixed?: unknown } | null;
+      distanceM += typeof d === 'number' ? d : Number(d ?? 0);
+    }
+    return { distanceM, durationS, count };
+  }
+
+  routes.get('/gear', async (c) => {
+    const userId = c.get('userId');
+    const gear = await prisma.gear.findMany({
+      where: { userId },
+      orderBy: [{ retiredAt: 'asc' }, { createdAt: 'desc' }],
+      include: {
+        activities: { select: { distanceM: true, durationS: true, startTime: true } },
+        components: true,
+      },
+    });
+    return c.json({
+      items: gear.map((g) => {
+        const components: Array<
+          Record<string, unknown> & {
+            usage: { distanceM: number; durationS: number; count: number };
+          }
+        > = g.components.map((comp) => ({
+          ...serializeRow(comp),
+          usage: usageOf(
+            g.activities,
+            comp.installedAt ? new Date(comp.installedAt.getTime()) : null,
+            comp.retiredAt ? new Date(comp.retiredAt.getTime()) : null,
+          ),
+        }));
+        // mounted components first, then newest
+        components.sort(
+          (a, b) =>
+            Number(a.retiredAt != null) - Number(b.retiredAt != null) ||
+            String(b.createdAt).localeCompare(String(a.createdAt)),
+        );
+        return {
+          ...serializeRow({ ...g, activities: undefined, components: undefined }),
+          usage: usageOf(g.activities, null, null),
+          components,
+        };
+      }),
+    });
+  });
+
+  const componentCreateSchema = z.object({
+    name: z.string().min(1).max(120),
+    kind: z
+      .enum([
+        'CHAIN',
+        'CASSETTE',
+        'CHAINRING',
+        'BRAKE_PADS',
+        'TIRES',
+        'TUBES',
+        'PEDALS',
+        'BATTERY',
+        'OTHER',
+      ])
+      .default('OTHER'),
+    installedAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}/, 'YYYY-MM-DD')
+      .optional(),
+    thresholdM: z.number().positive().optional(),
+    notes: z.string().max(2000).optional(),
+  });
+
+  routes.post('/gear/:gearId/components', async (c) => {
+    const parsed = componentCreateSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid body', detail: parsed.error.flatten().fieldErrors }, 400);
+    const gear = await prisma.gear.findFirst({
+      where: { id: c.req.param('gearId'), userId: c.get('userId') },
+      select: { id: true },
+    });
+    if (!gear) return c.json({ error: 'Not found' }, 404);
+    const created = await prisma.gearComponent.create({
+      data: {
+        userId: c.get('userId'),
+        gearId: gear.id,
+        name: parsed.data.name,
+        kind: parsed.data.kind,
+        installedAt: parsed.data.installedAt
+          ? new Date(`${parsed.data.installedAt}T00:00:00Z`)
+          : null,
+        thresholdM: parsed.data.thresholdM ?? null,
+        notes: parsed.data.notes ?? null,
+      },
+    });
+    return c.json({ item: serializeRow(created) }, 201);
+  });
+
+  const componentPatchSchema = z.object({
+    name: z.string().min(1).max(120).optional(),
+    kind: z
+      .enum([
+        'CHAIN',
+        'CASSETTE',
+        'CHAINRING',
+        'BRAKE_PADS',
+        'TIRES',
+        'TUBES',
+        'PEDALS',
+        'BATTERY',
+        'OTHER',
+      ])
+      .optional(),
+    installedAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}/, 'YYYY-MM-DD')
+      .optional(),
+    retiredAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}/, 'YYYY-MM-DD')
+      .nullable()
+      .optional(),
+    thresholdM: z.number().positive().nullable().optional(),
+    notes: z.string().max(2000).nullable().optional(),
+  });
+
+  routes.patch('/gear/components/:componentId', async (c) => {
+    const parsed = componentPatchSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid body', detail: parsed.error.flatten().fieldErrors }, 400);
+    const component = await prisma.gearComponent.findFirst({
+      where: { id: c.req.param('componentId'), userId: c.get('userId') },
+      select: { id: true },
+    });
+    if (!component) return c.json({ error: 'Not found' }, 404);
+    const d = parsed.data;
+    const updated = await prisma.gearComponent.update({
+      where: { id: component.id },
+      data: {
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.kind !== undefined ? { kind: d.kind } : {}),
+        ...(d.installedAt !== undefined
+          ? { installedAt: d.installedAt ? new Date(`${d.installedAt}T00:00:00Z`) : null }
+          : {}),
+        ...(d.retiredAt !== undefined
+          ? { retiredAt: d.retiredAt ? new Date(`${d.retiredAt}T00:00:00Z`) : null }
+          : {}),
+        ...(d.thresholdM !== undefined ? { thresholdM: d.thresholdM } : {}),
+        ...(d.notes !== undefined ? { notes: d.notes } : {}),
+      },
+    });
+    return c.json({ item: serializeRow(updated) });
+  });
+
+  routes.delete('/gear/components/:componentId', async (c) => {
+    const component = await prisma.gearComponent.findFirst({
+      where: { id: c.req.param('componentId'), userId: c.get('userId') },
+      select: { id: true },
+    });
+    if (!component) return c.json({ error: 'Not found' }, 404);
+    await prisma.gearComponent.delete({ where: { id: component.id } });
+    return c.json({ ok: true });
+  });
+
   return routes;
 }

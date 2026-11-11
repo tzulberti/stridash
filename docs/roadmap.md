@@ -66,6 +66,12 @@ application is approved; the auth half is a swap-in.)*
 - [x] Live E2E against a real account (needs a real Garmin login to run)
 - [x] Wellness ingest (2026-11): nightly sleep (stages, score, HRV, naps) +
       daily steps/floors/calories/HR/stress/body battery — see `docs/garmin.md`
+- [x] Gear sync (2026-11): gear-service v2 → `gear` (type, usage counters,
+      threshold, ACTIVE/RETIRED), per-activity gear attribution →
+      `activities.gear_id` + bounded backfill pass, and Stridash-managed
+      wear-item components (`gear_components`, replace-by-usage computed
+      from linked activities) with `/api/gear` + a web gear page —
+      see `docs/garmin.md` "Gear"
 - [ ] Weight / body composition ingest (Garmin Index or any scale synced to
       Garmin)
 - [ ] Blood pressure ingest

@@ -87,14 +87,18 @@ export function isoDate(v: string | null): string | undefined {
   return v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined;
 }
 
-// ─── Client routing — /activity/<id> and /connections have their own pages ───
+// ─── Client routing — /activity/<id>, /connections and /gear have their own pages ─
 
 export type Route =
-  { name: 'dashboard' } | { name: 'activity'; id: string } | { name: 'connections' };
+  | { name: 'dashboard' }
+  | { name: 'activity'; id: string }
+  | { name: 'connections' }
+  | { name: 'gear' };
 
-/** Parse a pathname; anything not /activity/<id> or /connections is the dashboard */
+/** Parse a pathname; anything not matched below is the dashboard */
 export function parseRoute(pathname: string): Route {
   if (/^\/connections\/?$/.test(pathname)) return { name: 'connections' };
+  if (/^\/gear\/?$/.test(pathname)) return { name: 'gear' };
   const m = /^\/activity\/([^/?#]+)/.exec(pathname);
   const id = m?.[1];
   return id ? { name: 'activity', id } : { name: 'dashboard' };

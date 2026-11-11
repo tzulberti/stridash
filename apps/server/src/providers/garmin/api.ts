@@ -66,6 +66,50 @@ export async function listActivities(
   return json as GarminActivityRow[];
 }
 
+// ─── Gear (verified live 2026-11 against gear-service v2) ───────────────────
+
+/** One v2 gear object: uuid, gearType, status ACTIVE/RETIRED, brand (the
+ * display name), usageType, maxUsageDistanceMeters, firstUseDate,
+ * distanceUsedMeters/durationUsedSeconds/numActivitiesLinked. */
+export interface GarminGearRow {
+  uuid: string;
+  gearType?: string; // "SHOES" | "BIKE" | …
+  status?: string; // "ACTIVE" | "RETIRED"
+  brand?: string;
+  model?: string;
+  usageType?: string; // "DISTANCE" | "TIME"
+  maxUsageDistanceMeters?: number;
+  firstUseDate?: string; // "YYYY-MM-DD"
+  distanceUsedMeters?: number;
+  durationUsedSeconds?: number;
+  numActivitiesLinked?: number;
+  createdDate?: string;
+}
+
+/** The user's whole gear list (gear-service v2 — the web app's endpoint). */
+export async function listGear(bearer: string, limit = 100): Promise<GarminGearRow[]> {
+  const { json } = await connectapiGet(`/gear-service/gear/v2/list?start=0&limit=${limit}`, bearer);
+  if (!Array.isArray(json)) return [];
+  return json as GarminGearRow[];
+}
+
+/** Which activities a piece of gear was used in (activitylist-service; the
+ * per-activity variant `/gear-service/activity/v2/:id` answers [] unreliably). */
+export async function listGearActivities(
+  bearer: string,
+  gearUuid: string,
+  limit = 1000,
+): Promise<{ activityId: number | string }[]> {
+  const { json } = await connectapiGet(
+    `/activitylist-service/activities/${gearUuid}/gear?start=0&limit=${limit}`,
+    bearer,
+  );
+  if (!Array.isArray(json)) return [];
+  return (json as { activityId?: number | string }[])
+    .filter((r) => r && r.activityId !== undefined)
+    .map((r) => ({ activityId: r.activityId as number | string }));
+}
+
 export async function downloadFit(bearer: string, activityId: string): Promise<Buffer> {
   const res = await fetch(`${CONNECTAPI_BASE}${FIT_PATH}/${activityId}`, {
     headers: {

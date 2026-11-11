@@ -197,8 +197,60 @@ export interface Gear {
   kind: GearKind;
   brand: string | null;
   model: string | null;
-  retired: boolean;
+  /** which provider this row came from (null = added manually in Stridash) */
+  provider: Provider | null;
+  /** provider's gear id (e.g. Garmin's dashed gear uuid); null for manual gear */
+  sourceGearId: string | null;
+  firstUsedAt: string | null;
+  /** null = still in use */
+  retiredAt: string | null;
+  /** how the provider counts usage ("DISTANCE" / "TIME") */
+  usageType: string | null;
+  /** provider-reported retirement threshold, meters */
+  thresholdM: number | null;
   createdAt: string;
+}
+
+export type GearComponentKind =
+  | 'CHAIN'
+  | 'CASSETTE'
+  | 'CHAINRING'
+  | 'BRAKE_PADS'
+  | 'TIRES'
+  | 'TUBES'
+  | 'PEDALS'
+  | 'BATTERY'
+  | 'OTHER';
+
+/** A wear item mounted on a piece of gear, managed in Stridash (Garmin has
+ * no component concept); usage is computed from linked activities. */
+export interface GearComponent {
+  id: string;
+  gearId: string;
+  name: string;
+  kind: GearComponentKind;
+  /** usage counts activities starting on/after this date; null → usage 0 */
+  installedAt: string | null;
+  /** null = still mounted */
+  retiredAt: string | null;
+  /** user's own replacement threshold, meters (advisory) */
+  thresholdM: number | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+/** Usage aggregated from the activities linked to the gear. */
+export interface GearUsage {
+  /** sum of activities.distance_m, meters */
+  distanceM: number;
+  /** sum of activities.duration_s, seconds */
+  durationS: number;
+  count: number;
+}
+
+export interface GearWithUsage extends Gear {
+  usage: GearUsage;
+  components: (GearComponent & { usage: GearUsage })[];
 }
 
 // ─── Measurements ────────────────────────────────────────────────────────────

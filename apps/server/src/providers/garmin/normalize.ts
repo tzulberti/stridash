@@ -7,7 +7,7 @@
  */
 
 import type { FitRecord, FitSession, ActivityType } from '../igpsport/normalize.js';
-import type { GarminActivityRow } from './api.js';
+import type { GarminActivityRow, GarminGearRow } from './api.js';
 
 /** Garmin activityTypes typeKey → our domain enum (strava-flavored). */
 export function mapType(typeKey: string | undefined): ActivityType {
@@ -287,5 +287,45 @@ export function rowToActivity(row: GarminActivityRow): ActivityInput {
       listRow: row,
       approximateStartTime: true,
     },
+  };
+}
+
+// ─── Gear (gear-service v2) ─────────────────────────────────────────────────
+
+export interface GearInput {
+  userId: string;
+  name: string;
+  kind: 'BIKE' | 'SHOES' | 'OTHER';
+  brand: string | null;
+  model: string | null;
+  provider: 'GARMIN';
+  sourceGearId: string;
+  firstUsedAt: Date | null;
+  retiredAt: Date | null;
+  usageType: string | null;
+  thresholdM: number | null;
+  raw: Record<string, unknown>;
+}
+
+/** gear-service v2 row → Gear upsert input. The v2 payload's display name
+ * lives in `brand` (users nickname gear there); `name`/`model` may exist on
+ * catalog-linked gear. Retired ⇔ status === 'RETIRED'. */
+export function mapGearRow(userId: string, row: GarminGearRow): GearInput | null {
+  if (!row.uuid) return null;
+  const kind = row.gearType === 'SHOES' ? 'SHOES' : row.gearType === 'BIKE' ? 'BIKE' : 'OTHER';
+  const retiredAt = row.status === 'RETIRED' ? new Date() : null;
+  return {
+    userId,
+    name: row.brand ?? row.model ?? row.gearType ?? 'Garmin gear',
+    kind,
+    brand: row.brand ?? null,
+    model: row.model ?? null,
+    provider: 'GARMIN',
+    sourceGearId: row.uuid,
+    firstUsedAt: row.firstUseDate ? new Date(`${row.firstUseDate}T00:00:00Z`) : null,
+    retiredAt,
+    usageType: row.usageType ?? null,
+    thresholdM: row.maxUsageDistanceMeters ?? null,
+    raw: { provider: 'GARMIN', v2: row },
   };
 }

@@ -227,18 +227,62 @@ timestamp-based duplicate detection.
 
 ### `gear`
 
-Bikes / shoes / equipment, with usage mapped to activities (a classic
-Strava-community feature users ask for when leaving Strava).
+Bikes / shoes / equipment. Gear is provider-synced where the provider has
+a gear concept — **Garmin does** (gear-service v2: uuid, type, usage
+counters, ACTIVE/RETIRED, per-activity links; see `docs/garmin.md`) —
+and Stridash-managed otherwise. `provider` + `source_gear_id` are the
+dedup key for synced rows; manual gear has both null.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` (v7) PK | |
 | `user_id` | `uuid` (v7) FK → users | |
-| `name` | text | |
-| `kind` | enum | `BIKE` \| `SHOES` \| `OTHER` |
+| `name` | text | display name (Garmin's `brand` field is the nickname) |
+| `kind` | enum | `BIKE` \| `SHOES` \| `OTHER` (unknown v2 gearTypes → `OTHER`) |
 | `brand` / `model` | text nullable | |
-| `retired` | bool | |
+| `provider` | enum nullable | null = manual gear |
+| `source_gear_id` | text nullable | provider's gear id (Garmin dashed uuid) |
+| `first_used_at` | date nullable | provider-reported |
+| `retired_at` | date nullable | null = in use; synced from Garmin status |
+| `usage_type` | text nullable | `DISTANCE` \| `TIME` |
+| `threshold_m` | decimal nullable | provider-reported retirement threshold (meters) |
+| `raw` | jsonb nullable | provider payload as-received |
 | `created_at` / `updated_at` | timestamptz | |
+
+Dedup index: `uniq (user_id, provider, source_gear_id)` — Postgres treats
+NULLs as distinct, so manual gear rows never collide.
+
+#### Usage
+
+Usage is **computed, never stored**: sum of `activities.distance_m` /
+`activities.duration_s` over rows with `activities.gear_id` pointing at the
+gear (the provider's per-activity gear links fill that column at ingest,
+plus a bounded self-healing backfill for rows that predate gear sync).
+`GET /api/gear` returns it alongside the gear row.
+
+### `gear_components`
+
+Wear items mounted on a piece of gear — chains, brake pads, tires, shoe
+insoles. **No provider has a component concept** (Garmin tracks the bike,
+not its chain); components are Stridash-managed and their usage is
+computed from the parent gear's activities within the component's window.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` (v7) PK | |
+| `user_id` | `uuid` (v7) FK → users | |
+| `gear_id` | `uuid` (v7) FK → gear (cascade) | |
+| `name` | text | |
+| `kind` | enum | `CHAIN` \| `CASSETTE` \| `CHAINRING` \| `BRAKE_PADS` \| `TIRES` \| `TUBES` \| `PEDALS` \| `BATTERY` \| `OTHER` |
+| `installed_at` | date nullable | usage counts activities starting on/after; null = unknown install odometer → usage 0 |
+| `retired_at` | date nullable | null = still mounted |
+| `threshold_m` | decimal nullable | user's own replacement threshold (advisory) |
+| `notes` | text nullable | |
+| `created_at` / `updated_at` | timestamptz | |
+
+Component CRUD: `POST /api/gear/:gearId/components`,
+`PATCH /api/gear/components/:id` (retire by setting `retiredAt`),
+`DELETE /api/gear/components/:id` — all user-scoped.
 
 ### `auth_identities`
 

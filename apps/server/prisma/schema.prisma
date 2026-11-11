@@ -41,6 +41,7 @@ model User {
   activities     Activity[]
   measurements   Measurement[]
   gear           Gear[]
+  gearComponents GearComponent[]
   authIdentities AuthIdentity[]
   sleepSessions  SleepSession[]
   dailyWellness  DailyWellness[]
@@ -348,21 +349,81 @@ enum GearKind {
 }
 
 model Gear {
-  id        String   @id @db.Uuid @default(uuid(7))
-  userId    String   @db.Uuid @map("user_id")
-  name      String
-  kind      GearKind @default(OTHER)
-  brand     String?
-  model     String?
-  retired   Boolean  @default(false)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id     String   @id @default(uuid(7)) @db.Uuid
+  userId String   @map("user_id") @db.Uuid
+  name   String
+  kind   GearKind @default(OTHER)
+  brand  String?
+  model  String?
+  /// Which provider this row came from (null = added manually in Stridash).
+  /// GARMIN rows come from gear-service v2 (uuid, usageType, threshold,
+  /// firstUseDate, ACTIVE/RETIRED status) — synced at activity sync time.
+  provider     Provider?
+  /// Provider's gear id (e.g. Garmin's dashed gear uuid) — dedup key with
+  /// (userId, provider); null for manual gear
+  sourceGearId String?   @map("source_gear_id")
+  /// date the provider says the gear was first used
+  firstUsedAt  DateTime? @map("first_used_at") @db.Date
+  /// null = still in use
+  retiredAt    DateTime? @map("retired_at") @db.Date
+  /// How the provider counts usage ("DISTANCE" / "TIME")
+  usageType    String?   @map("usage_type")
+  /// Provider-reported retirement threshold (Garmin's maxUsageDistanceMeters)
+  thresholdM   Decimal?  @map("threshold_m") @db.Decimal(10, 1)
+  /// Provider payload as-received ("raw payload is the authority" policy)
+  raw          Json?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   activities Activity[]
+  components GearComponent[]
 
   @@index([userId])
+  @@unique([userId, provider, sourceGearId])
   @@map("gear")
+}
+
+/// A wear item mounted on a piece of gear (chain, brake pads, tires, shoe
+/// insoles…). Garmin has no component concept — components are managed in
+/// Stridash, and their usage is COMPUTED from the activities linked to the
+/// parent gear (activities.gear_id) that start on/after `installedAt`
+/// (docs/data-model.md "Usage" section).
+enum GearComponentKind {
+  CHAIN
+  CASSETTE
+  CHAINRING
+  BRAKE_PADS
+  TIRES
+  TUBES
+  PEDALS
+  BATTERY
+  OTHER
+}
+
+model GearComponent {
+  id     String            @id @default(uuid(7)) @db.Uuid
+  userId String            @map("user_id") @db.Uuid
+  gearId String            @map("gear_id") @db.Uuid
+  name   String
+  kind   GearComponentKind @default(OTHER)
+  /// Usage counts activities that START on/after this date; null = unknown
+  /// install odometer → usage stays 0 until the date is set
+  installedAt DateTime?   @map("installed_at") @db.Date
+  /// null = still mounted
+  retiredAt   DateTime?   @map("retired_at") @db.Date
+  /// User's own replacement threshold in meters (advisory — shown as %)
+  thresholdM  Decimal?    @map("threshold_m") @db.Decimal(10, 1)
+  notes       String?
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gear Gear @relation(fields: [gearId], references: [id], onDelete: Cascade)
+
+  @@index([gearId])
+  @@index([userId])
+  @@map("gear_components")
 }
 
 // ─── Measurements ────────────────────────────────────────────────────────────

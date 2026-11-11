@@ -24,6 +24,8 @@ erDiagram
     activities ||--o{ activity_sources : "produced by"
     activities ||--o{ activity_data_points : "sample series"
     gear |o--o{ activities : used
+    gear ||--o{ gear_components : "wears"
+    users ||--o{ gear_components : owns
 
     users {
         uuid7 id PK "UUIDv7"
@@ -118,7 +120,24 @@ erDiagram
         uuid7 user_id FK
         text name
         enum kind
-        bool retired
+        enum provider "null = manual"
+        text source_gear_id "provider dedup key"
+        date first_used_at
+        date retired_at "null = in use"
+        text usage_type
+        decimal threshold_m
+        jsonb raw "provider payload as-received"
+    }
+    gear_components {
+        uuid7 id PK "UUIDv7"
+        uuid7 user_id FK
+        uuid7 gear_id FK "cascade"
+        text name
+        enum kind "CHAIN | BRAKE_PADS | ..."
+        date installed_at "usage window start"
+        date retired_at "null = mounted"
+        decimal threshold_m
+        text notes
     }
     measurements {
         uuid7 id PK "UUIDv7"

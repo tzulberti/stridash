@@ -1108,6 +1108,246 @@ function Card({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+// ─── Gear page (/gear — provider-synced gear + wear-item components) ─────────
+
+type GearUsageJson = { distanceM: number; durationS: number; count: number };
+
+type GearComponentJson = {
+  id: string;
+  name: string;
+  kind: string;
+  installedAt: string | null;
+  retiredAt: string | null;
+  thresholdM: number | null;
+  notes: string | null;
+  usage: GearUsageJson;
+};
+
+type GearJson = {
+  id: string;
+  name: string;
+  kind: string;
+  provider: string | null;
+  sourceGearId: string | null;
+  firstUsedAt: string | null;
+  retiredAt: string | null;
+  usageType: string | null;
+  thresholdM: number | null;
+  usage: GearUsageJson;
+  components: GearComponentJson[];
+};
+
+const COMPONENT_KINDS = [
+  'CHAIN',
+  'CASSETTE',
+  'CHAINRING',
+  'BRAKE_PADS',
+  'TIRES',
+  'TUBES',
+  'PEDALS',
+  'BATTERY',
+  'OTHER',
+] as const;
+
+const km = (m: number): string =>
+  m >= 1000 ? `${(m / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })} km` : `${m} m`;
+
+function usageLine(u: GearUsageJson): string {
+  const parts = [km(u.distanceM), `${(u.durationS / 3600).toFixed(1)} h`];
+  return parts.join(' · ');
+}
+
+function GearSection(props: { token: string; onBack: () => void }) {
+  const { token, onBack } = props;
+  const [gear, setGear] = useState<GearJson[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // add-component form state, keyed by gear id
+  const [addingFor, setAddingFor] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [kind, setKind] = useState<string>('CHAIN');
+  const [installedAt, setInstalledAt] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const res = await api<{ items: GearJson[] }>('/gear', { token });
+      setGear(res.items);
+      setError(null);
+    } catch (err) {
+      setError(String(err).replace(/^Error: /, ''));
+      setGear(null);
+    }
+  }, [token]);
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  async function addComponent(gearId: string): Promise<void> {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      await api(`/gear/${gearId}/components`, {
+        method: 'POST',
+        token,
+        body: {
+          name: name.trim(),
+          kind,
+          ...(installedAt ? { installedAt } : {}),
+        },
+      });
+      setName('');
+      setInstalledAt('');
+      setAddingFor(null);
+      await reload();
+    } catch (err) {
+      setError(String(err).replace(/^Error: /, ''));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retireComponent(id: string): Promise<void> {
+    await api(`/gear/components/${id}`, {
+      method: 'PATCH',
+      token,
+      body: { retiredAt: new Date().toISOString().slice(0, 10) },
+    });
+    await reload();
+  }
+
+  async function deleteComponent(id: string): Promise<void> {
+    await api(`/gear/components/${id}`, { method: 'DELETE', token });
+    await reload();
+  }
+
+  return (
+    <section className="connections-page">
+      <button type="button" className="btn ghost small" onClick={onBack}>
+        ← dashboard
+      </button>
+      <h2>Gear</h2>
+      <p className="muted">
+        Bikes and shoes come from your provider syncs (Garmin today). Wear items like chains and
+        brake pads are managed here — usage is counted from the activities wearing that gear since
+        the install date.
+      </p>
+      {error && <p className="error">{error}</p>}
+      {gear === null && !error && <p>Loading…</p>}
+      {gear?.length === 0 && <p className="muted">no gear synced yet — run a Garmin sync</p>}
+      {gear?.map((g) => (
+        <article key={g.id} className="card gear-card">
+          <header>
+            <strong>{g.name}</strong>{' '}
+            <span className={`pill ${g.retiredAt ? 'revoked' : 'active'}`}>
+              {g.kind.toLowerCase()}
+              {g.retiredAt ? ' · retired' : ''}
+            </span>
+            {g.provider && <span className="pill">{g.provider.toLowerCase()}</span>}
+          </header>
+          <p className="muted">
+            {usageLine(g.usage)}
+            {g.thresholdM ? ` · limit ${km(g.thresholdM)}` : ''}
+            {g.firstUsedAt ? ` · first used ${g.firstUsedAt.slice(0, 10)}` : ''}
+          </p>
+          {g.components.length > 0 && (
+            <table>
+              <thead>
+                <tr>
+                  <th>component</th>
+                  <th>usage</th>
+                  <th>window</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.components.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      {c.name}{' '}
+                      <span className="muted">({c.kind.toLowerCase().replaceAll('_', ' ')})</span>
+                    </td>
+                    <td>
+                      {usageLine(c.usage)}
+                      {c.thresholdM ? ` / ${km(c.thresholdM)}` : ''}
+                    </td>
+                    <td className="muted">
+                      {c.installedAt ? `since ${c.installedAt.slice(0, 10)}` : 'no install date'}
+                      {c.retiredAt ? ` → retired ${c.retiredAt.slice(0, 10)}` : ''}
+                    </td>
+                    <td>
+                      {!c.retiredAt && (
+                        <button
+                          type="button"
+                          className="btn ghost small"
+                          onClick={() => retireComponent(c.id)}
+                        >
+                          retire
+                        </button>
+                      )}{' '}
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        onClick={() => deleteComponent(c.id)}
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {addingFor === g.id ? (
+            <div className="add-component">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="component name"
+                autoFocus
+              />
+              <select value={kind} onChange={(e) => setKind(e.target.value)}>
+                {COMPONENT_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {k.toLowerCase().replaceAll('_', ' ')}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={installedAt}
+                onChange={(e) => setInstalledAt(e.target.value)}
+                title="install date — usage counts from here"
+              />
+              <button
+                type="button"
+                className="btn small"
+                disabled={busy}
+                onClick={() => addComponent(g.id)}
+              >
+                add
+              </button>
+              <button
+                type="button"
+                className="btn ghost small"
+                onClick={() => {
+                  setAddingFor(null);
+                  setName('');
+                }}
+              >
+                cancel
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="btn ghost small" onClick={() => setAddingFor(g.id)}>
+              + add component
+            </button>
+          )}
+        </article>
+      ))}
+    </section>
+  );
+}
+
 // ─── Connections page (/connections — manage + create provider links) ────────
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -1852,6 +2092,10 @@ export default function App() {
     window.history.pushState(null, '', '/connections');
     setRoute({ name: 'connections' });
   }
+  function openGear(): void {
+    window.history.pushState(null, '', '/gear');
+    setRoute({ name: 'gear' });
+  }
 
   /** force-sync one connection; one at a time so a slow Garmin history scan
    * doesn't hammer providers in parallel. Returns what happened so the
@@ -2026,6 +2270,14 @@ export default function App() {
       <button
         className="btn ghost"
         onClick={() => {
+          openGear();
+        }}
+      >
+        gear
+      </button>
+      <button
+        className="btn ghost"
+        onClick={() => {
           clearTokens();
           setToken(null);
         }}
@@ -2048,6 +2300,17 @@ export default function App() {
           onBack={goHome}
         />
         {loading && <p>Loading…</p>}
+        {footer}
+      </main>
+    );
+  }
+
+  // the gear page is its own URL: /gear
+  if (route.name === 'gear') {
+    return (
+      <main>
+        {header}
+        <GearSection token={token ?? ''} onBack={goHome} />
         {footer}
       </main>
     );

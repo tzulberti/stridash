@@ -600,3 +600,46 @@ footer {
   font: inherit;
   font-size: 13px;
 }
+
+/* gear page — provider-synced gear + wear-item components */
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+.gear-card {
+  margin-bottom: 12px;
+}
+.gear-card table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.gear-card th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.gear-card td {
+  padding: 5px 8px 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.add-component {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.add-component input,
+.add-component select {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13px;
+}

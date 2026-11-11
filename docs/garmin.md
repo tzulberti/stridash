@@ -215,3 +215,34 @@ Sync: `services/garmin-wellness.ts` runs after every Garmin activity sync
 (separate `WELLNESS` sync_logs row). Backfill starts at the oldest stored
 dateKey (first run: 2022-01-01; Garmin answers 0 rows before the first
 device sync). Recent 45 nights always get the rich dailySleepData pass.
+
+## Gear (gear-service v2, verified live 2026-11)
+
+Garmin is the only Stridash provider with a gear concept (Zwift and
+iGPSPORT carry none in their payloads). Endpoints that answer with a DI
+bearer:
+
+- `GET /gear-service/gear/v2/list?start=0&limit=N` — the whole gear list.
+  Each row: dashed `uuid`, `gearType` (`SHOES`/`BIKE`/…), `status`
+  (`ACTIVE`/`RETIRED`), `brand` (the user's nickname — `name`/`model`
+  may also appear), `usageType` (`DISTANCE`/`TIME`),
+  `maxUsageDistanceMeters` (retirement threshold), `firstUseDate`,
+  `distanceUsedMeters` / `durationUsedSeconds` / `numActivitiesLinked`,
+  `countsByActivityType` on the detail call.
+- `GET /gear-service/gear/v2/{uuid}` — one gear with
+  `countsByActivityType`/images/collections.
+- `GET /activitylist-service/activities/{gearUuid}/gear?start&limit` —
+  which activities used the gear. **This is the per-activity mapping we
+  use**; the per-activity variant `GET /gear-service/activity/v2/{id}`
+  answers `[]` unreliably (empty even for gear-linked activities), and
+  the legacy `filterGear?activityId=` 404s.
+- `GET /gear-service/gear/stats/{uuid}` — totals (legacy, unused here —
+  the v2 list already carries usage counters).
+- `GET /gear-service/gear/user/{profilePk}/activityTypes` — default gear
+  per activity type (empty unless the user set defaults in Connect).
+
+Components (chains, brake pads, …) are NOT a Garmin concept — the
+`gear_components` table is Stridash-managed, with usage computed from the
+activities linked to the parent gear. Sync wiring lives in
+`services/garmin-sync.ts` (`syncGear` + the bounded gear backfill pass);
+mapping in `providers/garmin/normalize.ts` (`mapGearRow`).

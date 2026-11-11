@@ -398,3 +398,128 @@ describe('connections', () => {
     expect((list.items as Json[]).find((c) => c.id === zwiftConnId)?.status).toBe('REVOKED');
   });
 });
+
+// ─── Gear (provider-synced gear + Stridash-managed components) ────────────────
+
+describe('gear', () => {
+  let shoesId = '';
+  let bikeId = '';
+  let runGearId = '';
+
+  beforeAll(async () => {
+    const alice = await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } });
+    // Alice owns a synced GARMIN shoe + a manual bike; her run wears the shoe
+    const shoes = await prisma.gear.create({
+      data: {
+        userId: alice.id,
+        name: 'Kiprun Kipride Max',
+        kind: 'SHOES',
+        provider: 'GARMIN',
+        sourceGearId: 'e496727e-dc6f-46c5-89c5-c429e9e35a61',
+        firstUsedAt: new Date('2026-01-01'),
+        usageType: 'DISTANCE',
+        thresholdM: 643_738,
+        raw: { provider: 'GARMIN', v2: { uuid: 'e496727e-dc6f-46c5-89c5-c429e9e35a61' } },
+      },
+    });
+    shoesId = shoes.id;
+    const bike = await prisma.gear.create({
+      data: { userId: alice.id, name: 'Giant Contend SL', kind: 'BIKE' },
+    });
+    bikeId = bike.id;
+
+    const run = await prisma.activity.findUniqueOrThrow({ where: { id: runId } });
+    await prisma.activity.update({ where: { id: run.id }, data: { gearId: shoesId } });
+    // silent: run distance 5100 m on 2026-11-01
+    void run;
+    runGearId = shoesId;
+  });
+
+  it('lists gear with computed usage from linked activities', async () => {
+    const res = await app.request('/api/gear', authed(aliceToken));
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    const items = body.items as Json[];
+    expect(items).toHaveLength(2);
+    const shoes = items.find((g) => g.id === shoesId)!;
+    expect(shoes.provider).toBe('GARMIN');
+    expect(shoes.thresholdM).toBe(643_738);
+    expect((shoes.usage as Json).distanceM).toBe(5_100); // the run's distance
+    expect((shoes.usage as Json).count).toBe(1);
+    expect((items.find((g) => g.id === bikeId)!.usage as Json).count).toBe(0);
+  });
+
+  it('creates a component with an install date; usage stays windowed', async () => {
+    const res = await app.request(`/api/gear/${bikeId}/components`, {
+      method: 'POST',
+      ...authed(aliceToken, {
+        body: JSON.stringify({ name: 'Chain', kind: 'CHAIN', installedAt: '2026-11-10' }),
+      }),
+    });
+    expect(res.status).toBe(201);
+    const { item } = (await json(res)) as { item: Json };
+    expect(item.kind).toBe('CHAIN');
+
+    // listed on the gear with 0 usage: the run happened BEFORE the install
+    const list = await json(await app.request('/api/gear', authed(aliceToken)));
+    const bike = (list.items as Json[]).find((g) => g.id === bikeId)!;
+    const comps = bike.components as Json[];
+    expect(comps).toHaveLength(1);
+    expect((comps[0].usage as Json).distanceM).toBe(0);
+    expect(comps[0].installedAt).toBe('2026-11-10T00:00:00.000Z');
+  });
+
+  it('rejects an invalid component payload and a foreign gear id', async () => {
+    const bad = await app.request(`/api/gear/${bikeId}/components`, {
+      method: 'POST',
+      ...authed(aliceToken, { body: JSON.stringify({ name: '' }) }),
+    });
+    expect(bad.status).toBe(400);
+
+    const alice = await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } });
+    const bob = await prisma.user.findUniqueOrThrow({ where: { email: 'bob@test.stridash' } });
+    const bobGear = await prisma.gear.create({
+      data: { userId: bob.id, name: "Bob's bike", kind: 'BIKE' },
+    });
+    const foreign = await app.request(`/api/gear/${bobGear.id}/components`, {
+      method: 'POST',
+      ...authed(aliceToken, { body: JSON.stringify({ name: 'Chain' }) }),
+    });
+    expect(foreign.status).toBe(404);
+    void alice;
+  });
+
+  it('patches (retires) and deletes a component; 404s are per-user', async () => {
+    const created = (await json(
+      await app.request(`/api/gear/${bikeId}/components`, {
+        method: 'POST',
+        ...authed(aliceToken, { body: JSON.stringify({ name: 'Brake pads', kind: 'BRAKE_PADS' }) }),
+      }),
+    )) as { item: Json };
+    const id = created.item.id as string;
+
+    const patched = await app.request(`/api/gear/components/${id}`, {
+      method: 'PATCH',
+      ...authed(aliceToken, { body: JSON.stringify({ retiredAt: '2026-11-11' }) }),
+    });
+    expect(patched.status).toBe(200);
+    expect(((await json(patched)) as { item: Json }).item.retiredAt).toContain('2026-11-11');
+
+    const gone = await app.request(`/api/gear/components/${id}`, {
+      method: 'DELETE',
+      ...authed(aliceToken, { method: 'DELETE' }),
+    });
+    expect(gone.status).toBe(200);
+
+    const missing = await app.request(`/api/gear/components/${id}`, {
+      method: 'PATCH',
+      ...authed(bobToken, { body: JSON.stringify({ name: 'X' }) }),
+    });
+    expect(missing.status).toBe(404);
+  });
+
+  it('requires auth', async () => {
+    const res = await app.request('/api/gear');
+    expect(res.status).toBe(401);
+  });
+});
