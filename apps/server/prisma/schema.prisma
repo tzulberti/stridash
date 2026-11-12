@@ -45,8 +45,37 @@ model User {
   authIdentities AuthIdentity[]
   sleepSessions  SleepSession[]
   dailyWellness  DailyWellness[]
+  preferences    UserPreferences?
 
   @@map("users")
+}
+
+// ─── User preferences ────────────────────────────────────────────────────────
+
+/// One row per user with a TYPED COLUMN per setting — deliberately not a
+/// jsonb blob, so every setting has a Postgres type, a default and a home in
+/// the schema. New setting = new column + migration.
+enum PrefUnit {
+  km
+  mi
+}
+
+enum PrefTheme {
+  dark
+  light
+}
+
+model UserPreferences {
+  id     String    @id @default(uuid(7)) @db.Uuid
+  userId String    @unique @map("user_id") @db.Uuid
+  units  PrefUnit  @default(km)
+  theme  PrefTheme @default(dark)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
 }
 
 enum IdentityKind {

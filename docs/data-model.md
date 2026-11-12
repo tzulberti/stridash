@@ -297,6 +297,23 @@ Local credential (password hash) per user; structured so a future
 | `secret_hash` | text | argon2id |
 | `updated_at` | timestamptz | |
 
+### `user_preferences`
+
+One row per user, one **typed column per setting** — deliberately not a
+jsonb blob: every setting has a Postgres type, a default and a visible
+home in the schema. New setting = new column + migration. Read via
+`GET /api/me`, saved via `PATCH /api/me` (partial updates); registration
+creates the defaults and the 2026-11-12 migration backfilled existing
+users.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` (v7) PK | |
+| `user_id` | `uuid` (v7) FK → users, unique, cascade | |
+| `units` | enum | `km` (default) \| `mi` — distance/speed/pace display |
+| `theme` | enum | `dark` (default) \| `light` |
+| `created_at` / `updated_at` | timestamptz | |
+
 ## Modeling decisions worth remembering
 
 1. **Provider-agnostic core.** New sources (Withings, Polar, wahoo…) are a new

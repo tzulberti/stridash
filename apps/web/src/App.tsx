@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import type { Measurement, Activity } from '@stridash/types';
+import type { Measurement, Activity, MeResponse } from '@stridash/types';
 
 // ─── API client ──────────────────────────────────────────────────────────────
 
@@ -1357,12 +1357,6 @@ function GearSection(props: { token: string; onBack: () => void }) {
 
 // ─── Settings page (/settings — units, theme, export, delete) ────────────────
 
-type MeJson = {
-  email: string;
-  displayName: string;
-  createdAt: string;
-};
-
 function SettingsSection(props: {
   token: string;
   unit: Unit;
@@ -1373,7 +1367,7 @@ function SettingsSection(props: {
   onBack: () => void;
 }) {
   const { token, unit, onUnitChange, theme, onThemeChange, onDeleted, onBack } = props;
-  const [me, setMe] = useState<MeJson | null>(null);
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1383,7 +1377,7 @@ function SettingsSection(props: {
 
   useEffect(() => {
     let alive = true;
-    api<MeJson>('/me', { token })
+    api<MeResponse>('/me', { token })
       .then((m) => {
         if (alive) setMe(m);
       })
@@ -1394,6 +1388,21 @@ function SettingsSection(props: {
       alive = false;
     };
   }, [token]);
+
+  /** optimistic UI first (localStorage + state), then persist to
+   * user_preferences via PATCH /api/me — server is the durable copy */
+  function changeUnit(u: Unit): void {
+    onUnitChange(u);
+    api('/me', { method: 'PATCH', token, body: { units: u } }).catch((err) =>
+      setError(String(err).replace(/^Error: /, '')),
+    );
+  }
+  function changeTheme(t: 'dark' | 'light'): void {
+    onThemeChange(t);
+    api('/me', { method: 'PATCH', token, body: { theme: t } }).catch((err) =>
+      setError(String(err).replace(/^Error: /, '')),
+    );
+  }
 
   async function exportData(): Promise<void> {
     setBusy(true);
@@ -1469,18 +1478,18 @@ function SettingsSection(props: {
           <button
             type="button"
             className={`btn small ${unit === 'km' ? '' : 'ghost'}`}
-            onClick={() => onUnitChange('km')}
+            onClick={() => changeUnit('km')}
           >
             kilometers
           </button>
           <button
             type="button"
             className={`btn small ${unit === 'mi' ? '' : 'ghost'}`}
-            onClick={() => onUnitChange('mi')}
+            onClick={() => changeUnit('mi')}
           >
             miles
           </button>
-          <span className="muted">applies to distances, speeds and paces everywhere</span>
+          <span className="muted">saved to your account</span>
         </div>
       </article>
 
@@ -1490,18 +1499,18 @@ function SettingsSection(props: {
           <button
             type="button"
             className={`btn small ${theme === 'dark' ? '' : 'ghost'}`}
-            onClick={() => onThemeChange('dark')}
+            onClick={() => changeTheme('dark')}
           >
             dark
           </button>
           <button
             type="button"
             className={`btn small ${theme === 'light' ? '' : 'ghost'}`}
-            onClick={() => onThemeChange('light')}
+            onClick={() => changeTheme('light')}
           >
             light
           </button>
-          <span className="muted">saved per browser</span>
+          <span className="muted">saved to your account</span>
         </div>
       </article>
 
@@ -2146,7 +2155,9 @@ export default function App() {
   // hamburger dropdown in the header (Providers Sync / Gear / Settings / Sign out)
   const [menuOpen, setMenuOpen] = useState(false);
   // settings-owned preferences; the module-level formatter unit is kept in
-  // sync BEFORE the re-render so every fmt* call speaks the chosen unit
+  // sync BEFORE the re-render so every fmt* call speaks the chosen unit.
+  // localStorage gives the instant boot value; the server (user_preferences,
+  // one typed column per setting) wins once /me answers — account > device.
   const [unit, setUnitState] = useState<Unit>(() => {
     const stored = localStorage.getItem('stridash.units') === 'mi' ? 'mi' : 'km';
     setUnit(stored);
@@ -2158,6 +2169,24 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  // adopt the account's stored preferences after login (runs once per token;
+  // every change made in Settings also PATCHes the server, so they agree)
+  useEffect(() => {
+    if (!token) return;
+    api<MeResponse>('/me', { token })
+      .then((m) => {
+        if (m.preferences?.units) {
+          setUnit(m.preferences.units);
+          localStorage.setItem('stridash.units', m.preferences.units);
+          setUnitState(m.preferences.units);
+        }
+        if (m.preferences?.theme) {
+          localStorage.setItem('stridash.theme', m.preferences.theme);
+          setThemeState(m.preferences.theme);
+        }
+      })
+      .catch(() => undefined); // prefs are cosmetic — never block the dashboard
+  }, [token]);
   const [bodyMetric, setBodyMetric] = useState<BodyMetricKey>(BOOT_URL.body);
   const [sleepMetric, setSleepMetric] = useState<SleepMetricKey>(BOOT_URL.sleep);
   const [dailyMetric, setDailyMetric] = useState<DailyMetricKey>(BOOT_URL.daily);

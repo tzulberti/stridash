@@ -32,6 +32,24 @@ export interface AuthIdentity {
 
 export type IdentityKind = 'PASSWORD';
 
+/** Account preferences — one typed column per setting in `user_preferences`
+ * (no jsonb). A new setting is a new column, not a new json key. */
+export type PrefUnit = 'km' | 'mi';
+export type PrefTheme = 'dark' | 'light';
+
+export interface UserPreferences {
+  units: PrefUnit;
+  theme: PrefTheme;
+}
+
+/** GET /api/me response: account + the preference pair. */
+export interface MeResponse {
+  email: string;
+  displayName: string;
+  createdAt: string;
+  preferences: UserPreferences;
+}
+
 // ─── Connections (external providers) ────────────────────────────────────────
 
 /** Providers Stridash can sync from. */
@@ -189,7 +207,6 @@ export interface ActivitySource {
 }
 
 export type GearKind = 'BIKE' | 'SHOES' | 'OTHER';
-
 export interface Gear {
   id: string;
   userId: string;

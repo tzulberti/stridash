@@ -41,10 +41,51 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   routes.get('/me', async (c) => {
     const user = await prisma.user.findUnique({
       where: { id: c.get('userId') },
-      select: { email: true, displayName: true, createdAt: true },
+      select: { email: true, displayName: true, createdAt: true, preferences: true },
     });
     if (!user) return c.json({ error: 'Not found' }, 404);
-    return c.json({ ...user, createdAt: user.createdAt.toISOString() });
+    // a user without a preferences row (pre-migration edge) reads as defaults
+    const { preferences, ...account } = user;
+    return c.json({
+      ...account,
+      createdAt: user.createdAt.toISOString(),
+      preferences: { units: preferences?.units ?? 'km', theme: preferences?.theme ?? 'dark' },
+    });
+  });
+
+  /** Save account preferences — a typed column per setting on
+   * user_preferences (no jsonb). Partial updates; unknown keys are 400s. */
+  const preferencesSchema = z.object({
+    units: z.enum(['km', 'mi']).optional(),
+    theme: z.enum(['dark', 'light']).optional(),
+  });
+
+  routes.patch('/me', async (c) => {
+    const parsed = preferencesSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid body', detail: parsed.error.flatten().fieldErrors }, 400);
+    if (Object.keys(parsed.data).length === 0) return c.json({ error: 'Nothing to update' }, 400);
+
+    const userId = c.get('userId');
+    try {
+      const preferences = await prisma.userPreferences.upsert({
+        where: { userId },
+        create: { userId, ...parsed.data },
+        update: parsed.data,
+      });
+      return c.json({ preferences: { units: preferences.units, theme: preferences.theme } });
+    } catch (err) {
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'code' in err &&
+        (err as { code?: string }).code === 'P2003'
+      ) {
+        // FK violation = the user row is gone (deleted account, stale token)
+        return c.json({ error: 'Not found' }, 404);
+      }
+      throw err;
+    }
   });
 
   // ─── Account data: full export + hard delete ───────────────────────────────

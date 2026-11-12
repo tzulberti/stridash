@@ -597,3 +597,62 @@ describe('account export + delete', () => {
     expect(me.status).toBe(404);
   });
 });
+
+// ─── Account preferences (user_preferences — one typed column per setting) ───
+
+describe('account preferences', () => {
+  let email = '';
+  let token = '';
+
+  beforeAll(async () => {
+    email = `prefs-${Date.now()}@test.stridash`;
+    const reg = await app.request('/api/auth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: 'preferences-1', displayName: 'Prefs' }),
+    });
+    token = ((await json(reg)) as { accessToken: string }).accessToken;
+  });
+
+  it('creates defaults (km, dark) at registration and reads them on /me', async () => {
+    const res = await app.request('/api/me', authed(token));
+    expect(res.status).toBe(200);
+    const me = (await json(res)) as Record<string, unknown>;
+    expect(me.preferences).toEqual({ units: 'km', theme: 'dark' });
+  });
+
+  it('persists partial updates and returns the new pair', async () => {
+    const res = await app.request('/api/me', {
+      method: 'PATCH',
+      ...authed(token, { body: JSON.stringify({ units: 'mi' }) }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await json(res)) as { preferences: unknown }).preferences).toEqual({
+      units: 'mi',
+      theme: 'dark',
+    });
+    // durable: a fresh /me still sees it (it is a real row now)
+    const me = (await json(await app.request('/api/me', authed(token)))) as {
+      preferences: unknown;
+    };
+    expect(me.preferences).toEqual({ units: 'mi', theme: 'dark' });
+  });
+
+  it('rejects unknown settings keys and empty updates', async () => {
+    const bad = await app.request('/api/me', {
+      method: 'PATCH',
+      ...authed(token, { body: JSON.stringify({ timeZone: 'utc' }) }),
+    });
+    expect(bad.status).toBe(400);
+
+    const empty = await app.request('/api/me', {
+      method: 'PATCH',
+      ...authed(token, { body: JSON.stringify({}) }),
+    });
+    expect(empty.status).toBe(400);
+  });
+
+  it('requires auth', async () => {
+    expect((await app.request('/api/me', { method: 'PATCH' })).status).toBe(401);
+  });
+});

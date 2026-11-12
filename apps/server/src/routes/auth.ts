@@ -45,6 +45,8 @@ export function authRoutes(env: Env): Hono {
           authIdentities: {
             create: { kind: 'PASSWORD', secretHash: hashPassword(body.data.password) },
           },
+          // defaults (km, dark) — one row per user from birth
+          preferences: { create: {} },
         },
       });
 

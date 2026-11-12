@@ -15,6 +15,7 @@ erDiagram
     users ||--o{ activities : owns
     users ||--o{ measurements : owns
     users ||--o{ gear : owns
+    users ||--o| user_preferences : "settings (1:1)"
     users ||--o{ auth_identities : "signs in with"
 
     connections ||--o{ sync_logs : "audited by"
@@ -43,6 +44,12 @@ erDiagram
         enum kind
         text secret_hash
         timestamptz updated_at
+    }
+    user_preferences {
+        uuid7 id PK "UUIDv7"
+        uuid7 user_id FK "unique, cascade"
+        enum units "km (default) | mi"
+        enum theme "dark (default) | light"
     }
     connections {
         uuid7 id PK "UUIDv7"
