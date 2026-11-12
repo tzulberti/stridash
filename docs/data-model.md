@@ -134,7 +134,7 @@ which field.
 | `activity_id` | `uuid` (v7) FK → activities | |
 | `connection_id` | `uuid` (v7) FK → connections | |
 | `source_activity_id` | text | id at the provider |
-| `source_updated_at` | timestamptz | provider-side edit detection |
+| `source_updated_at` | timestamptz | provider-side edit timestamp — set to the provider's `lastUpdateDate` when detected (Garmin edit pass), else to ingest time |
 | PK | (`activity_id`, `connection_id`) | |
 
 ### `devices`

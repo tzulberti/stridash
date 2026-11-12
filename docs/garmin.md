@@ -277,3 +277,33 @@ null. Zwift carries no device keys in its detail payloads; iGPSPORT FITs
 carry one `device_infos` message (manufacturer "igpsport", product 301,
 serial + sw/hw version, no model-name registry). Omron weigh-ins have no
 per-measurement device.
+
+## Edit detection (activity-service detail, verified live 2026-11-12)
+
+How sync notices that an already-ingested activity changed:
+
+- **There is no updated-since listing.** The search list rows carry no
+  update timestamp at all (checked every key of the newest row), and every
+  candidate `updated-since` path 404s; the old `list-activities`
+  endpoint 403s without a web session. Changes can only be seen
+  per-activity.
+- **The detail is the change signal:** `GET /activity-service/activity/{id}`
+  answers `metadataDTO.lastUpdateDate` (e.g. `2026-11-11T11:13:12.0` — GMT,
+  1-digit fractional seconds). Its `summaryDTO` + `activityTypeDTO` also
+  carry everything needed to rebuild the list row, so an edited activity
+  can be re-ingested from the detail + a fresh FIT without re-paging the
+  list.
+- **The pass:** after the gear/device backfills, the sync polls details for
+  the 100 most recent activities (45-day window, newest first) and compares
+  `lastUpdateDate` against `activity_sources.source_updated_at` — which
+  this pass keeps equal to the provider's timestamp (on ingest it is only
+  "now", so the first pass after an ingest no-ops). An edited activity is
+  re-ingested in place: scalars + series rebuilt from the FIT (detail
+  summary as fallback), current gear→activity attribution applied
+  unconditionally (the edit is provider-confirmed — this is how a gear
+  *change* propagates, closing the fill-empty-slot gap), device filled
+  fill-empty-slot style, and `source_updated_at` set to the provider's
+  edit timestamp.
+- Deleted activities are still not detected (nothing tells us a row
+  vanished from the list); Zwift edits could ride the same pattern via its
+  detail payload's `lastSaveDate` — TODO.

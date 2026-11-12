@@ -147,19 +147,96 @@ export interface GarminActivityDevice {
   manufacturer?: string;
 }
 
-export async function getActivityDevice(
+/**
+ * Per-activity detail — also the change-detection source (verified live
+ * 2026-11-12): `metadataDTO.lastUpdateDate` ("2026-11-11T11:13:12.0", GMT)
+ * is the provider-side edit timestamp. The list rows carry NO update field
+ * and there is no updated-since listing (probed: every candidate path 404s
+ * and the old list-activities endpoint 403s without a web session), so
+ * edits are detected by polling details over a bounded recent window.
+ * `summaryDTO` + `activityTypeDTO` carry enough to rebuild the list row,
+ * so an edited activity can be re-ingested without a list re-scan.
+ */
+export interface GarminActivityDetail {
+  /// provider-side edit timestamp as-received (may be null)
+  lastUpdateDate: string | null;
+  device: GarminActivityDevice | null;
+  /// synthesized from summaryDTO/activityTypeDTO — shaped like a list row
+  row: GarminActivityRow;
+}
+
+function num(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
+
+/** Garmin DTO timestamps are "2026-11-11T10:49:26.0" — GMT, no zone suffix,
+ * 1-digit fractional seconds. Strict UTC parse (unit-tested) so edit
+ * detection compares real instants, not strings. */
+export function parseGarminTimestamp(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$/.exec(s.trim());
+  if (!m) return null;
+  const [, y, mo, d, h, mi, sec, frac] = m;
+  const Y = Number(y);
+  const MO = Number(mo);
+  const D = Number(d);
+  const H = Number(h);
+  const MI = Number(mi);
+  const S = Number(sec);
+  // reject rollover values (99h etc.) instead of letting Date.UTC wrap them
+  if (MO < 1 || MO > 12 || D < 1 || D > 31 || H > 23 || MI > 59 || S > 59) return null;
+  const ms = frac ? Math.round(Number(`0.${frac}`) * 1000) : 0;
+  return new Date(Date.UTC(Y, MO - 1, D, H, MI, S, ms));
+}
+
+/** summaryDTO/activityTypeDTO → the list-row shape fitToActivity/rowToActivity
+ * expect (unit-tested — this is what makes detail-based re-ingest possible). */
+export function detailToRow(detail: Record<string, unknown>): GarminActivityRow {
+  const s = (detail.summaryDTO ?? {}) as Record<string, unknown>;
+  const type = detail.activityTypeDTO as { typeKey?: string } | undefined;
+  const name = detail.activityName;
+  const deviceId = (detail.metadataDTO as Record<string, unknown> | undefined)
+    ?.deviceMetaDataDTO as { deviceId?: unknown } | undefined;
+  return {
+    activityId: (detail.activityId as number | string | undefined) ?? 0,
+    activityName: typeof name === 'string' ? name : undefined,
+    startTimeGMT: typeof s.startTimeGMT === 'string' ? s.startTimeGMT : undefined,
+    distance: num(s.distance),
+    duration: num(s.duration),
+    movingDuration: num(s.movingDuration),
+    averageSpeed: num(s.averageSpeed),
+    maxSpeed: num(s.maxSpeed),
+    elevationGain: num(s.elevationGain),
+    elevationLoss: num(s.elevationLoss),
+    averageHR: num(s.averageHR),
+    maxHR: num(s.maxHR),
+    averagePower: num(s.averagePower),
+    maxPower: num(s.maxPower),
+    calories: num(s.calories),
+    deviceId: typeof deviceId?.deviceId === 'number' ? deviceId.deviceId : undefined,
+    activityType: { typeKey: typeof type?.typeKey === 'string' ? type.typeKey : undefined },
+  };
+}
+
+export async function getActivityDetail(
   bearer: string,
   activityId: string,
-): Promise<GarminActivityDevice | null> {
+): Promise<GarminActivityDetail | null> {
   const { status, json } = await connectapiGet(`/activity-service/activity/${activityId}`, bearer);
   if (status !== 200 || typeof json !== 'object' || json === null) return null;
-  const meta = (json as { metadataDTO?: Record<string, unknown> }).metadataDTO;
-  const dmd = meta?.deviceMetaDataDTO as { deviceId?: unknown; deviceTypePk?: unknown } | undefined;
-  if (!dmd || dmd.deviceId === undefined || dmd.deviceId === null) return null;
+  const detail = json as Record<string, unknown>;
+  const meta = (detail.metadataDTO ?? {}) as Record<string, unknown>;
+  const dmd = meta.deviceMetaDataDTO as { deviceId?: unknown; deviceTypePk?: unknown } | undefined;
   return {
-    deviceId: String(dmd.deviceId),
-    deviceTypePk: typeof dmd.deviceTypePk === 'number' ? dmd.deviceTypePk : undefined,
-    manufacturer: typeof meta?.manufacturer === 'string' ? meta.manufacturer : undefined,
+    lastUpdateDate: typeof meta.lastUpdateDate === 'string' ? meta.lastUpdateDate : null,
+    device:
+      dmd && dmd.deviceId !== undefined && dmd.deviceId !== null
+        ? {
+            deviceId: String(dmd.deviceId),
+            deviceTypePk: typeof dmd.deviceTypePk === 'number' ? dmd.deviceTypePk : undefined,
+            manufacturer: typeof meta.manufacturer === 'string' ? meta.manufacturer : undefined,
+          }
+        : null,
+    row: detailToRow(detail),
   };
 }
 

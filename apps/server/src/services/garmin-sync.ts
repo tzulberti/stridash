@@ -16,7 +16,9 @@ import {
   listGear,
   listGearActivities,
   listDevices,
-  getActivityDevice,
+  getActivityDetail,
+  parseGarminTimestamp,
+  type GarminActivityDetail,
   type GarminActivityRow,
   type GarminGearRow,
 } from '../providers/garmin/api.js';
@@ -140,10 +142,9 @@ export async function syncGarminConnection(
       }
     }
     // Self-healing device backfill: activities ingested before devices were
-    // tracked have device_id null. The activity detail endpoint's
-    // metadataDTO.deviceMetaDataDTO names the recorder cheaply (one JSON GET,
-    // no FIT re-download); bounded per pass like the gear pass — converges
-    // over repeated syncs.
+    // tracked have device_id null. The activity detail endpoint names the
+    // recorder cheaply (one JSON GET, no FIT re-download); bounded per pass
+    // like the gear pass — converges over repeated syncs.
     {
       const missing = await prisma.activitySource.findMany({
         where: { connectionId: connection.id, activity: { deviceId: null } },
@@ -153,14 +154,16 @@ export async function syncGarminConnection(
       });
       for (const s of missing) {
         try {
-          const dev = await getActivityDevice(bearer, s.sourceActivityId);
-          if (!dev) continue; // no recorder reported (manual entries) — stays null
+          const detail = await getActivityDetail(bearer, s.sourceActivityId);
+          if (!detail?.device) continue; // no recorder reported (manual entries) — stays null
           const deviceId = await upsertDevice(connection.userId, {
             provider: 'GARMIN',
-            sourceDeviceId: dev.deviceId,
-            manufacturer: dev.manufacturer ? dev.manufacturer.toLowerCase() : null,
-            model: deviceNames.get(dev.deviceId) || null,
-            raw: dev as unknown as never,
+            sourceDeviceId: detail.device.deviceId,
+            manufacturer: detail.device.manufacturer
+              ? detail.device.manufacturer.toLowerCase()
+              : null,
+            model: deviceNames.get(detail.device.deviceId) || null,
+            raw: detail.device as unknown as never,
           });
           await prisma.activity.update({ where: { id: s.activityId }, data: { deviceId } });
           result.itemsUpdated++;
@@ -168,6 +171,51 @@ export async function syncGarminConnection(
           result.status = 'PARTIAL';
           result.failedActivities.push(`device:${s.sourceActivityId}`);
           console.error(`[garmin] device backfill for ${s.sourceActivityId} failed:`, err);
+        }
+      }
+    }
+
+    // Edit detection: Garmin offers no listing keyed by update time (list
+    // rows carry no update field; probed 2026-11-12 — every updated-since
+    // path 404s), but the activity detail carries
+    // metadataDTO.lastUpdateDate. Poll details over a bounded recent window
+    // and compare against source_updated_at (which this pass keeps equal to
+    // the provider's timestamp). An edited activity is re-ingested: scalars
+    // + series rebuilt from its FIT, and the current gear→activity map
+    // applied unconditionally (the edit is provider-confirmed, so it may
+    // override a previously-filled gear slot). Bounded: the 100 most recent
+    // activities per pass.
+    {
+      const windowStart = new Date(Date.now() - 45 * 86_400_000);
+      const recent = await prisma.activitySource.findMany({
+        where: { connectionId: connection.id, activity: { startTime: { gte: windowStart } } },
+        select: { activityId: true, sourceActivityId: true, sourceUpdatedAt: true },
+        orderBy: { activity: { startTime: 'desc' } },
+        take: 100,
+      });
+      for (const s of recent) {
+        try {
+          const detail = await getActivityDetail(bearer, s.sourceActivityId);
+          const lastUpdate = detail?.lastUpdateDate
+            ? parseGarminTimestamp(detail.lastUpdateDate)
+            : null;
+          if (!lastUpdate) continue; // nothing to compare — never re-ingest blind
+          if (s.sourceUpdatedAt && s.sourceUpdatedAt >= lastUpdate) continue; // unchanged
+          await reingestActivity(
+            bearer,
+            connection,
+            s.activityId,
+            s.sourceActivityId,
+            detail as GarminActivityDetail,
+            lastUpdate,
+            gearByActivityId,
+            deviceNames,
+          );
+          result.itemsUpdated++;
+        } catch (err) {
+          result.status = 'PARTIAL';
+          result.failedActivities.push(`edit:${s.sourceActivityId}`);
+          console.error(`[garmin] edit detection for ${s.sourceActivityId} failed:`, err);
         }
       }
     }
@@ -343,8 +391,116 @@ async function ingestActivity(
   await upsertActivity(connection, id, rowToActivity(row), null, gearId, deviceId);
 }
 
-/** One device-registration call per sync → serial → model-name map. */
-async function syncDeviceNames(
+/**
+ * Re-ingest one EDITED activity in place: scalars + series rebuilt from a
+ * fresh FIT (falling back to the detail summary when the FIT is gone),
+ * current gear/device attribution applied, and `source_updated_at` set to
+ * the provider's edit timestamp so the next pass sees no change.
+ */
+async function reingestActivity(
+  bearer: string,
+  connection: ConnectionLike,
+  activityId: string,
+  sourceActivityId: string,
+  detail: GarminActivityDetail,
+  lastUpdate: Date,
+  gearByActivityId: Map<string, string>,
+  deviceNames: Map<string, string>,
+): Promise<void> {
+  let parsed: { activity: ActivityInput; series: Series } | null = null;
+  let deviceId: string | null = null;
+  try {
+    const fit = await downloadFit(bearer, sourceActivityId);
+    const { records, session, device } = await parseFitFile(extractFitFromDownload(fit));
+    if (device) {
+      try {
+        deviceId = await upsertDevice(connection.userId, {
+          provider: 'GARMIN',
+          sourceDeviceId: device.serialNumber,
+          manufacturer: device.manufacturer,
+          model: deviceNames.get(device.serialNumber) || null,
+          productCode: device.productCode,
+          softwareVersion: device.softwareVersion,
+          hardwareVersion: device.hardwareVersion,
+          raw: device.raw,
+        });
+      } catch (err) {
+        console.error(`[garmin] device upsert failed for edit ${sourceActivityId}:`, err);
+      }
+    }
+    if (records.length) {
+      const typeKey = (detail.row.activityType?.typeKey ?? '').toLowerCase();
+      const extraIndoor =
+        /virtual|indoor|treadmill/.test(typeKey) ||
+        (typeKey === 'cycling' && !records.some((r) => r.latDeg !== undefined));
+      parsed = fitToActivity(detail.row, records, { indoor: extraIndoor, session });
+    }
+  } catch (err) {
+    // FIT gone/unparseable — the detail summary still updates the scalars
+    console.error(`[garmin] FIT re-download failed for edit ${sourceActivityId}:`, err);
+  }
+
+  const input = parsed?.activity ?? rowToActivity(detail.row);
+  // the activity was EDITED at the provider: their values win, including
+  // gear attribution (only when the gear map still lists this activity)
+  const gearId = gearByActivityId.get(sourceActivityId) ?? null;
+  const deviceFill = deviceId ? { deviceId } : {};
+  const gearFill = gearId ? { gearId } : {};
+  await prisma.$transaction(async (tx) => {
+    await tx.activity.update({
+      where: { id: activityId },
+      data: {
+        headline: input.headline,
+        type: input.type,
+        durationS: input.durationS,
+        movingTimeS: input.movingTimeS,
+        distanceM: input.distanceM ?? null,
+        avgSpeedMs: input.avgSpeedMs ?? null,
+        maxSpeedMs: input.maxSpeedMs ?? null,
+        totalAscentM: input.totalAscentM ?? null,
+        totalDescentM: input.totalDescentM ?? null,
+        elevationHighM: input.elevationHighM ?? null,
+        elevationLowM: input.elevationLowM ?? null,
+        avgHr: input.avgHr,
+        maxHr: input.maxHr,
+        avgPowerW: input.avgPowerW,
+        maxPowerW: input.maxPowerW,
+        avgCadence: input.avgCadence,
+        maxCadence: input.maxCadence,
+        trainingLoad: input.trainingLoad ?? null,
+        caloriesKcal: input.caloriesKcal,
+        indoor: input.indoor,
+        hrZonesMin: (input.hrZonesMin as unknown as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+        raw: input.raw as unknown as Prisma.InputJsonValue,
+        ...deviceFill,
+        ...gearFill,
+      },
+    });
+    if (parsed?.series) {
+      await tx.activityDataPoint.upsert({
+        where: { activityId_provider: { activityId, provider: 'GARMIN' } },
+        create: {
+          activityId,
+          provider: 'GARMIN',
+          sampleCount: parsed.series.timeMs.length,
+          series: parsed.series as unknown as Prisma.InputJsonValue,
+        },
+        update: {
+          sampleCount: parsed.series.timeMs.length,
+          series: parsed.series as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
+    // store the provider's edit timestamp — the "unchanged?" comparison
+    // for every future pass (this is what the column was designed for)
+    await tx.activitySource.update({
+      where: { activityId_connectionId: { activityId, connectionId: connection.id } },
+      data: { sourceUpdatedAt: lastUpdate },
+    });
+  });
+}
+
+/** One device-registration call per sync → serial → model-name map. */ async function syncDeviceNames(
   bearer: string,
   result: { status: 'OK' | 'PARTIAL' | 'ERROR'; failedActivities: string[] },
 ): Promise<Map<string, string>> {
