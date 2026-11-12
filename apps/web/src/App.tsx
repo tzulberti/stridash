@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import type { Measurement, Activity, MeResponse } from '@stridash/types';
+import type { Measurement, Activity, MeResponse, Device } from '@stridash/types';
 
 // ─── API client ──────────────────────────────────────────────────────────────
 
@@ -712,7 +712,8 @@ function ActivityDetail({
   preview: Activity | null;
   onBack: () => void;
 }) {
-  const [act, setAct] = useState<Activity | null>(preview);
+  /** detail row = list activity + the recording device (from /activities/:id) */
+  const [act, setAct] = useState<(Activity & { device?: Device | null }) | null>(preview);
   const [rows, setRows] = useState<ActivitySeriesRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** shared X axis for the stream charts: elapsed time (default) or distance */
@@ -734,9 +735,12 @@ function ActivityDetail({
     setRows(null);
     setError(null);
     setAct(preview);
-    api<{ items: Array<Activity & { series: ActivitySeriesRow[] }> }>(`/activities/${id}`, {
-      token,
-    })
+    api<{ items: Array<Activity & { device?: Device | null; series: ActivitySeriesRow[] }> }>(
+      `/activities/${id}`,
+      {
+        token,
+      },
+    )
       .then((r) => {
         if (!alive) return;
         const item = r.items[0];
@@ -959,6 +963,15 @@ function ActivityDetail({
           <Card label="Training load" value={String(act.trainingLoad)} />
         ) : null}
         {act.indoor ? <Card label="Mode" value="indoor" /> : null}
+        {(() => {
+          const d = act.device;
+          if (!d) return null;
+          const name =
+            d.model ??
+            (d.manufacturer ? d.manufacturer[0]!.toUpperCase() + d.manufacturer.slice(1) : null);
+          if (!name) return null;
+          return <Card label="Device" value={name} />;
+        })()}
       </div>
       {error && <p className="error">{error}</p>}
 

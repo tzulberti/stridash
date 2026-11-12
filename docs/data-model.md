@@ -109,6 +109,7 @@ don't map get parked in `raw` for later backfill.
 | `training_load` | int nullable | source-reported TSS-like load; semantics vary by provider — `raw` is the authority |
 | `indoor` | bool | Zwift/trainer rides are flagged here |
 | `gear_id` | `uuid` (v7) FK → gear nullable | |
+| `device_id` | `uuid` (v7) FK → devices nullable | the recorder (watch / head unit); null for Zwift/Omron and not-yet-backfilled rows |
 | `notes` | text | edited in Stridash only (never pushed back) |
 | `raw` | jsonb | original provider payload |
 | `created_at` / `updated_at` | timestamptz | |
@@ -135,6 +136,35 @@ which field.
 | `source_activity_id` | text | id at the provider |
 | `source_updated_at` | timestamptz | provider-side edit detection |
 | PK | (`activity_id`, `connection_id`) | |
+
+### `devices`
+
+The physical hardware that **records** activities — watches (Garmin) and
+cycling head units (iGPSPORT). One row per `(user_id, provider,
+source_device_id)`; the source id is the FIT device message's serial
+number. Activities link to their recorder via `activities.device_id`
+(nullable — Zwift and Omron report no per-activity device, and activities
+ingested before this table existed are backfilled by bounded sync passes).
+
+The FIT `device_infos` array carries every sensor too (GPS chip,
+accelerometer, sensor hub, HR straps…); only the **recorder** becomes a
+row — the message with `device_index: "creator"` (Garmin) or the lone
+serial-carrying non-sensor message (iGPSPORT). Sensor messages stay in the
+FIT itself and are not stored.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` (v7) PK | |
+| `user_id` | `uuid` (v7) FK → users, cascade | |
+| `provider` | enum | `GARMIN` \| `IGPSPORT` (so far) |
+| `source_device_id` | text | FIT serial number — dedup key component |
+| `manufacturer` | text nullable | `"garmin"` / `"igpsport"` as-received |
+| `model` | text nullable | friendly name ("Forerunner 955 Solar") — resolved from Garmin's device-registration list (`deviceId` = the FIT serial); iGPSPORT has no device registry |
+| `product_code` | int nullable | FIT product code (Garmin 4024 → FR955 Solar; iGPSPORT 301 = iGS head unit) |
+| `software_version` | text nullable | latest firmware seen on any activity |
+| `hardware_version` | text nullable | iGPSPORT reports it; Garmin sensors do |
+| `raw` | jsonb nullable | the FIT device message / provider payload as-received |
+| `created_at` / `updated_at` | timestamptz | |
 
 ### `activity_data_points`
 

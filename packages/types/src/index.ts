@@ -158,6 +158,24 @@ export interface Activity {
   createdAt: string;
 }
 
+/** Recording device — the physical hardware that produced activities
+ * (Garmin watch, iGPSPORT head unit). `sourceDeviceId` is the FIT device
+ * message's serial; `model` is the friendly name when the provider resolves
+ * it ("Forerunner 955 Solar"). Zwift/Omron report no per-activity device. */
+export interface Device {
+  id: string;
+  provider: Provider;
+  sourceDeviceId: string;
+  manufacturer: string | null;
+  model: string | null;
+  productCode: number | null;
+  softwareVersion: string | null;
+  hardwareVersion: string | null;
+  /** the FIT device message / provider payload as-received */
+  raw?: unknown;
+  createdAt: string;
+}
+
 /**
  * A named numeric series array. Only the keys the provider delivered are
  * present; unrelated streams are absent (not null-filled).

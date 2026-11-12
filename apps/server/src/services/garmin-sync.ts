@@ -15,6 +15,8 @@ import {
   downloadFit,
   listGear,
   listGearActivities,
+  listDevices,
+  getActivityDevice,
   type GarminActivityRow,
   type GarminGearRow,
 } from '../providers/garmin/api.js';
@@ -26,6 +28,7 @@ import {
 } from '../providers/garmin/normalize.js';
 import { extractFitFromDownload } from '../providers/garmin/fitzip.js';
 import { parseFitFile } from '../providers/igpsport/fit.js';
+import { upsertDevice } from './devices.js';
 import type { FitRecord, FitSession } from '../providers/igpsport/normalize.js';
 import type { ActivityInput } from '../providers/garmin/normalize.js';
 import {
@@ -72,6 +75,11 @@ export async function syncGarminConnection(
     // was used in. Failures here degrade to PARTIAL — activities still sync.
     const gearByActivityId = await syncGear(bearer, connection.userId, result);
 
+    // Device model names come from the registration endpoint (deviceId ==
+    // the FIT device message's serial). One call per sync; failure only
+    // costs the friendly name, never the device row itself.
+    const deviceNames = await syncDeviceNames(bearer, result);
+
     // Garmin pages of 20; a years-deep account needs a few thousand rows of
     // headroom (each page costs ~1 list request; FIT downloads only happen for
     // fresh ids, so rerun sweeps re-paging the list are cheap thanks to dedup)
@@ -93,7 +101,13 @@ export async function syncGarminConnection(
         const id = String(row.activityId);
         if (knownIds.has(id)) continue;
         try {
-          await ingestActivity(bearer, connection, row, gearByActivityId.get(id) ?? null);
+          await ingestActivity(
+            bearer,
+            connection,
+            row,
+            gearByActivityId.get(id) ?? null,
+            deviceNames,
+          );
           result.itemsCreated++;
         } catch (err) {
           result.status = 'PARTIAL';
@@ -123,6 +137,38 @@ export async function syncGarminConnection(
         if (!gearId) continue;
         await prisma.activity.update({ where: { id: s.activityId }, data: { gearId } });
         result.itemsUpdated++;
+      }
+    }
+    // Self-healing device backfill: activities ingested before devices were
+    // tracked have device_id null. The activity detail endpoint's
+    // metadataDTO.deviceMetaDataDTO names the recorder cheaply (one JSON GET,
+    // no FIT re-download); bounded per pass like the gear pass — converges
+    // over repeated syncs.
+    {
+      const missing = await prisma.activitySource.findMany({
+        where: { connectionId: connection.id, activity: { deviceId: null } },
+        select: { activityId: true, sourceActivityId: true },
+        take: 50,
+        orderBy: { activity: { startTime: 'desc' } },
+      });
+      for (const s of missing) {
+        try {
+          const dev = await getActivityDevice(bearer, s.sourceActivityId);
+          if (!dev) continue; // no recorder reported (manual entries) — stays null
+          const deviceId = await upsertDevice(connection.userId, {
+            provider: 'GARMIN',
+            sourceDeviceId: dev.deviceId,
+            manufacturer: dev.manufacturer ? dev.manufacturer.toLowerCase() : null,
+            model: deviceNames.get(dev.deviceId) || null,
+            raw: dev as unknown as never,
+          });
+          await prisma.activity.update({ where: { id: s.activityId }, data: { deviceId } });
+          result.itemsUpdated++;
+        } catch (err) {
+          result.status = 'PARTIAL';
+          result.failedActivities.push(`device:${s.sourceActivityId}`);
+          console.error(`[garmin] device backfill for ${s.sourceActivityId} failed:`, err);
+        }
       }
     }
   } catch (err) {
@@ -236,14 +282,16 @@ async function ingestActivity(
   connection: ConnectionLike,
   row: GarminActivityRow,
   gearId: string | null,
+  deviceNames: Map<string, string>,
 ): Promise<void> {
   const id = String(row.activityId);
 
   let records: FitRecord[] = [];
   let session: FitSession | null = null;
+  let device: Awaited<ReturnType<typeof parseFitFile>>['device'] = null;
   try {
     const fit = await downloadFit(bearer, id);
-    ({ records, session } = await parseFitFile(extractFitFromDownload(fit)));
+    ({ records, session, device } = await parseFitFile(extractFitFromDownload(fit)));
   } catch (err) {
     // NOTE: surfaces in sync logs as PARTIAL for that id — never fatal
     console.error(`[garmin] FIT unavailable/failed for activity ${id} — using list summary`, err);
@@ -251,6 +299,27 @@ async function ingestActivity(
 
   if (records.length === 0) {
     console.warn(`[garmin] activity ${id} ingested WITHOUT a series (FIT empty/unparsed)`);
+  }
+
+  // the FIT's creator device_info message = the recording watch; the model
+  // name resolves through the registration list (serial → display name)
+  let deviceId: string | null = null;
+  if (device) {
+    try {
+      deviceId = await upsertDevice(connection.userId, {
+        provider: 'GARMIN',
+        sourceDeviceId: device.serialNumber,
+        manufacturer: device.manufacturer,
+        model: deviceNames.get(device.serialNumber) || null,
+        productCode: device.productCode,
+        softwareVersion: device.softwareVersion,
+        hardwareVersion: device.hardwareVersion,
+        raw: device.raw,
+      });
+    } catch (err) {
+      // device attribution is metadata — never fail the activity ingest
+      console.error(`[garmin] device upsert failed for activity ${id}:`, err);
+    }
   }
 
   const typeKey = (row.activityType?.typeKey ?? '').toLowerCase();
@@ -262,7 +331,7 @@ async function ingestActivity(
     ? fitToActivity(row, records, { indoor: extraIndoor, session })
     : null;
   if (parsed) {
-    await upsertActivity(connection, id, parsed.activity, parsed.series, gearId);
+    await upsertActivity(connection, id, parsed.activity, parsed.series, gearId, deviceId);
     return;
   }
   if (!row.startTimeGMT) {
@@ -271,7 +340,26 @@ async function ingestActivity(
       `Garmin activity ${id} has neither FIT data nor a start time`,
     );
   }
-  await upsertActivity(connection, id, rowToActivity(row), null, gearId);
+  await upsertActivity(connection, id, rowToActivity(row), null, gearId, deviceId);
+}
+
+/** One device-registration call per sync → serial → model-name map. */
+async function syncDeviceNames(
+  bearer: string,
+  result: { status: 'OK' | 'PARTIAL' | 'ERROR'; failedActivities: string[] },
+): Promise<Map<string, string>> {
+  try {
+    return new Map(
+      (await listDevices(bearer))
+        .filter((d) => d.productDisplayName)
+        .map((d) => [String(d.deviceId), d.productDisplayName as string]),
+    );
+  } catch (err) {
+    result.status = 'PARTIAL';
+    result.failedActivities.push('devices:list');
+    console.error('[garmin] device registration list failed:', err);
+    return new Map();
+  }
 }
 
 async function upsertActivity(
@@ -280,6 +368,7 @@ async function upsertActivity(
   activity: ActivityInput,
   series: Series | null,
   gearId: string | null,
+  deviceId: string | null = null,
 ): Promise<void> {
   const dup = await prisma.activity.findFirst({
     where: {
@@ -288,14 +377,17 @@ async function upsertActivity(
       type: activity.type,
       distanceM: activity.distanceM ?? undefined,
     },
-    select: { id: true, gearId: true },
+    select: { id: true, gearId: true, deviceId: true },
   });
 
   if (dup) {
-    // the provider's gear attribution fills an empty slot — never overrides
-    // a value another provider (or the user) already set
-    if (gearId && !dup.gearId) {
-      await prisma.activity.update({ where: { id: dup.id }, data: { gearId } });
+    // provider-sourced fills fill empty slots — never override a value
+    // another provider (or the user) already set
+    const fill: { gearId?: string; deviceId?: string } = {};
+    if (gearId && !dup.gearId) fill.gearId = gearId;
+    if (deviceId && !dup.deviceId) fill.deviceId = deviceId;
+    if (Object.keys(fill).length > 0) {
+      await prisma.activity.update({ where: { id: dup.id }, data: fill });
     }
     await prisma.activitySource.upsert({
       where: { activityId_connectionId: { activityId: dup.id, connectionId: connection.id } },
@@ -312,7 +404,7 @@ async function upsertActivity(
 
   await prisma.$transaction(async (tx) => {
     const created = await tx.activity.create({
-      data: { ...toActivityCreate(connection.userId, activity), gearId },
+      data: { ...toActivityCreate(connection.userId, activity, deviceId), gearId },
     });
 
     await tx.activitySource.upsert({
@@ -344,7 +436,7 @@ async function upsertActivity(
   });
 }
 
-function toActivityCreate(userId: string, input: ActivityInput) {
+function toActivityCreate(userId: string, input: ActivityInput, deviceId: string | null = null) {
   return {
     userId,
     headline: input.headline,
@@ -368,6 +460,7 @@ function toActivityCreate(userId: string, input: ActivityInput) {
     trainingLoad: input.trainingLoad ?? null,
     caloriesKcal: input.caloriesKcal,
     indoor: input.indoor,
+    deviceId,
     hrZonesMin: (input.hrZonesMin as unknown as Prisma.InputJsonValue) ?? Prisma.JsonNull,
     raw: input.raw as unknown as Prisma.InputJsonValue,
   };

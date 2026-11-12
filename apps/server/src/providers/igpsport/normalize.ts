@@ -65,6 +65,22 @@ export interface FitSession {
   hrZonesMin?: number[];
 }
 
+/** The device that RECORDED the file (FIT device_info message). Sensors
+ * (HR straps, GPS chips, accelerometers) are deliberately not this — only
+ * the recorder lands in the `devices` table. */
+export interface FitDevice {
+  /// "garmin" / "igpsport" — FIT manufacturer enum as-received
+  manufacturer: string | null;
+  /// FIT product code, provider-specific vocabulary (e.g. Garmin 4024)
+  productCode: number | null;
+  /// serial number as string — the dedup key vs other devices
+  serialNumber: string;
+  softwareVersion: string | null;
+  hardwareVersion: string | null;
+  /// the full device_info message as-received (raw payload is the authority)
+  raw: Record<string, unknown>;
+}
+
 /** exerciseType → ActivityType. 0 = cycling (mapping per protocol observation). */
 export function exerciseTypeToActivity(type: number | undefined): ActivityType {
   switch (type) {

@@ -110,6 +110,59 @@ export async function listGearActivities(
     .map((r) => ({ activityId: r.activityId as number | string }));
 }
 
+/** The user's registered devices (watches, sensors, scales) from the
+ * device-registration endpoint. Verified live 2026-11-12:
+ * `deviceId` is the numeric serial that matches the FIT device message's
+ * `serial_number`, and `productDisplayName` is the friendly model name
+ * ("Forerunner 955 Solar"). */
+export interface GarminDeviceRow {
+  deviceId: number | string;
+  productDisplayName?: string;
+  deviceTypePk?: number;
+  partNumber?: string;
+}
+
+export async function listDevices(bearer: string): Promise<GarminDeviceRow[]> {
+  const { json } = await connectapiGet('/device-service/deviceregistration/devices', bearer);
+  if (!Array.isArray(json)) return [];
+  return (json as Record<string, unknown>[])
+    .filter((r) => r && r.deviceId !== undefined)
+    .map((r) => ({
+      deviceId: r.deviceId as number | string,
+      productDisplayName:
+        typeof r.productDisplayName === 'string' ? r.productDisplayName : undefined,
+      deviceTypePk: typeof r.deviceTypePk === 'number' ? r.deviceTypePk : undefined,
+      partNumber: typeof r.partNumber === 'string' ? r.partNumber : undefined,
+    }));
+}
+
+/** The recording device for one activity, from the activity detail's
+ * metadataDTO (verified live 2026-11-12: `deviceMetaDataDTO.deviceId` is the
+ * numeric serial matching the device-registration rows and the FIT creator
+ * message; `manufacturer` is an upper-case enum like "GARMIN"). null when
+ * the activity reports no recorder (manual entries). */
+export interface GarminActivityDevice {
+  deviceId: string;
+  deviceTypePk?: number;
+  manufacturer?: string;
+}
+
+export async function getActivityDevice(
+  bearer: string,
+  activityId: string,
+): Promise<GarminActivityDevice | null> {
+  const { status, json } = await connectapiGet(`/activity-service/activity/${activityId}`, bearer);
+  if (status !== 200 || typeof json !== 'object' || json === null) return null;
+  const meta = (json as { metadataDTO?: Record<string, unknown> }).metadataDTO;
+  const dmd = meta?.deviceMetaDataDTO as { deviceId?: unknown; deviceTypePk?: unknown } | undefined;
+  if (!dmd || dmd.deviceId === undefined || dmd.deviceId === null) return null;
+  return {
+    deviceId: String(dmd.deviceId),
+    deviceTypePk: typeof dmd.deviceTypePk === 'number' ? dmd.deviceTypePk : undefined,
+    manufacturer: typeof meta?.manufacturer === 'string' ? meta.manufacturer : undefined,
+  };
+}
+
 export async function downloadFit(bearer: string, activityId: string): Promise<Buffer> {
   const res = await fetch(`${CONNECTAPI_BASE}${FIT_PATH}/${activityId}`, {
     headers: {

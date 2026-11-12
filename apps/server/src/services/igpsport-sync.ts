@@ -20,7 +20,8 @@ import {
   type FitRecord,
   fitToActivity,
 } from '../providers/igpsport/normalize.js';
-import { parseFitSeries } from '../providers/igpsport/fit.js';
+import { parseFitFile } from '../providers/igpsport/fit.js';
+import { upsertDevice } from './devices.js';
 import type { Env } from '../env.js';
 
 interface ConnectionLike {
@@ -192,6 +193,41 @@ export async function syncIgpSportConnection(
         stalePageStreak = 0;
       }
     }
+
+    // Self-healing device backfill: rides ingested before devices were
+    // tracked have device_id null. iGPSPORT exposes no per-ride device
+    // endpoint, so this re-downloads the FIT (bounded per pass — converges
+    // over repeated syncs, same pattern as the Garmin pass).
+    {
+      const missing = await prisma.activitySource.findMany({
+        where: { connectionId: connection.id, activity: { deviceId: null } },
+        select: { activityId: true, sourceActivityId: true },
+        take: 50,
+        orderBy: { activity: { startTime: 'desc' } },
+      });
+      for (const s of missing) {
+        try {
+          const fitBuf = await client.downloadFit(s.sourceActivityId);
+          const parsed = await parseFitFile(fitBuf);
+          if (!parsed.device) continue; // FIT reports no recorder
+          const deviceId = await upsertDevice(connection.userId, {
+            provider: 'IGPSPORT',
+            sourceDeviceId: parsed.device.serialNumber,
+            manufacturer: parsed.device.manufacturer,
+            productCode: parsed.device.productCode,
+            softwareVersion: parsed.device.softwareVersion,
+            hardwareVersion: parsed.device.hardwareVersion,
+            raw: parsed.device.raw,
+          });
+          await prisma.activity.update({ where: { id: s.activityId }, data: { deviceId } });
+          result.itemsUpdated++;
+        } catch (err) {
+          result.status = 'PARTIAL';
+          result.failedRides.push(`device:${s.sourceActivityId}`);
+          console.error(`[igpsport] device backfill for ${s.sourceActivityId} failed:`, err);
+        }
+      }
+    }
   } catch (err) {
     const detail =
       err instanceof IgpSportError
@@ -240,15 +276,36 @@ async function ingestRide(
 
   if (fitBuf) {
     let records: FitRecord[] = [];
+    let deviceId: string | null = null;
     try {
-      records = await parseFitSeries(fitBuf);
+      const parsed = await parseFitFile(fitBuf);
+      records = parsed.records;
+      // the FIT's single device_info message = the head unit that recorded
+      // the ride; iGPSPORT offers no device registry, so no model name
+      if (parsed.device) {
+        try {
+          deviceId = await upsertDevice(connection.userId, {
+            provider: 'IGPSPORT',
+            sourceDeviceId: parsed.device.serialNumber,
+            manufacturer: parsed.device.manufacturer,
+            productCode: parsed.device.productCode,
+            softwareVersion: parsed.device.softwareVersion,
+            hardwareVersion: parsed.device.hardwareVersion,
+            raw: parsed.device.raw,
+          });
+        } catch (err) {
+          // device attribution is metadata — never fail the ride ingest
+          console.error(`[igpsport] device upsert failed for ride ${rideId}:`, err);
+        }
+      }
     } catch (err) {
       console.error(`[igpsport] FIT parse failed for ride ${rideId} — using row summary`, err);
     }
     if (records.length) {
       const rowIndoor = (row as Record<string, unknown>).indoor === 1;
       const parsed = fitToActivity(row, records, { indoor: rowIndoor });
-      if (parsed) await upsertActivity(connection, rideId, parsed.activity, parsed.series);
+      if (parsed)
+        await upsertActivity(connection, rideId, parsed.activity, parsed.series, deviceId);
       return;
     }
   }
@@ -283,7 +340,7 @@ async function ingestRide(
     indoor: false,
     raw: { provider: 'IGPSPORT', sourceRow: row, approximateStartTime: true },
   };
-  await upsertActivity(connection, rideId, activity, null);
+  await upsertActivity(connection, rideId, activity, null, null);
 }
 
 interface StreamArray {
@@ -303,6 +360,7 @@ async function upsertActivity(
   rideId: string,
   activity: ActivityInput,
   series: StreamArray | null,
+  deviceId: string | null = null,
 ): Promise<void> {
   const dup = await prisma.activity.findFirst({
     where: {
@@ -311,11 +369,15 @@ async function upsertActivity(
       type: activity.type,
       distanceM: activity.distanceM ?? undefined,
     },
-    select: { id: true },
+    select: { id: true, deviceId: true },
   });
 
   if (dup) {
-    // another provider already stored this ride — just register provenance
+    // another provider already stored this ride — register provenance and
+    // fill the recording-device slot if nobody else claimed it
+    if (deviceId && !dup.deviceId) {
+      await prisma.activity.update({ where: { id: dup.id }, data: { deviceId } });
+    }
     await prisma.activitySource.upsert({
       where: {
         activityId_connectionId: { activityId: dup.id, connectionId: connection.id },
@@ -333,7 +395,7 @@ async function upsertActivity(
 
   await prisma.$transaction(async (tx) => {
     const created = await tx.activity.create({
-      data: toActivityCreate(connection.userId, connection.id, activity),
+      data: { ...toActivityCreate(connection.userId, connection.id, activity), deviceId },
     });
 
     await tx.activitySource.upsert({

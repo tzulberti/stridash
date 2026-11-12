@@ -246,3 +246,34 @@ Components (chains, brake pads, …) are NOT a Garmin concept — the
 activities linked to the parent gear. Sync wiring lives in
 `services/garmin-sync.ts` (`syncGear` + the bounded gear backfill pass);
 mapping in `providers/garmin/normalize.ts` (`mapGearRow`).
+
+## Devices (device-service + activity detail, verified live 2026-11-12)
+
+Garmin reports the recording device two ways, and both agree:
+
+- **FIT device message** (per activity): the decoded FIT's `device_infos`
+  array carries 14+ messages on a typical run — the watch plus sensors
+  (GPS chip, accelerometer, sensor hub, HR straps). The recorder is the
+  message with `device_index: "creator"`: `manufacturer: "garmin"`,
+  numeric `product` (4024 = Forerunner 955 Solar), `serial_number`
+  (3422639741, numeric — always stringified), `software_version` (29.05).
+- **Activity detail** `GET /activity-service/activity/{id}`:
+  `metadataDTO.manufacturer` ("GARMIN") +
+  `metadataDTO.deviceMetaDataDTO` = `{ deviceId: "3422639741",
+  deviceTypePk: 37016, deviceVersionPk: 1016639 }`. The `deviceId` here
+  IS the FIT serial — cheap JSON backfill path, no FIT re-download.
+- **Device registration list** `GET
+  /device-service/deviceregistration/devices` — the user's devices with
+  `deviceId` (= FIT serial), `productDisplayName` ("Forerunner 955
+  Solar", "HRM 600", "Index™ S2 Smart Scale"), `deviceTypePk`,
+  `partNumber` (`006-B4024-00` — the FIT product code is embedded after
+  the `B`), `serialNumber` (the human-readable serial). One call per sync
+  builds the serial → model-name map used to fill `devices.model`.
+
+Wiring: fresh ingests read the FIT creator message; the self-healing
+backfill pass (50 activities per sync, newest first) uses the activity
+detail endpoint and only links activities whose `device_id` is still
+null. Zwift carries no device keys in its detail payloads; iGPSPORT FITs
+carry one `device_infos` message (manufacturer "igpsport", product 301,
+serial + sw/hw version, no model-name registry). Omron weigh-ins have no
+per-measurement device.

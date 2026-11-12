@@ -4,7 +4,7 @@
  * to our stream types.
  */
 
-import type { FitRecord, FitSession } from './normalize.js';
+import type { FitDevice, FitRecord, FitSession } from './normalize.js';
 
 // CJS module: load through interop
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -31,7 +31,7 @@ export async function parseFitSeries(buf: Buffer): Promise<FitRecord[]> {
 /** Full parse: per-sample records + session summaries + HR-zone minutes. */
 export async function parseFitFile(
   buf: Buffer,
-): Promise<{ records: FitRecord[]; session: FitSession | null }> {
+): Promise<{ records: FitRecord[]; session: FitSession | null; device: FitDevice | null }> {
   const parser = new FitParser({
     force: true, // tolerate invalid checksums (some iGPSPORT files glitch)
     speedUnit: 'm/s',
@@ -40,7 +40,11 @@ export async function parseFitFile(
     positionUnit: 'deg',
   });
 
-  return new Promise<{ records: FitRecord[]; session: FitSession | null }>((resolve, reject) => {
+  return new Promise<{
+    records: FitRecord[];
+    session: FitSession | null;
+    device: FitDevice | null;
+  }>((resolve, reject) => {
     parser.parse(buf, (err: unknown, data: any) => {
       if (err) {
         reject(new Error(`FIT parse failed: ${err instanceof Error ? err.message : String(err)}`));
@@ -93,9 +97,76 @@ export async function parseFitFile(
           staminaPct: typeof m.stamina === 'number' ? m.stamina : undefined,
         });
       }
-      resolve({ records: out, session: extractSession(data) });
+      resolve({
+        records: out,
+        session: extractSession(data),
+        device: extractFitDevice(data?.device_infos),
+      });
     });
   });
+}
+
+/**
+ * Pick the device that RECORDED the file out of a decoded FIT's
+ * `device_infos` array. Garmin files carry 14+ messages (the watch, GPS
+ * chip, accelerometer, sensor hub, HR straps…); the recorder is the one
+ * with `device_index: "creator"`. iGPSPORT files carry a single message
+ * with no device_index at all — fall back to the first entry that has a
+ * serial + manufacturer and isn't a sensor (gps/accelerometer/…).
+ */
+export function extractFitDevice(deviceInfos: unknown): FitDevice | null {
+  const list = Array.isArray(deviceInfos) ? deviceInfos : [];
+  const messages = list.filter(
+    (m): m is Record<string, unknown> => typeof m === 'object' && m !== null,
+  );
+  const SENSOR_TYPES = new Set([
+    'gps',
+    'accelerometer',
+    'sensor_hub',
+    'hr',
+    'power',
+    'shoe',
+    'radar',
+    'camera',
+    'bike_light',
+    'nerve',
+  ]);
+  const serialOf = (m: Record<string, unknown>): string | null => {
+    const s = m.serial_number;
+    return (typeof s === 'number' && Number.isFinite(s)) || typeof s === 'string'
+      ? String(s)
+      : null;
+  };
+  const pick = (m: Record<string, unknown> | undefined): FitDevice | null => {
+    const serial = m ? serialOf(m) : null;
+    if (!m || !serial) return null;
+    return {
+      manufacturer: typeof m.manufacturer === 'string' ? m.manufacturer : null,
+      productCode: typeof m.product === 'number' && Number.isFinite(m.product) ? m.product : null,
+      serialNumber: serial,
+      softwareVersion:
+        m.software_version === undefined || m.software_version === null
+          ? null
+          : String(m.software_version),
+      hardwareVersion:
+        m.hardware_version === undefined || m.hardware_version === null
+          ? null
+          : String(m.hardware_version),
+      raw: m,
+    };
+  };
+  const creator = messages.find((m) => m.device_index === 'creator');
+  if (creator) return pick(creator);
+  const recorder = messages.find((m) => {
+    if (!serialOf(m)) return false;
+    const t = m.device_type;
+    // numeric 0 = not a sensor (iGPSPORT's single recorder message); known
+    // sensor names are skipped outright
+    if (typeof t === 'number') return t === 0;
+    if (typeof t === 'string') return !SENSOR_TYPES.has(t);
+    return true;
+  });
+  return pick(recorder);
 }
 
 /** Session/user summaries + source-reported HR-zone minutes. */

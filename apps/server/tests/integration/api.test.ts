@@ -656,3 +656,117 @@ describe('account preferences', () => {
     expect((await app.request('/api/me', { method: 'PATCH' })).status).toBe(401);
   });
 });
+
+// ─── Devices (recording hardware on activities) ──────────────────────────────
+
+describe('devices', () => {
+  let email = '';
+  let token = '';
+  let userId = '';
+  let activityId = '';
+
+  beforeAll(async () => {
+    email = `dev-${Date.now()}@test.stridash`;
+    const reg = await app.request('/api/auth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: 'devices-pass-1', displayName: 'Dev' }),
+    });
+    token = ((await json(reg)) as { accessToken: string }).accessToken;
+    userId = (await prisma.user.findUniqueOrThrow({ where: { email } })).id;
+  });
+
+  it('activity detail carries the recording device', async () => {
+    const { upsertDevice } = await import('../../src/services/devices.js');
+    const deviceId = await upsertDevice(userId, {
+      provider: 'GARMIN',
+      sourceDeviceId: '3422639741',
+      manufacturer: 'garmin',
+      model: 'Forerunner 955 Solar',
+      productCode: 4024,
+      softwareVersion: '29.05',
+      raw: { product: 4024, device_index: 'creator' },
+    });
+    const activity = await prisma.activity.create({
+      data: {
+        userId,
+        headline: 'Watch run',
+        type: 'RUN',
+        startTime: new Date('2026-11-10T07:00:00Z'),
+        durationS: 1_800,
+        raw: {},
+        deviceId,
+      },
+    });
+    activityId = activity.id;
+
+    const res = await app.request(`/api/activities/${activity.id}`, authed(token));
+    expect(res.status).toBe(200);
+    const item = (await json(res)).items[0] as Record<string, unknown>;
+    const device = item.device as Record<string, unknown> | null;
+    expect(device).not.toBeNull();
+    expect(device).toMatchObject({
+      provider: 'GARMIN',
+      sourceDeviceId: '3422639741',
+      manufacturer: 'garmin',
+      model: 'Forerunner 955 Solar',
+      productCode: 4024,
+      softwareVersion: '29.05',
+    });
+    // the raw FIT device message rides along (raw payload is the authority)
+    expect((device!.raw as Record<string, unknown>).product).toBe(4024);
+  });
+
+  it('upsertDevice dedupes per (user, provider, serial) and fills gaps', async () => {
+    const { upsertDevice } = await import('../../src/services/devices.js');
+    const id1 = await upsertDevice(userId, {
+      provider: 'IGPSPORT',
+      sourceDeviceId: '72364288',
+      manufacturer: 'igpsport',
+      productCode: 301,
+      softwareVersion: '1.31',
+      raw: {},
+    });
+    const id2 = await upsertDevice(userId, {
+      provider: 'IGPSPORT',
+      sourceDeviceId: '72364288',
+      softwareVersion: '1.40', // newer firmware observed later
+      raw: { newer: true },
+    });
+    expect(id2).toBe(id1); // same serial → same row
+    const row = await prisma.device.findUniqueOrThrow({
+      where: {
+        userId_provider_sourceDeviceId: {
+          userId,
+          provider: 'IGPSPORT',
+          sourceDeviceId: '72364288',
+        },
+      },
+    });
+    expect(row.productCode).toBe(301); // not nulled by the second call
+    expect(row.softwareVersion).toBe('1.40');
+    expect((row.raw as Record<string, unknown>).newer).toBe(true);
+
+    // a different user never sees another user's device
+    const other = await prisma.user.findUniqueOrThrow({ where: { email: 'bob@test.stridash' } });
+    const id3 = await upsertDevice(other.id, {
+      provider: 'IGPSPORT',
+      sourceDeviceId: '72364288',
+      raw: {},
+    });
+    expect(id3).not.toBe(id1);
+  });
+
+  it('devices ride in the account export', async () => {
+    const res = await app.request('/api/export', authed(token));
+    expect(res.status).toBe(200);
+    const dump = (await json(res)) as Record<string, unknown>;
+    const devices = dump.devices as Array<Record<string, unknown>>;
+    expect(devices.some((d) => d.sourceDeviceId === '3422639741')).toBe(true);
+  });
+
+  it('device links never leak across users', async () => {
+    const res = await app.request(`/api/activities/${activityId}`, authed(bobToken));
+    expect(res.status).toBe(404);
+  });
+});

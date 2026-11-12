@@ -46,6 +46,7 @@ model User {
   sleepSessions  SleepSession[]
   dailyWellness  DailyWellness[]
   preferences    UserPreferences?
+  devices        Device[]
 
   @@map("users")
 }
@@ -312,6 +313,9 @@ model Activity {
   trainingLoad Int?         @map("training_load")
   indoor       Boolean      @default(false)
   gearId       String?      @db.Uuid @map("gear_id")
+  /// Recording device (watch / cycling head unit), nullable — backfilled by
+  /// sync passes for activities ingested before devices were tracked
+  deviceId     String?      @db.Uuid @map("device_id")
   notes        String?
   raw          Json?
   /// provider detail-endpoint payload as-received (e.g. Zwift's
@@ -323,6 +327,7 @@ model Activity {
 
   user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   gear       Gear?               @relation(fields: [gearId], references: [id], onDelete: SetNull)
+  device     Device?             @relation(fields: [deviceId], references: [id], onDelete: SetNull)
   sources    ActivitySource[]
   dataPoints ActivityDataPoint[]
 
@@ -367,6 +372,39 @@ model ActivitySource {
 
   @@id([activityId, connectionId])
   @@map("activity_sources")
+}
+
+// ─── Devices (recording hardware) ────────────────────────────────────────────
+
+/// Physical devices that record activities — watches (Garmin) and cycling
+/// head units (iGPSPORT). Dedup key: (user_id, provider, source_device_id),
+/// where the source id is the FIT device message's serial number. The
+/// friendly model name resolves from the provider when it can (Garmin's
+/// device-registration endpoint); Zwift/Omron have no per-activity device.
+model Device {
+  id              String   @id @db.Uuid @default(uuid(7))
+  userId          String   @db.Uuid @map("user_id")
+  provider        Provider
+  sourceDeviceId  String   @map("source_device_id")
+  /// "garmin" / "igpsport" — FIT manufacturer enum as-received
+  manufacturer    String?
+  /// friendly display name when the provider resolves it ("Forerunner 955 Solar")
+  model           String?
+  /// FIT product code (numeric, e.g. 4024) — provider-specific vocabulary
+  productCode     Int?     @map("product_code")
+  /// latest firmware seen on any activity from this device
+  softwareVersion String?  @map("software_version")
+  hardwareVersion String?  @map("hardware_version")
+  /// the FIT device message / provider payload as-received
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities Activity[]
+
+  @@unique([userId, provider, sourceDeviceId])
+  @@map("devices")
 }
 
 // ─── Gear ────────────────────────────────────────────────────────────────────

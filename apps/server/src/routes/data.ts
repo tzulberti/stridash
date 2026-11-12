@@ -98,40 +98,49 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
    * gear — is in here. */
   routes.get('/export', async (c) => {
     const userId = c.get('userId');
-    const [user, connections, activities, measurements, sleepSessions, dailyWellness, gear] =
-      await Promise.all([
-        prisma.user.findUnique({
-          where: { id: userId },
-          select: { email: true, displayName: true, createdAt: true },
-        }),
-        prisma.connection.findMany({
-          where: { userId },
-          // tokens are NEVER exported — they're credentials, not data
-          select: {
-            provider: true,
-            providerUserId: true,
-            status: true,
-            createdAt: true,
-            lastSyncedAt: true,
+    const [
+      user,
+      connections,
+      activities,
+      measurements,
+      sleepSessions,
+      dailyWellness,
+      gear,
+      devices,
+    ] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true, displayName: true, createdAt: true },
+      }),
+      prisma.connection.findMany({
+        where: { userId },
+        // tokens are NEVER exported — they're credentials, not data
+        select: {
+          provider: true,
+          providerUserId: true,
+          status: true,
+          createdAt: true,
+          lastSyncedAt: true,
+        },
+      }),
+      prisma.activity.findMany({
+        where: { userId },
+        orderBy: { startTime: 'asc' },
+        include: {
+          sources: {
+            select: { connectionId: true, sourceActivityId: true, sourceUpdatedAt: true },
           },
-        }),
-        prisma.activity.findMany({
-          where: { userId },
-          orderBy: { startTime: 'asc' },
-          include: {
-            sources: {
-              select: { connectionId: true, sourceActivityId: true, sourceUpdatedAt: true },
-            },
-          },
-        }),
-        prisma.measurement.findMany({ where: { userId }, orderBy: { measuredAt: 'asc' } }),
-        prisma.sleepSession.findMany({ where: { userId }, orderBy: { dateKey: 'asc' } }),
-        prisma.dailyWellness.findMany({ where: { userId }, orderBy: { dateKey: 'asc' } }),
-        prisma.gear.findMany({
-          where: { userId },
-          include: { components: { orderBy: { createdAt: 'asc' } } },
-        }),
-      ]);
+        },
+      }),
+      prisma.measurement.findMany({ where: { userId }, orderBy: { measuredAt: 'asc' } }),
+      prisma.sleepSession.findMany({ where: { userId }, orderBy: { dateKey: 'asc' } }),
+      prisma.dailyWellness.findMany({ where: { userId }, orderBy: { dateKey: 'asc' } }),
+      prisma.gear.findMany({
+        where: { userId },
+        include: { components: { orderBy: { createdAt: 'asc' } } },
+      }),
+      prisma.device.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+    ]);
 
     const dump = {
       exportedAt: new Date().toISOString(),
@@ -148,6 +157,7 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
         ...serializeRow(g),
         components: g.components.map(serializeRow),
       })),
+      devices: devices.map(serializeRow),
     };
     const filename = `stridash-export-${new Date().toISOString().slice(0, 10)}.json`;
     return new Response(JSON.stringify(dump, null, 1), {
@@ -300,13 +310,24 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     const id = c.req.param('id');
     const activity = await prisma.activity.findFirst({
       where: { id, userId: c.get('userId') },
+      include: { device: true },
     });
     if (!activity) return c.json({ error: 'Not found' }, 404);
     const points = await prisma.activityDataPoint.findMany({
       where: { activityId: id },
       select: { provider: true, sampleCount: true, series: true },
     });
-    return c.json({ items: [{ ...serializeRow(activity), series: points }] });
+    // device flattened to the display fields (+ raw as-received)
+    const { device, ...row } = activity;
+    return c.json({
+      items: [
+        {
+          ...serializeRow(row),
+          device: device ? serializeRow(device) : null,
+          series: points,
+        },
+      ],
+    });
   });
 
   routes.get('/measurements', async (c) => {

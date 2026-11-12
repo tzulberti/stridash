@@ -15,6 +15,7 @@ erDiagram
     users ||--o{ activities : owns
     users ||--o{ measurements : owns
     users ||--o{ gear : owns
+    users ||--o{ devices : owns
     users ||--o| user_preferences : "settings (1:1)"
     users ||--o{ auth_identities : "signs in with"
 
@@ -25,6 +26,7 @@ erDiagram
     activities ||--o{ activity_sources : "produced by"
     activities ||--o{ activity_data_points : "sample series"
     gear |o--o{ activities : used
+    devices |o--o{ activities : recorded
     gear ||--o{ gear_components : "wears"
     users ||--o{ gear_components : owns
 
@@ -101,10 +103,23 @@ erDiagram
         int training_load "TSS-like, provider-dependent"
         bool indoor
         uuid7 gear_id FK
+        uuid7 device_id FK "recorder (watch/head unit), nullable"
         text notes
         jsonb raw
         timestamptz created_at
         timestamptz updated_at
+    }
+    devices {
+        uuid7 id PK "UUIDv7"
+        uuid7 user_id FK
+        enum provider "GARMIN | IGPSPORT"
+        text source_device_id "FIT serial — dedup key"
+        text manufacturer
+        text model "friendly name (Garmin resolves it)"
+        int product_code "FIT product code"
+        text software_version "latest seen"
+        text hardware_version
+        jsonb raw "FIT device message as-received"
     }
     activity_data_points {
         uuid7 id PK "UUIDv7"
