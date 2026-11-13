@@ -82,7 +82,16 @@ no refresh token (re-exchange on expiry). The auth half is a swap-in.)*
 - [ ] Weight / body composition ingest (Garmin Index or any scale synced to
       Garmin)
 - [ ] Blood pressure ingest
-- [ ] E2E dedup testing against Strava-originated duplicates
+- [ ] Dedup hardening + merge of stored duplicates (2026-11-13 finding):
+      the cross-provider key is exact equality on
+      `(start_time, type, distance_m)`, and provider clocks disagree —
+      "Zwift - Devedeset Lite" stored twice (Garmin FIT start 10:40:51 /
+      11537.84 m vs Zwift session start 10:40:30.082 / 11539.70 m — 21 s /
+      1.9 m apart). Loosen ingest matching to a tolerance window (same
+      type + day, start within ~60 s, distance within ~100 m) and merge
+      existing duplicates into one row carrying both `activity_sources`
+      (see [`data-model.md`](data-model.md) "Deduplication"); covers the
+      Strava-originated duplicates case too.
 - [ ] Migrate auth to the official Garmin Personal API (removes the
       unofficial-SSO gray zone: key → 24h token exchange, no refresh —
       re-exchange; same activity/health read surface. Key expiry

@@ -111,6 +111,13 @@ precision, zero-offset). Same bounded poll-and-compare pattern as
   race-results endpoints not covered by this connector).
 - **No HR-zone time / training load**: Zwift reports neither; both stay null
   (web trainingLoad / hr zone tables degrade gracefully).
+- **No drafting metric** (verified 2026-11-13 across list rows, detail
+  payloads and per-second fitness data): Zwift applies drafting as a
+  physics modifier while riding and never records it. The only "draft" in
+  any stored payload is an achievement badge ("MASTER DRAFTSMAN — You
+  drafted another rider for 15 seconds"). A drafting proxy computed from
+  speed + power (samples where power sits far below the C_dA-implied
+  demand on flats) would be an estimate, not a recorded value.
 
 ## Known quirks
 

@@ -115,13 +115,23 @@ don't map get parked in `raw` for later backfill.
 | `created_at` / `updated_at` | timestamptz | |
 
 **Deduplication** — the same ride legitimately arrives from two providers
-(e.g. Zwift → Strava push plus direct Garmin). Uniqueness is enforced with a
+(e.g. direct Garmin plus a Zwift copy). Uniqueness is enforced with a
 composite index:
 
 ```
 uniq (user_id, source, source_activity_id)            -- provider ids
 uniq (user_id, start_time, type, distance_m)          -- heuristic fuzzy key
 ```
+
+The heuristic key is **exact equality**, and 2026-11-13 proved it too tight:
+the same ride synced from Garmin and Zwift stored twice ("Zwift - Devedeset
+Lite") because provider clocks disagree — Garmin's FIT recording start
+(10:40:51) sits 21 s after Zwift's session start (10:40:30.082), and
+distance drifts 1.9 m (11537.84 vs 11539.70). Planned fix, tracked on the
+[roadmap](roadmap.md): at ingest, match against the user's recent activities
+inside a tolerance window (same type + day, start within ~60 s, distance
+within ~100 m); then a one-time merge pass collapsing stored duplicates into
+one row that carries both `activity_sources` (+ both series).
 
 ### `activity_sources`
 
