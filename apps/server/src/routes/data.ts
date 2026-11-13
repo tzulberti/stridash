@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../db.js';
 import { requireUserId } from '../auth.js';
 import type { Env } from '../env.js';
@@ -341,6 +342,50 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
         },
       ],
     });
+  });
+
+  /** Candidate activities worth comparing the base one against: same type
+   * and roughly the same size — distance within ±25%, or duration within
+   * ±40% when the base carries no distance (WORKOUT/OTHER rows). Newest
+   * first; provider-lean rows (picker needs headline/date/distance/time). */
+  routes.get('/activities/:id/similar', async (c) => {
+    const base = await prisma.activity.findFirst({
+      where: { id: c.req.param('id'), userId: c.get('userId') },
+      select: { id: true, type: true, distanceM: true, durationS: true },
+    });
+    if (!base) return c.json({ error: 'Not found' }, 404);
+    const baseDistance = base.distanceM == null ? null : Number(base.distanceM);
+    const where: Prisma.ActivityWhereInput = {
+      userId: c.get('userId'),
+      type: base.type,
+      id: { not: base.id },
+      ...(baseDistance != null
+        ? { distanceM: { gte: baseDistance * 0.75, lte: baseDistance * 1.25 } }
+        : base.durationS != null
+          ? {
+              durationS: {
+                gte: Math.round(base.durationS * 0.6),
+                lte: Math.round(base.durationS * 1.67),
+              },
+            }
+          : {}),
+    };
+    const items = await prisma.activity.findMany({
+      where,
+      orderBy: { startTime: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        headline: true,
+        type: true,
+        startTime: true,
+        durationS: true,
+        movingTimeS: true,
+        distanceM: true,
+        avgSpeedMs: true,
+      },
+    });
+    return c.json({ items: items.map(serializeRow) });
   });
 
   routes.get('/measurements', async (c) => {

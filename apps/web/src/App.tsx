@@ -441,6 +441,120 @@ function PointsRadius(n: number): number {
   return 3.5;
 }
 
+/** the two series colors of every compare chart: A (this activity) green,
+ * B (the other) red — identity beats per-channel coloring when two lines
+ * share one plot */
+const COMPARE_A = '#30a46c';
+const COMPARE_B = '#e5484d';
+
+/** Two-series overlay for the activity-compare section: shared axes across
+ * both activities, two polylines (A/B), no hover — v1 stays read-only.
+ * xMode mirrors LineChart (elapsed time, or meters when both sides carry a
+ * distance stream). */
+function CompareChart({
+  a,
+  b,
+  label,
+  xMode = 'time',
+  height = 180,
+}: {
+  a: Point[];
+  b: Point[];
+  label?: string;
+  /** which X axis: elapsed time (default) or distance in meters */
+  xMode?: 'time' | 'distance';
+  height?: number;
+}) {
+  if (a.length < 2 || b.length < 2) return <div className="empty">{t('chart.noData')}</div>;
+
+  const W = 900;
+  const H = height;
+  const padL = 52;
+  const padR = 14;
+  const padT = 14;
+  const padB = 42;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  // combined domain so both lines live in one coordinate space
+  const all = [...a, ...b];
+  const x0 = Math.min(...all.map((p) => p.x)),
+    x1 = Math.max(...all.map((p) => p.x));
+  const y0 = Math.min(...all.map((p) => p.y)),
+    y1 = Math.max(...all.map((p) => p.y));
+  const spanX = Math.max(1e-9, x1 - x0);
+  const spanY = Math.max(1e-9, y1 - y0);
+  const spanDays = spanX / 86_400_000;
+  const toXY = (p: Point): [number, number] => [
+    padL + ((p.x - x0) / spanX) * plotW,
+    padT + (1 - (p.y - y0) / spanY) * plotH,
+  ];
+  const pathOf = (pts: Point[]): string =>
+    pts
+      .map((p, i) => {
+        const [x, y] = toXY(p);
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+
+  const yTicks = niceTicks(y0, y1, 4);
+  const isDist = xMode === 'distance';
+  const unitM = metersPerUnit();
+  const xTickCount = Math.max(2, Math.round(plotW / 170));
+  const xTickMarks = isDist
+    ? niceTicks(x0 / unitM, x1 / unitM, Math.max(3, Math.round(plotW / 160))).map((d) => ({
+        x: d * unitM,
+        label: fmtVal(d),
+      }))
+    : Array.from({ length: xTickCount }, (_, i) => {
+        const t = x0 + (spanX * i) / (xTickCount - 1);
+        return { x: t, label: fmtTick(t, spanDays, x0) };
+      });
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label={label}>
+      {yTicks.map((tv) => {
+        const y = padT + (1 - (tv - y0) / spanY) * plotH;
+        return (
+          <g key={`y${tv}`}>
+            <line x1={padL} x2={W - padR} y1={y} y2={y} className="chart-grid" />
+            <text x={padL - 6} y={y + 3.5} textAnchor="end" className="chart-axis">
+              {fmtVal(tv)}
+            </text>
+          </g>
+        );
+      })}
+      {xTickMarks.map((tk) => (
+        <text
+          key={`x${tk.x}`}
+          x={padL + ((tk.x - x0) / spanX) * plotW}
+          y={H - padB + 16}
+          textAnchor="middle"
+          className="chart-axis"
+        >
+          {tk.label}
+        </text>
+      ))}
+      {label && (
+        <text
+          transform={`rotate(-90 13 ${padT + plotH / 2})`}
+          x={13}
+          y={padT + plotH / 2}
+          textAnchor="middle"
+          className="chart-axis-title"
+        >
+          {label}
+        </text>
+      )}
+      <text x={W - padR} y={H - 6} textAnchor="end" className="chart-axis-title">
+        {isDist ? t('chart.axis.distance', { unit: unitLabel() }) : t('chart.axis.elapsed')}
+      </text>
+      <path d={pathOf(a)} fill="none" stroke={COMPARE_A} strokeWidth={1.75} />
+      <path d={pathOf(b)} fill="none" stroke={COMPARE_B} strokeWidth={1.75} />
+    </svg>
+  );
+}
+
 /** HR-zone bpm boundaries recovered from the series + the stored per-zone
  * minutes: FIT samples arrive ~time-uniform, so the bpm under which exactly
  * Σ(minutes of zones 1..k-1) of time sits is zone k's lower bound.
@@ -651,6 +765,8 @@ import {
   unitLabel,
   setLocale,
   getLocale,
+  fmtDeltaSecs,
+  pctDelta,
   TYPE_EMOJI,
   FEED_TYPES,
   FEED_PROVIDERS,
@@ -762,6 +878,136 @@ function ActivityDetail({
       alive = false;
     };
   }, [id, token, preview]);
+
+  // ─── Compare with a similar activity ───────────────────────────────────────
+
+  /** lean picker row from GET /activities/:id/similar */
+  interface SimilarRow {
+    id: string;
+    headline: string;
+    type: string;
+    startTime: string;
+    durationS: number | null;
+    movingTimeS: number | null;
+    distanceM: number | null;
+    avgSpeedMs: number | null;
+  }
+
+  const [similar, setSimilar] = useState<SimilarRow[] | null>(null);
+  const [compareId, setCompareId] = useState('');
+  const [compareAct, setCompareAct] = useState<(Activity & { series: ActivitySeriesRow[] }) | null>(
+    null,
+  );
+
+  // candidates refresh with the activity; picking one resets the old compare
+  useEffect(() => {
+    let alive = true;
+    setSimilar(null);
+    setCompareId('');
+    setCompareAct(null);
+    api<{ items: SimilarRow[] }>(`/activities/${id}/similar`, { token })
+      .then((r) => {
+        if (alive) setSimilar(r.items);
+      })
+      .catch(() => {
+        if (alive) setSimilar([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id, token]);
+
+  useEffect(() => {
+    if (!compareId) {
+      setCompareAct(null);
+      return;
+    }
+    let alive = true;
+    setCompareAct(null);
+    api<{ items: Array<Activity & { series: ActivitySeriesRow[] }> }>(`/activities/${compareId}`, {
+      token,
+    })
+      .then((r) => {
+        if (alive) setCompareAct(r.items[0] ?? null);
+      })
+      .catch(() => {
+        if (alive) setCompareAct(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [compareId, token]);
+
+  /** side-by-side stat rows: only metrics at least one side reports */
+  const compareRows = useMemo(() => {
+    const b = compareAct;
+    if (!act || !b) return [];
+    type Row = { key: string; label: MsgKey; av: string; bv: string; delta: string | null };
+    const out: Row[] = [];
+    const push = (
+      key: string,
+      label: MsgKey,
+      av: number | null | undefined,
+      bv: number | null | undefined,
+      fmt: (v: number) => string,
+      deltaOf: (x: number | null, y: number | null) => string | null,
+    ): void => {
+      if (av == null && bv == null) return;
+      out.push({
+        key,
+        label,
+        av: av == null ? '—' : fmt(av),
+        bv: bv == null ? '—' : fmt(bv),
+        delta: deltaOf(av ?? null, bv ?? null),
+      });
+    };
+    const bpm = (v: number): string => `${Math.round(v)}`;
+    const watts = (v: number): string => `${Math.round(v)} W`;
+    push('distance', 'detail.distanceC', act.distanceM, b.distanceM, fmtKm, pctDelta);
+    push('duration', 'detail.duration', act.durationS, b.durationS, fmtMin, fmtDeltaSecs);
+    push('moving', 'detail.moving', act.movingTimeS, b.movingTimeS, fmtMin, fmtDeltaSecs);
+    push('avgSpeed', 'compare.avgSpeed', act.avgSpeedMs, b.avgSpeedMs, fmtSpeed, pctDelta);
+    push('maxSpeed', 'compare.maxSpeed', act.maxSpeedMs, b.maxSpeedMs, fmtSpeed, pctDelta);
+    push('avgHr', 'split.avgHr', act.avgHr, b.avgHr, bpm, pctDelta);
+    push('maxHr', 'split.maxHr', act.maxHr, b.maxHr, bpm, pctDelta);
+    push('avgPower', 'compare.avgPower', act.avgPowerW, b.avgPowerW, watts, pctDelta);
+    push('maxPower', 'compare.maxPower', act.maxPowerW, b.maxPowerW, watts, pctDelta);
+    push('calories', 'detail.calories', act.caloriesKcal, b.caloriesKcal, bpm, pctDelta);
+    push('ascent', 'detail.ascent', act.totalAscentM, b.totalAscentM, bpm, pctDelta);
+    return out;
+  }, [act, compareAct]);
+  /** overlaid charts for channels BOTH sides recorded; distance x-axis only
+   * when both series carry a full distance stream (else elapsed time) */
+  const compareCharts = useMemo(() => {
+    const sa = rows?.[0]?.series;
+    const sb = compareAct?.series?.[0]?.series;
+    if (!sa || !sb)
+      return {
+        xMode: 'time' as const,
+        charts: [] as Array<{
+          key: string;
+          titleKey: MsgKey;
+          pointsA: Point[];
+          pointsB: Point[];
+        }>,
+      };
+    const aligned = (s: ActivitySeriesRow['series']): boolean =>
+      (s.distanceM?.length ?? 0) >= 2 && s.distanceM?.length === s.timeMs?.length;
+    const xMode = aligned(sa) && aligned(sb) ? ('distance' as const) : ('time' as const);
+    const pts = (s: ActivitySeriesRow['series'], vals: number[]): Point[] =>
+      vals.map((v, i) => ({
+        x: (xMode === 'distance' ? s.distanceM?.[i] : s.timeMs?.[i]) ?? i,
+        y: v,
+      }));
+    const charts: Array<{ key: string; titleKey: MsgKey; pointsA: Point[]; pointsB: Point[] }> = [];
+    for (const [key, titleKey] of SERIES_CHANNELS) {
+      const va = (sa as Record<string, number[] | undefined>)[key];
+      const vb = (sb as Record<string, number[] | undefined>)[key];
+      if (!va || !vb || va.length < 2 || vb.length < 2) continue;
+      charts.push({ key, titleKey, pointsA: pts(sa, va), pointsB: pts(sb, vb) });
+    }
+    return { xMode, charts };
+  }, [rows, compareAct]);
 
   // streams come back as labeled numeric arrays aligned with timeMs — plot
   // against the real sample clock so the axes show elapsed time; distance
@@ -1004,6 +1250,72 @@ function ActivityDetail({
               </tbody>
             </table>
           </div>
+        </section>
+      ) : null}
+
+      {similar !== null && similar.length === 0 ? (
+        <p className="empty">{t('compare.none')}</p>
+      ) : null}
+      {similar !== null && similar.length > 0 ? (
+        <section>
+          <h3>{t('compare.title')}</h3>
+          <select value={compareId} onChange={(e) => setCompareId(e.target.value)}>
+            <option value="">{t('compare.pick')}</option>
+            {similar.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.headline} · {fmtDate(s.startTime)} ·{' '}
+                {s.distanceM != null ? fmtKm(s.distanceM) : fmtMin(s.durationS)}
+              </option>
+            ))}
+          </select>
+          {compareId && !compareAct ? <p>{t('detail.loading')}</p> : null}
+          {compareAct ? (
+            <>
+              <div className="cmp-legend">
+                <span className="cmp-item">
+                  <span className="cmp-sw" style={{ background: COMPARE_A }} />
+                  {act.headline} · {fmtDate(act.startTime)}
+                </span>
+                <span className="cmp-item">
+                  <span className="cmp-sw" style={{ background: COMPARE_B }} />
+                  {compareAct.headline} · {fmtDate(compareAct.startTime)}
+                </span>
+              </div>
+              <div className="table-scroll">
+                <table className="list">
+                  <thead>
+                    <tr>
+                      <th>{t('compare.metric')}</th>
+                      <th>{t('compare.this')}</th>
+                      <th>{t('compare.other')}</th>
+                      <th>Δ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compareRows.map((r) => (
+                      <tr key={r.key}>
+                        <td>{t(r.label)}</td>
+                        <td>{r.av}</td>
+                        <td>{r.bv}</td>
+                        <td>{r.delta ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {compareCharts.charts.map((c) => (
+                <div key={c.key}>
+                  <h4>{t(c.titleKey)}</h4>
+                  <CompareChart
+                    a={c.pointsA}
+                    b={c.pointsB}
+                    label={t(c.titleKey)}
+                    xMode={compareCharts.xMode}
+                  />
+                </div>
+              ))}
+            </>
+          ) : null}
         </section>
       ) : null}
 

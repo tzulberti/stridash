@@ -71,6 +71,31 @@ export function fmtDate(iso: string | undefined): string {
     : '—';
 }
 
+/** Signed duration delta for the compare table: `+0:23` / `−1:05` / `+1:02:03`
+ * (h:mm:ss beyond an hour), `null` when either side is unknown. */
+export function fmtDeltaSecs(
+  a: number | null | undefined,
+  b: number | null | undefined,
+): string | null {
+  if (a == null || b == null) return null;
+  const d = Math.round(b - a);
+  if (d === 0) return '±0:00';
+  return `${d > 0 ? '+' : '−'}${fmtSplitTime(Math.abs(d))}`;
+}
+
+/** Signed percent change from a to b: `+1.9%` / `−4.2%`, `null` when the base
+ * is 0/unknown (a percent of nothing is noise). */
+export function pctDelta(
+  a: number | null | undefined,
+  b: number | null | undefined,
+): string | null {
+  if (a == null || b == null || a === 0) return null;
+  const p = ((b - a) / Math.abs(a)) * 100;
+  if (!Number.isFinite(p)) return null;
+  const sign = p > 0 ? '+' : p < 0 ? '−' : '±';
+  return `${sign}${Math.abs(p).toFixed(1)}%`;
+}
+
 // ─── Feed constants ─────────────────────────────────────────────────────────
 
 export const TYPE_EMOJI: Record<string, string> = {

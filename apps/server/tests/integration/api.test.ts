@@ -795,3 +795,86 @@ describe('devices', () => {
     expect(res.status).toBe(404);
   });
 });
+
+// ─── Similar activities (compare picker) ─────────────────────────────────────
+
+describe('similar activities (compare picker)', () => {
+  let closeRunId = '';
+  let farRunId = '';
+  let workoutId = '';
+  let yogaId = '';
+
+  beforeAll(async () => {
+    const aliceId = (
+      await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } })
+    ).id;
+    const mk = (
+      headline: string,
+      type: string,
+      startTime: Date,
+      distanceM: number | null,
+      durationS: number,
+    ) =>
+      prisma.activity.create({
+        data: {
+          userId: aliceId,
+          headline,
+          type: type as never,
+          startTime,
+          durationS,
+          distanceM,
+          raw: { provider: 'GARMIN', sourceRow: {} },
+        },
+      });
+
+    // in the base run's ±25% distance band (3825..6375 m)
+    closeRunId = (await mk('Evening run', 'RUN', new Date('2026-11-08T18:00:00Z'), 5_300, 1_850))
+      .id;
+    // outside the band (8 000 m) and a different type entirely
+    farRunId = (await mk('Long run', 'RUN', new Date('2026-11-10T07:00:00Z'), 8_000, 3_000)).id;
+    // distance-less rows use the duration band (±40% of 1 800 s)
+    workoutId = (
+      await mk('Core strength', 'WORKOUT', new Date('2026-11-11T06:00:00Z'), null, 1_800)
+    ).id;
+    yogaId = (await mk('Yoga flow', 'WORKOUT', new Date('2026-11-12T06:00:00Z'), null, 1_600)).id;
+  });
+
+  it('returns same-type rows within the distance band, excluding the base', async () => {
+    const res = await app.request(`/api/activities/${runId}/similar`, authed(aliceToken));
+    expect(res.status).toBe(200);
+    const items = ((await json(res)).items ?? []) as Json[];
+    const ids = items.map((i) => i.id);
+    expect(ids).toContain(closeRunId);
+    expect(ids).not.toContain(runId); // self excluded
+    expect(ids).not.toContain(farRunId); // 8 000 m > 5 100 × 1.25
+    expect(ids).not.toContain(virtualId); // different type
+    expect(ids).not.toContain(workoutId); // different type
+    // lean picker rows: headline/date/distance/time, no raw payloads
+    const close = items.find((i) => i.id === closeRunId) as Json;
+    expect(close.distanceM).toBe(5_300);
+    expect(close.headline).toBe('Evening run');
+    expect(close.raw).toBeUndefined();
+    expect(close.detailRaw).toBeUndefined();
+  });
+
+  it('falls back to duration bands when the base has no distance', async () => {
+    const res = await app.request(`/api/activities/${workoutId}/similar`, authed(aliceToken));
+    expect(res.status).toBe(200);
+    const items = ((await json(res)).items ?? []) as Json[];
+    // 1 600 s sits inside ±40% of 1 800 s; no RUN qualifies (type filter)
+    expect(items.map((i) => i.id)).toEqual([yogaId]);
+  });
+
+  it('404s for an unknown activity', async () => {
+    const res = await app.request(
+      '/api/activities/00000000-0000-0000-0000-000000000000/similar',
+      authed(aliceToken),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('never leaks another user’s activities', async () => {
+    const res = await app.request(`/api/activities/${runId}/similar`, authed(bobToken));
+    expect(res.status).toBe(404);
+  });
+});

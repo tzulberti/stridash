@@ -11,6 +11,8 @@ import {
   fmtPace,
   fmtSplitTime,
   fmtDate,
+  fmtDeltaSecs,
+  pctDelta,
   metersPerUnit,
   setUnit,
   TYPE_EMOJI,
@@ -70,6 +72,29 @@ describe('formatters', () => {
   it('fmtDate falls back to — for absent values', () => {
     expect(fmtDate(undefined)).toBe('—');
     expect(fmtDate('2026-11-08T18:00:00Z')).toContain('2026'); // locale varies; year is stable
+  });
+});
+
+describe('compare deltas', () => {
+  it('fmtDeltaSecs renders signed m:ss / h:mm:ss between two durations', () => {
+    expect(fmtDeltaSecs(1_800, 1_823)).toBe('+0:23');
+    expect(fmtDeltaSecs(1_800, 1_735)).toBe('−1:05');
+    expect(fmtDeltaSecs(1_800, 1_800)).toBe('±0:00');
+    expect(fmtDeltaSecs(3_540, 3_540 + 3_723)).toBe('+1:02:03'); // beyond an hour
+    expect(fmtDeltaSecs(60, 59.6)).toBe('±0:00'); // rounds once, 0.4s → 0
+    expect(fmtDeltaSecs(1_800, null)).toBeNull();
+    expect(fmtDeltaSecs(null, null)).toBeNull();
+  });
+
+  it('pctDelta renders signed percent relative to the base magnitude', () => {
+    expect(pctDelta(5_100, 5_300)).toBe('+3.9%');
+    expect(pctDelta(5_100, 4_900)).toBe('−3.9%');
+    expect(pctDelta(5_100, 5_100)).toBe('±0.0%');
+    // sign reflects direction, magnitude measured against |base|
+    expect(pctDelta(-100, -110)).toBe('−10.0%');
+    expect(pctDelta(0, 100)).toBeNull(); // percent of nothing is noise
+    expect(pctDelta(null, 100)).toBeNull();
+    expect(pctDelta(100, null)).toBeNull();
   });
 });
 

@@ -133,6 +133,12 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       drill-down: per-activity detail cards + HR / power / speed / cadence /
       altitude series charts (new `GET /api/activities/:id` endpoint)
 - [x] Connections status pills (provider · status · last sync)
+- [x] Activity comparison (2026-11-13): `GET /api/activities/:id/similar`
+      suggests same-type activities within ±25% distance (±40% duration when
+      the base has no distance), newest-first, 20 max; the activity page gains
+      a Compare section — picker, side-by-side stat table with signed deltas,
+      and per-channel overlaid two-line charts (A green / B red; distance
+      x-axis only when both series carry a distance stream)
 - [ ] Onboarding: create user → connect providers → first sync (UI)
 - [ ] Connections screen with "sync now" buttons + `sync_logs` error surfacing
 - [ ] Manual entry UI
