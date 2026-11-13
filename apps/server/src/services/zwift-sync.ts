@@ -200,6 +200,70 @@ async function upsertZwiftActivity(
   return 'created';
 }
 
+/** Re-ingest one provider-confirmed edit. The detail payload is already in
+ * hand (the edit pass fetched it to read lastSaveDate): rebuild the scalars
+ * it carries (rename, moving time, distance/speeds, HR/power/cadence,
+ * calories, ascent), refresh detail_raw, re-fetch the series, and stamp
+ * source_updated_at with the provider's own save time. Absent fields stay
+ * `undefined` (= no change in Prisma) so a partial payload can never null
+ * out a stored value; `raw` keeps the discovery-time list row (detail_raw is
+ * the fresh authority). */
+async function reingestEditedZwiftActivity(
+  client: ZwiftClient,
+  connection: ConnectionLike,
+  activityId: string,
+  externalId: string,
+  detail: ZwiftActivity,
+  lastSave: Date,
+): Promise<void> {
+  const row = mapZwiftActivityRow(detail);
+  if (!row) return; // unusable detail — keep the stored row untouched
+
+  // the detail row names its ascent key differently from list rows and
+  // carries fractional metres
+  const totalAscentM =
+    typeof detail.totalElevation === 'number' ? detail.totalElevation : undefined;
+
+  await prisma.activity.update({
+    where: { id: activityId },
+    data: {
+      headline: row.headline,
+      workoutName: row.workoutName,
+      ...(detail.endDate != null ? { durationS: row.durationS } : {}),
+      ...(detail.movingTimeInMs != null ? { movingTimeS: row.movingTimeS } : {}),
+      ...(detail.distanceInMeters != null ? { distanceM: row.distanceM } : {}),
+      ...(detail.avgSpeedInMetersPerSecond != null ? { avgSpeedMs: row.avgSpeedMs } : {}),
+      ...(detail.maxSpeedInMetersPerSecond != null ? { maxSpeedMs: row.maxSpeedMs } : {}),
+      ...(detail.avgHeartRate != null ? { avgHr: row.avgHr } : {}),
+      ...(detail.maxHeartRate != null ? { maxHr: row.maxHr } : {}),
+      ...(detail.avgWatts != null ? { avgPowerW: row.avgPowerW } : {}),
+      ...(detail.maxWatts != null ? { maxPowerW: row.maxPowerW } : {}),
+      ...(detail.avgCadenceInRotationsPerMinute != null ? { avgCadence: row.avgCadence } : {}),
+      ...(detail.maxCadenceInRotationsPerMinute != null ? { maxCadence: row.maxCadence } : {}),
+      ...(detail.calories != null ? { caloriesKcal: row.caloriesKcal } : {}),
+      ...(totalAscentM !== undefined ? { totalAscentM } : {}),
+      detailRaw: detail as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  // series rebuild is best-effort: the existing series survives a fetch
+  // hiccup (the upgrade pass only heals rows with no series at all)
+  try {
+    const url = detail.fitnessData?.fullDataUrl;
+    if (url) {
+      const series = toZwiftSeries(await client.getFitnessData(url));
+      if (series) await storeSeries(activityId, series);
+    }
+  } catch (err) {
+    console.error(`[zwift] edit series rebuild for ${externalId} failed:`, err);
+  }
+
+  await prisma.activitySource.update({
+    where: { activityId_connectionId: { activityId, connectionId: connection.id } },
+    data: { sourceUpdatedAt: lastSave },
+  });
+}
+
 /** Pages the newest activities first; stops when nothing new for 2 pages. */
 export async function syncZwiftConnection(
   env: Env,
@@ -360,6 +424,54 @@ export async function syncZwiftConnection(
         result.status = 'PARTIAL';
         result.failedActivities.push(s.sourceActivityId);
         console.error(`[zwift] streams upgrade failed for ${s.sourceActivityId}:`, err);
+      }
+    }
+
+    // Edit detection: Zwift list rows carry no update timestamp either, but
+    // the detail payload's lastSaveDate is bumped on every in-game save —
+    // renames, description/privacy edits, workout completion. Same bounded
+    // poll-and-compare pattern as Garmin's lastUpdateDate pass: details over
+    // the 100 most recent activities in a 45-day window, compared against
+    // source_updated_at; edits are re-ingested with the provider's save time
+    // stamped onto source_updated_at. Fresh ingest stamps it with "now", so
+    // a just-synced activity no-ops (its lastSaveDate is already in the past)
+    // and the pass only fires on real later edits. Zwift-owned rows only —
+    // dedup rows pointing at another provider's activity never rewrite that
+    // owner's authoritative payload.
+    {
+      const windowStart = new Date(Date.now() - 45 * 86_400_000);
+      const recent = await prisma.activitySource.findMany({
+        where: {
+          connectionId: connection.id,
+          activity: {
+            startTime: { gte: windowStart },
+            raw: { path: ['provider'], equals: 'ZWIFT' },
+          },
+        },
+        select: { activityId: true, sourceActivityId: true, sourceUpdatedAt: true },
+        orderBy: { activity: { startTime: 'desc' } },
+        take: 100,
+      });
+      for (const s of recent) {
+        try {
+          const detail = await client.getActivityDetail(s.sourceActivityId);
+          const lastSave = detail.lastSaveDate ? new Date(detail.lastSaveDate) : null;
+          if (!lastSave || Number.isNaN(lastSave.getTime())) continue; // never re-ingest blind
+          if (s.sourceUpdatedAt && s.sourceUpdatedAt >= lastSave) continue; // unchanged
+          await reingestEditedZwiftActivity(
+            client,
+            connection,
+            s.activityId,
+            s.sourceActivityId,
+            detail,
+            lastSave,
+          );
+          result.itemsUpdated++;
+        } catch (err) {
+          result.status = 'PARTIAL';
+          result.failedActivities.push(`edit:${s.sourceActivityId}`);
+          console.error(`[zwift] edit detection for ${s.sourceActivityId} failed:`, err);
+        }
       }
     }
   } catch (err) {

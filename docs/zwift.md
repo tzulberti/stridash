@@ -75,6 +75,36 @@ Per-second streams are **parallel arrays aligned by index**, with
 (Watopia etc.), not real GPS — storing them under the same channel as real GPS
 streams would invite nonsense on any geo feature.
 
+## Edit detection
+
+Zwift list rows carry no update timestamp, but the detail payload's
+`lastSaveDate` is bumped on **every in-game save** — renames,
+description/privacy edits, workout completion. Verified 2026-11-13:
+`lastSaveDate` format is `2026-09-28T22:34:55.957+0000` (millisecond
+precision, zero-offset). Same bounded poll-and-compare pattern as
+[Garmin's](garmin.md) `lastUpdateDate` pass:
+
+- Each sync polls the details of the **100 most recent activities whose
+  `start_time` is within 45 days**, and compares `lastSaveDate` against
+  `activity_sources.source_updated_at`.
+- A detail without a parseable `lastSaveDate` is never re-ingested blind.
+- An edited activity is re-ingested from the detail already in hand:
+  headline/workout name, moving time, distance/speeds, HR/power/cadence,
+  calories, ascent (the detail row names its ascent key `totalElevation` —
+  fractional metres, unlike the list row's `totalElevationInMeters`),
+  `detail_raw` refreshed, series rebuilt from the fresh `fitnessData` URL
+  (best-effort — the existing series survives a fetch hiccup), and
+  `source_updated_at` stamped with the provider's own save time.
+- Absent detail fields update nothing (`undefined` = no change in Prisma), so
+  a partial payload can never null out stored values. `raw` keeps the
+  discovery-time list row; `detail_raw` is the fresh authority.
+- **Zwift-owned rows only** (`raw.provider = 'ZWIFT'`): dedup rows pointing
+  at another provider's activity never rewrite that owner's authoritative
+  payload.
+- Fresh ingest stamps `source_updated_at` with "now", so a just-synced
+  activity no-ops (its `lastSaveDate` is already in the past) and the pass
+  only fires on real later edits.
+
 ## Known gaps vs the other connectors
 
 - **Stories/laps**: Zwift reports no lap segments (races aside, which have

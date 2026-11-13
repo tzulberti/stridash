@@ -2,8 +2,8 @@
  * Zwift sync-service unit tests — mocked prisma + mocked HTTP client, no
  * network and no database. Covers the orchestration the normalize tests
  * can't reach: page-scan stopping, ingest scalar/stream enrichment,
- * failure classification (PARTIAL vs ERROR) and the self-healing upgrade
- * pass.
+ * failure classification (PARTIAL vs ERROR), the self-healing upgrade
+ * pass and the lastSaveDate edit-detection pass.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -28,6 +28,7 @@ const { prisma, listActivities, getActivityDetail, getFitnessData, zwiftRefresh 
       activitySource: {
         findMany: vi.fn(async () => [] as Array<Record<string, unknown>>),
         upsert: vi.fn(async () => ({})),
+        update: vi.fn(async () => ({})),
       },
       activityDataPoint: { upsert: vi.fn(async () => ({})) },
     },
@@ -277,6 +278,181 @@ describe('syncZwiftConnection — failure classification', () => {
     };
     expect(errUpdate.data.status).toBe('ERROR');
     expect(errUpdate.data.errorDetail.kind).toBe('CREDENTIALS');
+  });
+});
+
+// ─── Edit detection (lastSaveDate) ──────────────────────────────────────────
+
+/** Seed the three activitySource.findMany calls: known-id scan (no take),
+ * upgrade pass (take: 50) and edit pass (take: 100). */
+function mockScan(known: unknown[] = [], upgrade: unknown[] = [], edits: unknown[] = []): void {
+  prisma.activitySource.findMany.mockImplementation(async (args: { take?: number }) => {
+    if (args?.take === 100) return edits; // edit pass
+    if (args?.take === 50) return upgrade; // upgrade pass
+    return known; // known-id scan
+  });
+}
+
+/** A detail payload shaped like the real thing: names its ascent key
+ * `totalElevation` (fractional metres), carries Zwift's +0000 timestamps. */
+const editDetail = {
+  ...detail,
+  id_str: '9007199254740999',
+  sport: 'CYCLING',
+  name: 'Zwift - Renamed Evening Ride',
+  startDate: '2026-11-08T18:00:00.000Z',
+  endDate: '2026-11-08T18:30:00.000Z',
+  distanceInMeters: 15_000,
+  totalElevation: 21.1524,
+  lastSaveDate: '2026-11-10T12:00:00.957+0000',
+} as ZwiftActivity;
+
+describe('syncZwiftConnection — edit detection (lastSaveDate)', () => {
+  it('re-ingests an edited row: scalars + detail_raw + series rebuilt, source_updated_at = lastSaveDate', async () => {
+    mockScan(
+      [],
+      [],
+      [
+        {
+          activityId: 'act-1',
+          sourceActivityId: '9007199254740999',
+          sourceUpdatedAt: new Date('2026-11-09T00:00:00.000Z'),
+        },
+      ],
+    );
+    getActivityDetail.mockResolvedValue(editDetail);
+
+    const result = await syncZwiftConnection(env, connection);
+
+    expect(result.status).toBe('OK');
+    expect(result.itemsUpdated).toBe(1);
+    expect(result.failedActivities).toEqual([]);
+
+    // the activity row is rebuilt from the fresh detail
+    const update = (
+      prisma.activity.update.mock.calls[0][0] as {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }
+    ).data;
+    expect(update.headline).toBe('Zwift - Renamed Evening Ride');
+    expect(update.workoutName).toBe('Renamed Evening Ride');
+    expect(update.movingTimeS).toBe(1800);
+    expect(update.avgHr).toBe(124);
+    expect(update.maxPowerW).toBe(250);
+    expect(update.detailRaw).toBe(editDetail);
+    // the detail row's own ascent key feeds totalAscentM
+    expect(update.totalAscentM).toBe(21.1524);
+
+    // series rebuilt from the fresh stream
+    expect(prisma.activityDataPoint.upsert).toHaveBeenCalledTimes(1);
+
+    // provenance stamped with the provider's save time (Zwift's +0000 form)
+    const sourceUpdate = (
+      prisma.activitySource.update.mock.calls[0][0] as {
+        where: { activityId_connectionId: { activityId: string } };
+        data: { sourceUpdatedAt: Date };
+      }
+    ).data;
+    expect(sourceUpdate.sourceUpdatedAt).toEqual(new Date('2026-11-10T12:00:00.957Z'));
+  });
+
+  it('no-ops when lastSaveDate is not after source_updated_at (unchanged / fresh ingest)', async () => {
+    mockScan(
+      [],
+      [],
+      [
+        {
+          activityId: 'act-1',
+          sourceActivityId: '9007199254740999',
+          // fresh ingest stamps "now"; the activity's save time is older
+          sourceUpdatedAt: new Date('2026-11-10T12:00:00.957Z'),
+        },
+      ],
+    );
+
+    const result = await syncZwiftConnection(env, connection);
+
+    expect(result.itemsUpdated).toBe(0);
+    expect(prisma.activity.update).not.toHaveBeenCalled();
+    expect(prisma.activitySource.update).not.toHaveBeenCalled();
+    expect(prisma.activityDataPoint.upsert).not.toHaveBeenCalled();
+  });
+
+  it('never re-ingests blind: a detail without lastSaveDate is skipped', async () => {
+    mockScan(
+      [],
+      [],
+      [{ activityId: 'act-1', sourceActivityId: '9007199254740999', sourceUpdatedAt: new Date(0) }],
+    );
+    const noStamp = { ...editDetail } as Record<string, unknown>;
+    delete noStamp.lastSaveDate;
+    getActivityDetail.mockResolvedValue(noStamp);
+
+    const result = await syncZwiftConnection(env, connection);
+
+    expect(result.itemsUpdated).toBe(0);
+    expect(result.status).toBe('OK');
+    expect(prisma.activity.update).not.toHaveBeenCalled();
+  });
+
+  it('a series hiccup during re-ingest is best-effort: scalars + stamp still land', async () => {
+    mockScan(
+      [],
+      [],
+      [{ activityId: 'act-1', sourceActivityId: '9007199254740999', sourceUpdatedAt: new Date(0) }],
+    );
+    getActivityDetail.mockResolvedValue(editDetail);
+    getFitnessData.mockRejectedValueOnce(new Error('stream down'));
+
+    const result = await syncZwiftConnection(env, connection);
+
+    expect(result.status).toBe('OK'); // the edit itself succeeded
+    expect(result.itemsUpdated).toBe(1);
+    expect(
+      (prisma.activity.update.mock.calls[0][0] as { data: Record<string, unknown> }).data,
+    ).toHaveProperty('detailRaw', editDetail);
+    expect(prisma.activitySource.update).toHaveBeenCalled();
+  });
+
+  it('a detail failure during the edit pass degrades to PARTIAL as edit:<id>', async () => {
+    mockScan(
+      [],
+      [],
+      [{ activityId: 'act-1', sourceActivityId: '9007199254740999', sourceUpdatedAt: new Date(0) }],
+    );
+    getActivityDetail.mockRejectedValueOnce(new Error('detail down'));
+
+    const result = await syncZwiftConnection(env, connection);
+
+    expect(result.status).toBe('PARTIAL');
+    expect(result.failedActivities).toContain('edit:9007199254740999');
+    expect(prisma.activity.update).not.toHaveBeenCalled();
+  });
+
+  it('polls a bounded recent window over Zwift-owned rows only', async () => {
+    mockScan();
+
+    await syncZwiftConnection(env, connection);
+
+    const editCall = prisma.activitySource.findMany.mock.calls.find(
+      (c) => (c[0] as { take?: number }).take === 100,
+    )![0] as {
+      where: {
+        connectionId: string;
+        activity: {
+          startTime: { gte: Date };
+          raw: { path: string[]; equals: string };
+        };
+      };
+    };
+    expect(editCall.where.connectionId).toBe(connection.id);
+    // 45-day lookback
+    expect(Date.now() - editCall.where.activity.startTime.gte.getTime()).toBeLessThanOrEqual(
+      45 * 86_400_000 + 1_000,
+    );
+    // ownership filter: never rewrite another provider's authoritative row
+    expect(editCall.where.activity.raw).toEqual({ path: ['provider'], equals: 'ZWIFT' });
   });
 });
 

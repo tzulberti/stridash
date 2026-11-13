@@ -128,11 +128,12 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [ ] Connections screen with "sync now" buttons + `sync_logs` error surfacing
 - [ ] Manual entry UI
 - [ ] Mobile (Expo) app UI — dashboards phone-sized
-- [ ] Edit detection beyond Garmin: Zwift detail payloads carry
+- [x] Edit detection beyond Garmin: Zwift's detail payload carries
       `lastSaveDate` — same poll-and-compare pattern as Garmin's
-      `lastUpdateDate` pass; iGPSPORT has no per-ride edit signal
-      (FIT re-download is the only option). Deletion detection (an activity
-      removed at the provider) is still undetected for every provider.
+      `lastUpdateDate` pass ([`zwift.md`](zwift.md) "Edit detection");
+      iGPSPORT has no per-ride edit signal (FIT re-download is the only
+      option). Deletion detection (an activity removed at the provider) is
+      still undetected for every provider.
 
 ## M6 — Extras ☐
 

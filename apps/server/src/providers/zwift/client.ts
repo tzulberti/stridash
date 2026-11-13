@@ -90,6 +90,11 @@ export interface ZwiftActivity {
   totalElevationInMeters?: number;
   calories?: number;
   fitnessData?: { fullDataUrl?: string };
+  /** detail-only: bumped on every in-game save (rename, description,
+   * privacy, workout completion) — the edit-detection signal */
+  lastSaveDate?: string;
+  /** detail-only: fractional metres (list rows name it totalElevationInMeters) */
+  totalElevation?: number;
   [key: string]: unknown;
 }
 
