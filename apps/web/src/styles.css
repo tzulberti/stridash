@@ -488,6 +488,11 @@ footer {
   border-radius: 3px;
 }
 
+/* compare-splits header: swatch-only column identities */
+.cmp-hsw {
+  text-align: center;
+}
+
 /* disabled toggles (e.g. 'distance' axis with no distance stream) */
 .btn:disabled {
   opacity: 0.35;

@@ -137,7 +137,9 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       suggests same-type activities within ±25% distance (±40% duration when
       the base has no distance), newest-first, 20 max; the activity page gains
       a Compare section — picker, side-by-side stat table with signed deltas,
-      and per-channel overlaid two-line charts (A green / B red; distance
+      per-unit splits table (paired by unit index, Δ pace in seconds per unit,
+      Δ elevation in meters) when both sides carry distance streams, and
+      per-channel overlaid two-line charts (A green / B red; distance
       x-axis only when both series carry a distance stream)
 - [ ] Onboarding: create user → connect providers → first sync (UI)
 - [ ] Connections screen with "sync now" buttons + `sync_logs` error surfacing

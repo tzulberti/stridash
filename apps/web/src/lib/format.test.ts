@@ -13,6 +13,7 @@ import {
   fmtDate,
   fmtDeltaSecs,
   pctDelta,
+  numDelta,
   metersPerUnit,
   setUnit,
   TYPE_EMOJI,
@@ -95,6 +96,15 @@ describe('compare deltas', () => {
     expect(pctDelta(0, 100)).toBeNull(); // percent of nothing is noise
     expect(pctDelta(null, 100)).toBeNull();
     expect(pctDelta(100, null)).toBeNull();
+  });
+
+  it('numDelta renders signed absolute steps with an optional suffix', () => {
+    expect(numDelta(12, 18, ' m')).toBe('+6 m');
+    expect(numDelta(12, 9, ' m')).toBe('−3 m');
+    expect(numDelta(12, 12, ' m')).toBe('±0 m');
+    expect(numDelta(12.4, 12.6)).toBe('±0'); // rounds once
+    expect(numDelta(10, null)).toBeNull();
+    expect(numDelta(null, 10, ' m')).toBeNull();
   });
 });
 

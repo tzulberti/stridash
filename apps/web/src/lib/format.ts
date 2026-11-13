@@ -96,6 +96,20 @@ export function pctDelta(
   return `${sign}${Math.abs(p).toFixed(1)}%`;
 }
 
+/** Signed integer difference for count-like metrics (elevation meters, bpm,
+ * rpm) where absolute steps matter more than percent: `+6 m` / `−3` / `±0`,
+ * `null` when either side is unknown. */
+export function numDelta(
+  a: number | null | undefined,
+  b: number | null | undefined,
+  suffix = '',
+): string | null {
+  if (a == null || b == null) return null;
+  const d = Math.round(b - a);
+  if (d === 0) return `±0${suffix}`;
+  return `${d > 0 ? '+' : '−'}${Math.abs(d)}${suffix}`;
+}
+
 // ─── Feed constants ─────────────────────────────────────────────────────────
 
 export const TYPE_EMOJI: Record<string, string> = {

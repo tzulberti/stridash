@@ -6,7 +6,7 @@
  * activities list + one-activity drill-down with GPS/HR/power series.
  */
 
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef, Fragment } from 'react';
 import type { Measurement, Activity, MeResponse, Device } from '@stridash/types';
 
 // ─── API client ──────────────────────────────────────────────────────────────
@@ -767,6 +767,7 @@ import {
   getLocale,
   fmtDeltaSecs,
   pctDelta,
+  numDelta,
   TYPE_EMOJI,
   FEED_TYPES,
   FEED_PROVIDERS,
@@ -1054,6 +1055,79 @@ function ActivityDetail({
     return buildKmSplits(s);
   }, [rows]);
 
+  /** the compared activity's per-unit splits — same builder, same display
+   * unit as the base activity's table */
+  const compareSplits = useMemo(() => {
+    const s = compareAct?.series?.[0]?.series;
+    if (!s) return null;
+    return buildKmSplits(s);
+  }, [compareAct]);
+
+  /** paired split rows: same unit index on both activities (1, 2, 3…, plus
+   * the tail row only when both activities have one) */
+  const compareSplitRows = useMemo(() => {
+    if (!splits || !compareSplits) return [];
+    const byKm = new Map(compareSplits.map((r) => [r.km, r]));
+    return splits
+      .filter((r) => byKm.has(r.km))
+      .map((r) => ({ a: r, b: byKm.get(r.km) as KmSplit }));
+  }, [splits, compareSplits]);
+
+  /** compare-splits column groups: a metric shows up only when at least one
+   * paired row has the value on BOTH sides — otherwise the A/B columns are
+   * just dashes and the Δ column is noise */
+  const compareSplitGroups = useMemo(() => {
+    const paired = compareSplitRows;
+    if (paired.length === 0) return [];
+    const both = (pick: (r: KmSplit) => number | null): boolean =>
+      paired.some(({ a, b }) => pick(a) != null && pick(b) != null);
+    type Group = {
+      key: string;
+      labelKey: MsgKey;
+      cell: (r: KmSplit) => string | null;
+      delta: (a: KmSplit, b: KmSplit) => string | null;
+    };
+    const groups: Group[] = [];
+    if (both((r) => r.paceSec))
+      groups.push({
+        key: 'pace',
+        labelKey: 'split.pace',
+        cell: (r) => fmtPace(r.paceSec),
+        // signed seconds per unit — the tangible number for runners
+        delta: (a, b) => fmtDeltaSecs(a.paceSec, b.paceSec),
+      });
+    if (both((r) => r.avgHr))
+      groups.push({
+        key: 'hr',
+        labelKey: 'split.avgHr',
+        cell: (r) => (r.avgHr != null ? `${Math.round(r.avgHr)} bpm` : null),
+        delta: (a, b) => pctDelta(a.avgHr, b.avgHr),
+      });
+    if (both((r) => r.maxHr))
+      groups.push({
+        key: 'hrm',
+        labelKey: 'split.maxHr',
+        cell: (r) => (r.maxHr != null ? `${Math.round(r.maxHr)} bpm` : null),
+        delta: (a, b) => pctDelta(a.maxHr, b.maxHr),
+      });
+    if (both((r) => r.avgPowerW))
+      groups.push({
+        key: 'pw',
+        labelKey: 'split.power',
+        cell: (r) => (r.avgPowerW != null ? `${Math.round(r.avgPowerW)} W` : null),
+        delta: (a, b) => pctDelta(a.avgPowerW, b.avgPowerW),
+      });
+    if (both((r) => r.elevM))
+      groups.push({
+        key: 'el',
+        labelKey: 'split.elev',
+        cell: (r) => (r.elevM != null ? `${Math.round(r.elevM)} m` : null),
+        // meters climbed — absolute steps, not percent
+        delta: (a, b) => numDelta(a.elevM, b.elevM, ' m'),
+      });
+    return groups;
+  }, [compareSplitRows]);
+
   // columns render only when some row actually has the metric, so each sport
   // gets the columns its data supports (Garmin-style laps)
   const splitCols = useMemo(() => {
@@ -1303,6 +1377,62 @@ function ActivityDetail({
                   </tbody>
                 </table>
               </div>
+              {compareSplitRows.length > 0 && compareSplitGroups.length > 0 ? (
+                <>
+                  <h4>{t('detail.splits', { unit: unitLabel() })}</h4>
+                  <div className="table-scroll">
+                    <table className="list">
+                      <thead>
+                        <tr>
+                          <th rowSpan={2}>{unitLabel()}</th>
+                          {compareSplitGroups.map((g) => (
+                            <th key={g.key} colSpan={3}>
+                              {t(g.labelKey)}
+                            </th>
+                          ))}
+                        </tr>
+                        <tr>
+                          {compareSplitGroups.map((g) => (
+                            <Fragment key={g.key}>
+                              {/* column identities come from the legend
+                                  swatches above, not text */}
+                              <th
+                                className="cmp-hsw"
+                                title={t('compare.this')}
+                                aria-label={t('compare.this')}
+                              >
+                                <span className="cmp-sw" style={{ background: COMPARE_A }} />
+                              </th>
+                              <th
+                                className="cmp-hsw"
+                                title={t('compare.other')}
+                                aria-label={t('compare.other')}
+                              >
+                                <span className="cmp-sw" style={{ background: COMPARE_B }} />
+                              </th>
+                              <th>Δ</th>
+                            </Fragment>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {compareSplitRows.map(({ a, b }) => (
+                          <tr key={a.km}>
+                            <td>{a.label}</td>
+                            {compareSplitGroups.map((g) => (
+                              <Fragment key={g.key}>
+                                <td>{g.cell(a) ?? '—'}</td>
+                                <td>{g.cell(b) ?? '—'}</td>
+                                <td>{g.delta(a, b) ?? '—'}</td>
+                              </Fragment>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
               {compareCharts.charts.map((c) => (
                 <div key={c.key}>
                   <h4>{t(c.titleKey)}</h4>
