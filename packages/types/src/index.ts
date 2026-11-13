@@ -36,10 +36,14 @@ export type IdentityKind = 'PASSWORD';
  * (no jsonb). A new setting is a new column, not a new json key. */
 export type PrefUnit = 'km' | 'mi';
 export type PrefTheme = 'dark' | 'light';
+/** UI languages shipped by the web dashboard (English default). */
+export type PrefLanguage =
+  'en' | 'es' | 'pt' | 'fr' | 'de' | 'it' | 'nl' | 'ru' | 'ja' | 'ko' | 'zh' | 'hi';
 
 export interface UserPreferences {
   units: PrefUnit;
   theme: PrefTheme;
+  language: PrefLanguage;
 }
 
 /** GET /api/me response: account + the preference pair. */

@@ -130,35 +130,33 @@ type SyncResponseJson = {
 function summarizeSync(res: SyncResponseJson): string {
   const r = res.result;
   const parts: string[] = [];
-  if (r?.itemsCreated) parts.push(`${r.itemsCreated} new`);
-  if (r?.itemsUpdated) parts.push(`${r.itemsUpdated} updated`);
-  if (res.wellness?.sleepUpserted) parts.push(`${res.wellness.sleepUpserted} sleep records`);
-  if (res.wellness?.daysUpserted) parts.push(`${res.wellness.daysUpserted} daily records`);
-  return parts.length ? `synced — ${parts.join(' · ')}` : 'synced — nothing new';
+  if (r?.itemsCreated) parts.push(t('sync.new', { n: r.itemsCreated }));
+  if (r?.itemsUpdated) parts.push(t('sync.updated', { n: r.itemsUpdated }));
+  if (res.wellness?.sleepUpserted) parts.push(t('sync.sleep', { n: res.wellness.sleepUpserted }));
+  if (res.wellness?.daysUpserted) parts.push(t('sync.daily', { n: res.wellness.daysUpserted }));
+  return parts.length ? t('sync.summary', { items: parts.join(' · ') }) : t('sync.nothingNew');
 }
 
 // ─── Small SVG chart (no chart deps — keeps bundle light and honest) ─────────
 
 type Point = { x: number; y: number };
 
-const MONTHS_SHORT = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
+// month names come from Intl in the active locale (en → Jan/Feb/…, ru →
+// янв./февр./…) — cached per locale since the chart renders on every hover
+const monthFmtCache = new Map<string, Intl.DateTimeFormat>();
+function monthShort(d: Date): string {
+  const loc = getLocale();
+  let f = monthFmtCache.get(loc);
+  if (!f) {
+    f = new Intl.DateTimeFormat(loc, { month: 'short', timeZone: 'UTC' });
+    monthFmtCache.set(loc, f);
+  }
+  return f.format(d);
+}
 
 function fmtDay(ms: number): string {
   const d = new Date(ms);
-  return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+  return `${monthShort(d)} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
 /** elapsed since the activity start: 0:30 for sub-hour runs, 1:02:33 after */
@@ -174,10 +172,9 @@ function fmtElapsed(ms: number): string {
 function fmtTick(ms: number, spanDays: number, x0: number): string {
   const d = new Date(ms);
   if (spanDays < 1.5) return fmtElapsed(ms - x0); // activity-length spans: elapsed since start
-  if (spanDays >= 545) return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-  if (spanDays >= 60)
-    return `${MONTHS_SHORT[d.getUTCMonth()]} '${String(d.getUTCFullYear() % 100)}`;
-  return `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
+  if (spanDays >= 545) return `${monthShort(d)} ${d.getUTCFullYear()}`;
+  if (spanDays >= 60) return `${monthShort(d)} '${String(d.getUTCFullYear() % 100)}`;
+  return `${monthShort(d)} ${d.getUTCDate()}`;
 }
 
 /** readable number for tick marks + tooltips */
@@ -233,7 +230,7 @@ function LineChart({
 }) {
   // hover index — declared before the early return so hook counts stay stable
   const [hover, setHover] = useState<number | null>(null);
-  if (points.length < 2) return <div className="empty">not enough data</div>;
+  if (points.length < 2) return <div className="empty">{t('chart.noData')}</div>;
 
   const W = 900;
   const H = height;
@@ -383,7 +380,11 @@ function LineChart({
         </text>
       )}
       <text x={W - padR} y={H - 6} textAnchor="end" className="chart-axis-title">
-        {isDist ? `distance (${unitLabel()})` : spanDays < 1.5 ? 'elapsed' : 'date'}
+        {isDist
+          ? t('chart.axis.distance', { unit: unitLabel() })
+          : spanDays < 1.5
+            ? t('chart.axis.elapsed')
+            : t('chart.axis.date')}
       </text>
       {zonePaths ? (
         zonePaths.map((zp) => (
@@ -648,6 +649,8 @@ import {
   setUnit,
   metersPerUnit,
   unitLabel,
+  setLocale,
+  getLocale,
   TYPE_EMOJI,
   FEED_TYPES,
   FEED_PROVIDERS,
@@ -658,6 +661,7 @@ import {
   type Route,
   type Unit,
 } from './lib/format';
+import { setLang, localeOf, LANGUAGES, t, type Lang, type MsgKey } from './lib/i18n/index';
 
 // ─── Activity page (/activity/<id> — every scrap of info for one activity) ───
 
@@ -685,18 +689,18 @@ interface ActivitySeriesRow {
 }
 
 /** labeled stream charts for the activity page, in display order */
-const SERIES_CHANNELS: Array<[string, string, string, string]> = [
-  ['speedMs', 'Speed', '#30a46c', ' m/s'],
-  ['hrBpm', 'Heart rate', '#e5484d', ' bpm'],
-  ['powerW', 'Power', '#6e56cf', ' W'],
-  ['cadenceRpm', 'Cadence', '#0091ff', ' rpm'],
-  ['altitudeM', 'Altitude', '#b8860b', ' m'],
-  ['respirationRate', 'Respiration', '#d6409f', ' br/min'],
-  ['staminaPct', 'Stamina', '#d29922', ' %'],
-  ['stepLengthM', 'Step length', '#80a9a0', ' m'],
-  ['verticalOscillationM', 'Vertical oscillation', '#9c6ade', ' m'],
-  ['stanceTimePct', 'Ground contact %', '#bf7f26', ' %'],
-  ['verticalRatioPct', 'Vertical ratio', '#bf7f26', ' %'],
+const SERIES_CHANNELS: Array<[string, MsgKey, string, string]> = [
+  ['speedMs', 'series.speed', '#30a46c', ' m/s'],
+  ['hrBpm', 'series.hr', '#e5484d', ' bpm'],
+  ['powerW', 'series.power', '#6e56cf', ' W'],
+  ['cadenceRpm', 'series.cadence', '#0091ff', ' rpm'],
+  ['altitudeM', 'series.altitude', '#b8860b', ' m'],
+  ['respirationRate', 'series.respiration', '#d6409f', ' br/min'],
+  ['staminaPct', 'series.stamina', '#d29922', ' %'],
+  ['stepLengthM', 'series.stepLength', '#80a9a0', ' m'],
+  ['verticalOscillationM', 'series.vertOscillation', '#9c6ade', ' m'],
+  ['stanceTimePct', 'series.groundContact', '#bf7f26', ' %'],
+  ['verticalRatioPct', 'series.vertRatio', '#bf7f26', ' %'],
 ];
 
 function ActivityDetail({
@@ -745,7 +749,7 @@ function ActivityDetail({
         if (!alive) return;
         const item = r.items[0];
         if (!item) {
-          setError('activity not found');
+          setError(t('detail.notFound'));
           return;
         }
         setAct(item);
@@ -771,18 +775,18 @@ function ActivityDetail({
     const byDistance = xAxis === 'distance' && dist.length === ts.length;
     const out: Array<{
       key: string;
-      title: string;
+      titleKey: MsgKey;
       color: string;
       points: Point[];
       unit: string;
       zones: number[] | null;
     }> = [];
-    for (const [key, title, color, unit] of SERIES_CHANNELS) {
+    for (const [key, titleKey, color, unit] of SERIES_CHANNELS) {
       const vals = (s as Record<string, number[] | undefined>)[key];
       if (!vals?.length) continue;
       out.push({
         key,
-        title,
+        titleKey,
         color,
         unit,
         zones: key === 'hrBpm' ? hrZoneThresholds(vals, act?.hrZonesMin ?? null) : null,
@@ -811,115 +815,117 @@ function ActivityDetail({
     const has = (pick: (r: KmSplit) => number | null): boolean => rs.some((r) => pick(r) != null);
     const cols: Array<{ key: string; head: string; cell: (r: KmSplit) => string | null }> = [
       { key: 'km', head: unitLabel(), cell: (r) => r.label },
-      { key: 'time', head: 'time', cell: (r) => fmtSplitTime(r.timeS) },
+      { key: 'time', head: t('split.time'), cell: (r) => fmtSplitTime(r.timeS) },
     ];
     if (has((r) => r.bestPaceSec))
-      cols.push({ key: 'bp', head: 'best pace', cell: (r) => fmtPace(r.bestPaceSec) });
+      cols.push({ key: 'bp', head: t('split.best'), cell: (r) => fmtPace(r.bestPaceSec) });
     if (has((r) => r.paceSec))
-      cols.push({ key: 'pace', head: 'pace', cell: (r) => fmtPace(r.paceSec) });
+      cols.push({ key: 'pace', head: t('split.pace'), cell: (r) => fmtPace(r.paceSec) });
     if (has((r) => r.avgHr))
       cols.push({
         key: 'hr',
-        head: 'avg HR',
+        head: t('split.avgHr'),
         cell: (r) => (r.avgHr != null ? `${Math.round(r.avgHr)} bpm` : null),
       });
     if (has((r) => r.maxHr))
       cols.push({
         key: 'hrm',
-        head: 'max HR',
+        head: t('split.maxHr'),
         cell: (r) => (r.maxHr != null ? `${Math.round(r.maxHr)} bpm` : null),
       });
     if (has((r) => r.avgCadence))
       cols.push({
         key: 'cad',
-        head: 'cadence',
+        head: t('split.cadence'),
         cell: (r) => (r.avgCadence != null ? `${Math.round(r.avgCadence)}` : null),
       });
     if (has((r) => r.avgSpeedMs))
       cols.push({
         key: 'spd',
-        head: 'speed',
+        head: t('split.speed'),
         cell: (r) => (r.avgSpeedMs != null ? fmtSpeed(r.avgSpeedMs) : null),
       });
     if (has((r) => r.avgPowerW))
       cols.push({
         key: 'pw',
-        head: 'power',
+        head: t('split.power'),
         cell: (r) => (r.avgPowerW != null ? `${Math.round(r.avgPowerW)} W` : null),
       });
     if (has((r) => r.avgStepM))
       cols.push({
         key: 'step',
-        head: 'step (m)',
+        head: t('split.step'),
         cell: (r) => (r.avgStepM != null ? r.avgStepM.toFixed(2) : null),
       });
     if (has((r) => r.avgVoCm))
       cols.push({
         key: 'vo',
-        head: 'vert osc (cm)',
+        head: t('split.vertOsc'),
         cell: (r) => (r.avgVoCm != null ? r.avgVoCm.toFixed(1) : null),
       });
     if (has((r) => r.avgVertRatioPct))
       cols.push({
         key: 'vr',
-        head: 'vert ratio (%)',
+        head: t('split.vertRatio'),
         cell: (r) => (r.avgVertRatioPct != null ? r.avgVertRatioPct.toFixed(1) : null),
       });
     if (has((r) => r.avgGctPct))
       cols.push({
         key: 'gct',
-        head: 'GCT (%)',
+        head: t('split.gct'),
         cell: (r) => (r.avgGctPct != null ? r.avgGctPct.toFixed(1) : null),
       });
     if (has((r) => r.elevM))
       cols.push({
         key: 'el',
-        head: 'elev ▲',
+        head: t('split.elev'),
         cell: (r) => (r.elevM != null ? `${Math.round(r.elevM)} m` : null),
       });
     return cols;
   }, [splits]);
 
   if (error) return <p className="error">{error}</p>;
-  if (!act) return <p>loading…</p>;
+  if (!act) return <p>{t('detail.loading')}</p>;
 
   return (
     <div>
       <button className="btn" onClick={onBack}>
-        ← back to dashboard
+        {t('nav.backDetail')}
       </button>
       <h2>
         {TYPE_EMOJI[act.type] ?? '⌚'} {act.headline}
       </h2>
-      {act.workoutName && <p className="conn-sub">workout: {act.workoutName}</p>}
+      {act.workoutName && (
+        <p className="conn-sub">{t('detail.workout', { name: act.workoutName })}</p>
+      )}
       <div className="metric-tabs">
         <button
           className={`btn ghost ${xAxis === 'time' ? 'active' : ''}`}
           onClick={() => setXAxis('time')}
         >
-          time
+          {t('detail.timeTab')}
         </button>
         <button
           className={`btn ghost ${xAxis === 'distance' ? 'active' : ''}`}
           disabled={!hasDistance}
           onClick={() => setXAxis('distance')}
         >
-          distance
+          {t('detail.distanceTab')}
         </button>
       </div>
       <div className="cards">
-        <Card label="Start" value={fmtDate(act.startTime)} />
-        <Card label="Distance" value={fmtKm(act.distanceM)} />
-        <Card label="Duration" value={fmtMin(act.durationS)} />
-        <Card label="Moving" value={fmtMin(act.movingTimeS)} />
+        <Card label={t('detail.start')} value={fmtDate(act.startTime)} />
+        <Card label={t('detail.distanceC')} value={fmtKm(act.distanceM)} />
+        <Card label={t('detail.duration')} value={fmtMin(act.durationS)} />
+        <Card label={t('detail.moving')} value={fmtMin(act.movingTimeS)} />
         <Card
-          label="Avg / max HR"
+          label={t('detail.avgMaxHr')}
           value={
             has(act.avgHr) || has(act.maxHr) ? `${act.avgHr ?? '—'} / ${act.maxHr ?? '—'} bpm` : '—'
           }
         />
         <Card
-          label="Avg / max power"
+          label={t('detail.avgMaxPower')}
           value={
             has(act.avgPowerW) || has(act.maxPowerW)
               ? `${act.avgPowerW ?? '—'} / ${act.maxPowerW ?? '—'} W`
@@ -927,7 +933,7 @@ function ActivityDetail({
           }
         />
         <Card
-          label="Avg / max speed"
+          label={t('detail.avgMaxSpeed')}
           value={
             has(act.avgSpeedMs) || has(act.maxSpeedMs)
               ? `${fmtSpeed(act.avgSpeedMs)} / ${fmtSpeed(act.maxSpeedMs)}`
@@ -935,7 +941,7 @@ function ActivityDetail({
           }
         />
         <Card
-          label="Avg / max cadence"
+          label={t('detail.avgMaxCadence')}
           value={
             has(act.avgCadence) || has(act.maxCadence)
               ? `${act.avgCadence ?? '—'} / ${act.maxCadence ?? '—'} rpm`
@@ -943,7 +949,7 @@ function ActivityDetail({
           }
         />
         <Card
-          label="Ascent / descent"
+          label={t('detail.ascent')}
           value={
             has(act.totalAscentM) || has(act.totalDescentM)
               ? `${act.totalAscentM ?? '—'} / ${act.totalDescentM ?? '—'} m`
@@ -951,18 +957,18 @@ function ActivityDetail({
           }
         />
         <Card
-          label="Elev high / low"
+          label={t('detail.elevHigh')}
           value={
             has(act.elevationHighM) || has(act.elevationLowM)
               ? `${act.elevationLowM ?? '—'} / ${act.elevationHighM ?? '—'} m`
               : '—'
           }
         />
-        <Card label="Calories" value={asStr(act.caloriesKcal, ' kcal')} />
+        <Card label={t('detail.calories')} value={asStr(act.caloriesKcal, ' kcal')} />
         {act.trainingLoad != null ? (
-          <Card label="Training load" value={String(act.trainingLoad)} />
+          <Card label={t('detail.trainingLoad')} value={String(act.trainingLoad)} />
         ) : null}
-        {act.indoor ? <Card label="Mode" value="indoor" /> : null}
+        {act.indoor ? <Card label={t('detail.mode')} value={t('detail.indoorVal')} /> : null}
         {(() => {
           const d = act.device;
           if (!d) return null;
@@ -970,14 +976,14 @@ function ActivityDetail({
             d.model ??
             (d.manufacturer ? d.manufacturer[0]!.toUpperCase() + d.manufacturer.slice(1) : null);
           if (!name) return null;
-          return <Card label="Device" value={name} />;
+          return <Card label={t('detail.device')} value={name} />;
         })()}
       </div>
       {error && <p className="error">{error}</p>}
 
       {splits && splitCols.length > 2 ? (
         <section>
-          <h3>Per-kilometer splits</h3>
+          <h3>{t('detail.splits', { unit: unitLabel() })}</h3>
           <div className="table-scroll">
             <table className="list splits">
               <thead>
@@ -1001,14 +1007,14 @@ function ActivityDetail({
         </section>
       ) : null}
 
-      {rows === null && !error ? <p>loading series…</p> : null}
+      {rows === null && !error ? <p>{t('detail.loadingSeries')}</p> : null}
       {charts.map((c) => (
         <section key={c.key}>
-          <h3>{c.title}</h3>
+          <h3>{t(c.titleKey)}</h3>
           <LineChart
             points={c.points}
             color={c.color}
-            label={c.title}
+            label={t(c.titleKey)}
             unit={c.unit}
             zoneThresholds={c.zones}
             xMode={xAxis === 'distance' && hasDistance ? 'distance' : 'time'}
@@ -1029,24 +1035,26 @@ function ActivityDetail({
         </section>
       ))}
       {rows !== null && charts.length === 0 && !error ? (
-        <p className="empty">No time series stored for this activity.</p>
+        <p className="empty">{t('detail.noSeries')}</p>
       ) : null}
 
       {act.hrZonesMin?.length ? (
         <section>
-          <h3>Heart-rate zones</h3>
+          <h3>{t('detail.zones')}</h3>
           <table className="list">
             <thead>
               <tr>
-                <th>zone</th>
-                <th>minutes</th>
+                <th>{t('zones.zone')}</th>
+                <th>{t('zones.minutes')}</th>
               </tr>
             </thead>
             <tbody>
               {act.hrZonesMin.map((min, i) => (
                 <tr key={i}>
                   <td>{i + 1}</td>
-                  <td>{min} min</td>
+                  <td>
+                    {min} {t('detail.minShort')}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1056,7 +1064,7 @@ function ActivityDetail({
 
       {act.notes ? (
         <section>
-          <h3>Notes</h3>
+          <h3>{t('detail.notes')}</h3>
           <p>{act.notes}</p>
         </section>
       ) : null}
@@ -1169,6 +1177,24 @@ const COMPONENT_KINDS = [
   'OTHER',
 ] as const;
 
+/** COMPONENT_KINDS enum → translated label; unknown kinds (provider values
+ * like "SHOES") fall back to lowercased-with-spaces */
+const KIND_KEY: Record<string, MsgKey> = {
+  CHAIN: 'kind.chain',
+  CASSETTE: 'kind.cassette',
+  CHAINRING: 'kind.chainring',
+  BRAKE_PADS: 'kind.brakePads',
+  TIRES: 'kind.tires',
+  TUBES: 'kind.tubes',
+  PEDALS: 'kind.pedals',
+  BATTERY: 'kind.battery',
+  OTHER: 'kind.other',
+};
+function kindLabel(k: string): string {
+  const key = KIND_KEY[k];
+  return key ? t(key) : k.toLowerCase().replaceAll('_', ' ');
+}
+
 const km = (m: number): string =>
   `${(m / metersPerUnit()).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${unitLabel()}`;
 
@@ -1243,39 +1269,35 @@ function GearSection(props: { token: string; onBack: () => void }) {
   return (
     <section className="connections-page">
       <button type="button" className="btn ghost small" onClick={onBack}>
-        ← dashboard
+        {t('nav.backDashboard')}
       </button>
-      <h2>Gear</h2>
-      <p className="muted">
-        Bikes and shoes come from your provider syncs (Garmin today). Wear items like chains and
-        brake pads are managed here — usage is counted from the activities wearing that gear since
-        the install date.
-      </p>
+      <h2>{t('gear.heading')}</h2>
+      <p className="muted">{t('gear.intro')}</p>
       {error && <p className="error">{error}</p>}
-      {gear === null && !error && <p>Loading…</p>}
-      {gear?.length === 0 && <p className="muted">no gear synced yet — run a Garmin sync</p>}
+      {gear === null && !error && <p>{t('common.loading')}</p>}
+      {gear?.length === 0 && <p className="muted">{t('gear.none')}</p>}
       {gear?.map((g) => (
         <article key={g.id} className="card gear-card">
           <header>
             <strong>{g.name}</strong>{' '}
             <span className={`pill ${g.retiredAt ? 'revoked' : 'active'}`}>
               {g.kind.toLowerCase()}
-              {g.retiredAt ? ' · retired' : ''}
+              {g.retiredAt ? ` · ${t('gear.retired')}` : ''}
             </span>
             {g.provider && <span className="pill">{g.provider.toLowerCase()}</span>}
           </header>
           <p className="muted">
             {usageLine(g.usage)}
-            {g.thresholdM ? ` · limit ${km(g.thresholdM)}` : ''}
-            {g.firstUsedAt ? ` · first used ${g.firstUsedAt.slice(0, 10)}` : ''}
+            {g.thresholdM ? ` · ${t('gear.limit', { value: km(g.thresholdM) })}` : ''}
+            {g.firstUsedAt ? ` · ${t('gear.firstUsed', { date: g.firstUsedAt.slice(0, 10) })}` : ''}
           </p>
           {g.components.length > 0 && (
             <table>
               <thead>
                 <tr>
-                  <th>component</th>
-                  <th>usage</th>
-                  <th>window</th>
+                  <th>{t('gear.th.component')}</th>
+                  <th>{t('gear.th.usage')}</th>
+                  <th>{t('gear.th.window')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -1283,16 +1305,19 @@ function GearSection(props: { token: string; onBack: () => void }) {
                 {g.components.map((c) => (
                   <tr key={c.id}>
                     <td>
-                      {c.name}{' '}
-                      <span className="muted">({c.kind.toLowerCase().replaceAll('_', ' ')})</span>
+                      {c.name} <span className="muted">({kindLabel(c.kind)})</span>
                     </td>
                     <td>
                       {usageLine(c.usage)}
                       {c.thresholdM ? ` / ${km(c.thresholdM)}` : ''}
                     </td>
                     <td className="muted">
-                      {c.installedAt ? `since ${c.installedAt.slice(0, 10)}` : 'no install date'}
-                      {c.retiredAt ? ` → retired ${c.retiredAt.slice(0, 10)}` : ''}
+                      {c.installedAt
+                        ? t('gear.since', { date: c.installedAt.slice(0, 10) })
+                        : t('gear.noInstall')}
+                      {c.retiredAt
+                        ? ` ${t('gear.retiredAt', { date: c.retiredAt.slice(0, 10) })}`
+                        : ''}
                     </td>
                     <td>
                       {!c.retiredAt && (
@@ -1301,7 +1326,7 @@ function GearSection(props: { token: string; onBack: () => void }) {
                           className="btn ghost small"
                           onClick={() => retireComponent(c.id)}
                         >
-                          retire
+                          {t('gear.retire')}
                         </button>
                       )}{' '}
                       <button
@@ -1322,13 +1347,13 @@ function GearSection(props: { token: string; onBack: () => void }) {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="component name"
+                placeholder={t('gear.placeholder')}
                 autoFocus
               />
               <select value={kind} onChange={(e) => setKind(e.target.value)}>
                 {COMPONENT_KINDS.map((k) => (
                   <option key={k} value={k}>
-                    {k.toLowerCase().replaceAll('_', ' ')}
+                    {kindLabel(k)}
                   </option>
                 ))}
               </select>
@@ -1336,7 +1361,7 @@ function GearSection(props: { token: string; onBack: () => void }) {
                 type="date"
                 value={installedAt}
                 onChange={(e) => setInstalledAt(e.target.value)}
-                title="install date — usage counts from here"
+                title={t('gear.installDate')}
               />
               <button
                 type="button"
@@ -1344,7 +1369,7 @@ function GearSection(props: { token: string; onBack: () => void }) {
                 disabled={busy}
                 onClick={() => addComponent(g.id)}
               >
-                add
+                {t('gear.add')}
               </button>
               <button
                 type="button"
@@ -1354,12 +1379,12 @@ function GearSection(props: { token: string; onBack: () => void }) {
                   setName('');
                 }}
               >
-                cancel
+                {t('common.cancel')}
               </button>
             </div>
           ) : (
             <button type="button" className="btn ghost small" onClick={() => setAddingFor(g.id)}>
-              + add component
+              {t('gear.addComponent')}
             </button>
           )}
         </article>
@@ -1376,10 +1401,13 @@ function SettingsSection(props: {
   onUnitChange: (u: Unit) => void;
   theme: 'dark' | 'light';
   onThemeChange: (t: 'dark' | 'light') => void;
+  lang: Lang;
+  onLangChange: (l: Lang) => void;
   onDeleted: () => void;
   onBack: () => void;
 }) {
-  const { token, unit, onUnitChange, theme, onThemeChange, onDeleted, onBack } = props;
+  const { token, unit, onUnitChange, theme, onThemeChange, lang, onLangChange, onDeleted, onBack } =
+    props;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -1416,6 +1444,12 @@ function SettingsSection(props: {
       setError(String(err).replace(/^Error: /, '')),
     );
   }
+  function changeLanguage(l: Lang): void {
+    onLangChange(l);
+    api('/me', { method: 'PATCH', token, body: { language: l } }).catch((err) =>
+      setError(String(err).replace(/^Error: /, '')),
+    );
+  }
 
   async function exportData(): Promise<void> {
     setBusy(true);
@@ -1433,7 +1467,7 @@ function SettingsSection(props: {
         'stridash-export.json';
       a.click();
       URL.revokeObjectURL(url);
-      setNote('Export downloaded.');
+      setNote(t('settings.exported'));
     } catch (err) {
       setError(String(err).replace(/^Error: /, ''));
     } finally {
@@ -1456,28 +1490,28 @@ function SettingsSection(props: {
   return (
     <section className="connections-page">
       <button type="button" className="btn ghost small" onClick={onBack}>
-        ← dashboard
+        {t('nav.backDashboard')}
       </button>
-      <h2>Settings</h2>
+      <h2>{t('settings.heading')}</h2>
       {error && <p className="error">{error}</p>}
       {note && !error && <p className="muted">{note}</p>}
 
       <article className="card settings-card">
-        <h3>Account</h3>
-        {!me && !error && <p className="muted">Loading…</p>}
+        <h3>{t('settings.account')}</h3>
+        {!me && !error && <p className="muted">{t('common.loading')}</p>}
         {me && (
           <table>
             <tbody>
               <tr>
-                <th>email</th>
+                <th>{t('settings.email')}</th>
                 <td>{me.email}</td>
               </tr>
               <tr>
-                <th>display name</th>
+                <th>{t('settings.displayName')}</th>
                 <td>{me.displayName}</td>
               </tr>
               <tr>
-                <th>member since</th>
+                <th>{t('settings.memberSince')}</th>
                 <td>{me.createdAt.slice(0, 10)}</td>
               </tr>
             </tbody>
@@ -1486,66 +1520,75 @@ function SettingsSection(props: {
       </article>
 
       <article className="card settings-card">
-        <h3>Units</h3>
+        <h3>{t('settings.units')}</h3>
         <div className="setting-row">
           <button
             type="button"
             className={`btn small ${unit === 'km' ? '' : 'ghost'}`}
             onClick={() => changeUnit('km')}
           >
-            kilometers
+            {t('settings.kilometers')}
           </button>
           <button
             type="button"
             className={`btn small ${unit === 'mi' ? '' : 'ghost'}`}
             onClick={() => changeUnit('mi')}
           >
-            miles
+            {t('settings.miles')}
           </button>
-          <span className="muted">saved to your account</span>
+          <span className="muted">{t('settings.saved')}</span>
         </div>
       </article>
 
       <article className="card settings-card">
-        <h3>Theme</h3>
+        <h3>{t('settings.theme')}</h3>
         <div className="setting-row">
           <button
             type="button"
             className={`btn small ${theme === 'dark' ? '' : 'ghost'}`}
             onClick={() => changeTheme('dark')}
           >
-            dark
+            {t('settings.dark')}
           </button>
           <button
             type="button"
             className={`btn small ${theme === 'light' ? '' : 'ghost'}`}
             onClick={() => changeTheme('light')}
           >
-            light
+            {t('settings.light')}
           </button>
-          <span className="muted">saved to your account</span>
+          <span className="muted">{t('settings.saved')}</span>
         </div>
       </article>
 
       <article className="card settings-card">
-        <h3>Export</h3>
-        <p className="muted">
-          Downloads a full JSON dump of your account: activities (with provider raw payloads and
-          provenance), measurements, sleep, daily wellness and gear. Tokens are never included;
-          per-sample series are out of the dump (huge) but stay available per activity.
-        </p>
+        <h3>{t('settings.language')}</h3>
+        <div className="setting-row">
+          {LANGUAGES.map((l) => (
+            <button
+              key={l.code}
+              type="button"
+              className={`btn small ${lang === l.code ? '' : 'ghost'}`}
+              onClick={() => changeLanguage(l.code)}
+            >
+              {l.name}
+            </button>
+          ))}
+          <span className="muted">{t('settings.saved')}</span>
+        </div>
+      </article>
+
+      <article className="card settings-card">
+        <h3>{t('settings.export')}</h3>
+        <p className="muted">{t('settings.exportDesc')}</p>
         <button type="button" className="btn" disabled={busy} onClick={() => void exportData()}>
-          {busy ? 'preparing…' : 'Download my data (JSON)'}
+          {busy ? t('settings.preparing') : t('settings.download')}
         </button>
       </article>
 
       <article className="card settings-card danger-zone">
-        <h3>Danger zone</h3>
-        <p className="muted">
-          Permanently deletes this Stridash account and everything synced into it — activities,
-          weigh-ins, sleep, gear, provider links. Provider accounts themselves are untouched. There
-          is no undo.
-        </p>
+        <h3>{t('settings.danger')}</h3>
+        <p className="muted">{t('settings.dangerDesc')}</p>
         {!confirmDelete ? (
           <button
             type="button"
@@ -1555,14 +1598,14 @@ function SettingsSection(props: {
               setDeleteTyped('');
             }}
           >
-            Delete account…
+            {t('settings.deleteAccount')}
           </button>
         ) : (
           <div className="setting-row">
             <input
               value={deleteTyped}
               onChange={(e) => setDeleteTyped(e.target.value)}
-              placeholder="type DELETE to confirm"
+              placeholder={t('settings.typeDelete')}
             />
             <button
               type="button"
@@ -1570,14 +1613,14 @@ function SettingsSection(props: {
               disabled={deleteTyped !== 'DELETE' || busy}
               onClick={() => void deleteAccount()}
             >
-              {busy ? 'deleting…' : 'Delete permanently'}
+              {busy ? t('settings.deleting') : t('settings.deletePermanently')}
             </button>
             <button
               type="button"
               className="btn ghost small"
               onClick={() => setConfirmDelete(false)}
             >
-              cancel
+              {t('common.cancel')}
             </button>
           </div>
         )}
@@ -1621,13 +1664,14 @@ function ConnectionsSection(props: {
   // garmin second factor: the connect call answers 202 when the code step is due
   const [mfa, setMfa] = useState<{ id: string; method: string } | null>(null);
   const [mfaCode, setMfaCode] = useState('');
-  // delete confirmation + per-card sync result lines
+  // delete confirmation + per-card sync result lines (ok flag kept separately
+  // so the "sync failed — " prefix re-translates on a language switch)
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
-  const [syncMsg, setSyncMsg] = useState<Record<string, string>>({});
+  const [syncMsg, setSyncMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
 
   async function runSync(id: string): Promise<void> {
     const out = await syncConnection(id);
-    setSyncMsg((m) => ({ ...m, [id]: `${out.ok ? '' : 'sync failed — '}${out.text}` }));
+    setSyncMsg((m) => ({ ...m, [id]: { ok: out.ok, text: out.text } }));
   }
 
   async function del(id: string): Promise<void> {
@@ -1655,9 +1699,7 @@ function ConnectionsSection(props: {
       const res = await api<ConnectResponseJson>('/connections', { method: 'POST', body, token });
       if (res.mfaRequired) {
         setMfa({ id: res.connection?.id ?? '', method: res.method ?? 'code' });
-        setConnectMsg(
-          `Garmin wants a second-factor code (via ${res.method ?? 'your trusted device'}) — enter it below`,
-        );
+        setConnectMsg(t('conn.mfaNeeded', { method: res.method ?? t('conn.trustedDevice') }));
         reload(); // the pending connection shows up in the list
         return;
       }
@@ -1665,7 +1707,7 @@ function ConnectionsSection(props: {
       setPassword('');
       setMfa(null);
       setConnectMsg(
-        `${PROVIDER_LABEL[provider.toUpperCase()] ?? provider} connected — data flows in on the next sync`,
+        t('conn.connected', { provider: PROVIDER_LABEL[provider.toUpperCase()] ?? provider }),
       );
       reload();
     } catch (err) {
@@ -1683,7 +1725,7 @@ function ConnectionsSection(props: {
       await api(`/connections/${mfa.id}/mfa`, { method: 'POST', body: { code: mfaCode }, token });
       setMfa(null);
       setMfaCode('');
-      setConnectMsg('Garmin connected — data flows in on the next sync');
+      setConnectMsg(t('conn.connected', { provider: 'Garmin' }));
       reload();
     } catch (err) {
       setConnectMsg(String(err).replace(/^Error: /, ''));
@@ -1694,24 +1736,21 @@ function ConnectionsSection(props: {
 
   const identifierLabel =
     provider === 'omron'
-      ? 'Omron email or username'
+      ? t('conn.identifierOmron')
       : provider === 'igpsport'
-        ? 'iGPSPORT username'
+        ? t('conn.identifierIgpsport')
         : provider === 'zwift'
-          ? 'Zwift account email'
-          : 'Garmin email';
+          ? t('conn.identifierZwift')
+          : t('conn.identifierGarmin');
 
   return (
     <section className="connections-page">
       <button type="button" className="btn ghost small" onClick={onBack}>
-        ← dashboard
+        {t('nav.backDashboard')}
       </button>
 
-      <h2>Connections</h2>
-      <p className="page-hint">
-        Each link is stored server-side — providers are synced by your Stridash instance, never from
-        a browser.
-      </p>
+      <h2>{t('conn.heading')}</h2>
+      <p className="page-hint">{t('conn.hint')}</p>
 
       <div className="conn-list">
         {conn.map((c) => {
@@ -1726,45 +1765,36 @@ function ConnectionsSection(props: {
                 <span className="conn-status">{c.status.toLowerCase()}</span>
                 {busy && (
                   <span className="conn-spin">
-                    <span className="spin">↻</span> syncing…
+                    <span className="spin">↻</span> {t('conn.syncing')}
                   </span>
                 )}
               </div>
               <div className="conn-sub">{c.providerUserId || '—'}</div>
               <div className="conn-sub">
-                last sync {c.lastSyncedAt ? fmtDate(c.lastSyncedAt) : 'never'}
+                {t('conn.lastSync', {
+                  date: c.lastSyncedAt ? fmtDate(c.lastSyncedAt) : t('conn.never'),
+                })}
               </div>
               {(() => {
                 const msg = syncMsg[c.id];
                 return msg ? (
-                  <p className={msg.startsWith('sync failed') ? 'conn-msg err' : 'conn-msg'}>
-                    {msg}
+                  <p className={msg.ok ? 'conn-msg' : 'conn-msg err'}>
+                    {msg.ok ? '' : t('conn.syncFailed')}
+                    {msg.text}
                   </p>
                 ) : null;
               })()}
-              {c.status === 'ERROR' && (
-                <p className="conn-msg err">
-                  the stored token was rejected by the provider — delete and reconnect below
-                </p>
-              )}
-              {c.status === 'REVOKED' && (
-                <p className="conn-msg err">
-                  this link was deleted — re-add the account in the form below (pulled data is kept)
-                </p>
-              )}
+              {c.status === 'ERROR' && <p className="conn-msg err">{t('conn.tokenRejected')}</p>}
+              {c.status === 'REVOKED' && <p className="conn-msg err">{t('conn.revoked')}</p>}
               <div className="conn-actions">
                 <button
                   type="button"
                   className="btn ghost small"
                   onClick={() => void runSync(c.id)}
                   disabled={syncingId != null || c.status === 'PENDING' || c.status === 'REVOKED'}
-                  title={
-                    c.status === 'PENDING'
-                      ? 'awaiting MFA — finish the connect form first'
-                      : 'sync this provider now'
-                  }
+                  title={c.status === 'PENDING' ? t('conn.pendingTitle') : t('conn.syncTitle')}
                 >
-                  ↻ sync now
+                  ↻ {t('conn.syncNow')}
                 </button>
                 <button
                   type="button"
@@ -1772,37 +1802,35 @@ function ConnectionsSection(props: {
                   onClick={() => setConfirmDel(confirmDel === c.id ? null : c.id)}
                   disabled={busy}
                 >
-                  delete
+                  {t('conn.delete')}
                 </button>
               </div>
               {confirmDel === c.id && (
                 <div className="conn-confirm">
-                  <span>delete this connection? data already pulled stays.</span>
+                  <span>{t('conn.confirmDelete')}</span>
                   <button
                     type="button"
                     className="btn ghost small danger"
                     onClick={() => void del(c.id)}
                   >
-                    yes, delete
+                    {t('conn.yesDelete')}
                   </button>
                   <button
                     type="button"
                     className="btn ghost small"
                     onClick={() => setConfirmDel(null)}
                   >
-                    keep it
+                    {t('conn.keep')}
                   </button>
                 </div>
               )}
             </div>
           );
         })}
-        {conn.length === 0 && (
-          <p className="conn-sub">no providers linked yet — add the first one below.</p>
-        )}
+        {conn.length === 0 && <p className="conn-sub">{t('conn.noLinks')}</p>}
       </div>
 
-      <h2>Add a connection</h2>
+      <h2>{t('conn.addHeading')}</h2>
       <form
         className="conn-form"
         onSubmit={(e) => {
@@ -1818,10 +1846,10 @@ function ConnectionsSection(props: {
             setConnectMsg(null);
           }}
         >
-          <option value="omron">Omron — body scale / blood pressure (KRD-703T and friends)</option>
-          <option value="igpsport">iGPSPORT — rides</option>
-          <option value="garmin">Garmin — activities, sleep, daily metrics</option>
-          <option value="zwift">Zwift — indoor rides and runs (virtual)</option>
+          <option value="omron">{t('conn.providerOmron')}</option>
+          <option value="igpsport">{t('conn.providerIgpsport')}</option>
+          <option value="garmin">{t('conn.providerGarmin')}</option>
+          <option value="zwift">{t('conn.providerZwift')}</option>
         </select>
         <input
           value={identifier}
@@ -1834,13 +1862,13 @@ function ConnectionsSection(props: {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="password (verified, never stored in clear)"
+          placeholder={t('conn.password')}
           autoComplete="off"
           required
         />
         {provider === 'omron' && (
           <label className="conn-field-hint">
-            Omron Connect country code (where the account lives)
+            {t('conn.countryHint')}
             <input
               value={country}
               onChange={(e) => setCountry(e.target.value.toUpperCase().slice(0, 2))}
@@ -1852,12 +1880,12 @@ function ConnectionsSection(props: {
           </label>
         )}
         <button className="btn" type="submit" disabled={connectBusy}>
-          {connectBusy ? 'connecting…' : 'connect'}
+          {connectBusy ? t('conn.connecting') : t('conn.connect')}
         </button>
         {mfa && (
           <div className="mfa-row">
             <label>
-              {mfa.method} code
+              {t('conn.mfaCode', { method: mfa.method })}
               <input
                 value={mfaCode}
                 onChange={(e) => setMfaCode(e.target.value)}
@@ -1873,7 +1901,7 @@ function ConnectionsSection(props: {
               }}
               disabled={connectBusy || !mfaCode.trim()}
             >
-              verify
+              {t('conn.verify')}
             </button>
           </div>
         )}
@@ -1893,21 +1921,33 @@ function ConnectionsSection(props: {
 
 // ─── Calendar date picker (no deps — a small month-grid popover) ─────────────
 
-const DP_MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-const DP_WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+// month + weekday names come from Intl in the active locale (DP_WEEKDAYS
+// starts at a known Monday so the Monday-first column order holds everywhere)
+const DP_MONDAY = new Date(Date.UTC(2024, 0, 1)); // 2024-01-01 was a Monday
+const dpMonthFmtCache = new Map<string, Intl.DateTimeFormat>();
+const dpWdFmtCache = new Map<string, Intl.DateTimeFormat>();
+
+function dpMonthName(view: Date): string {
+  const loc = getLocale();
+  let f = dpMonthFmtCache.get(loc);
+  if (!f) {
+    f = new Intl.DateTimeFormat(loc, { month: 'long', timeZone: 'UTC' });
+    dpMonthFmtCache.set(loc, f);
+  }
+  return f.format(view);
+}
+
+function dpWeekdays(): string[] {
+  const loc = getLocale();
+  let f = dpWdFmtCache.get(loc);
+  if (!f) {
+    f = new Intl.DateTimeFormat(loc, { weekday: 'short', timeZone: 'UTC' });
+    dpWdFmtCache.set(loc, f);
+  }
+  return Array.from({ length: 7 }, (_, i) =>
+    f!.format(new Date(DP_MONDAY.getTime() + i * 86_400_000)),
+  );
+}
 
 /** Midnight-UTC of the 1st of the month containing `d` (day keys are UTC; the
  * server data + presets use toISOString().slice(0,10) everywhere). */
@@ -1986,24 +2026,24 @@ function DatePicker({
               type="button"
               className="dp-nav"
               onClick={() => setView(dpMonthStart(new Date(view.getTime() - 15 * 86_400_000)))}
-              aria-label="previous month"
+              aria-label={t('dp.prevMonth')}
             >
               ‹
             </button>
             <span className="dp-month">
-              {DP_MONTHS[view.getUTCMonth()]} {view.getUTCFullYear()}
+              {dpMonthName(view)} {view.getUTCFullYear()}
             </span>
             <button
               type="button"
               className="dp-nav"
               onClick={() => setView(dpMonthStart(new Date(view.getTime() + 31 * 86_400_000)))}
-              aria-label="next month"
+              aria-label={t('dp.nextMonth')}
             >
               ›
             </button>
           </div>
           <div className="dp-grid">
-            {DP_WEEKDAYS.map((w) => (
+            {dpWeekdays().map((w) => (
               <span key={w} className="dp-wd">
                 {w}
               </span>
@@ -2047,7 +2087,7 @@ function DatePicker({
               }}
               disabled={value === ''}
             >
-              clear
+              {t('dp.clear')}
             </button>
             <button
               type="button"
@@ -2057,7 +2097,7 @@ function DatePicker({
                 setOpen(false);
               }}
             >
-              today
+              {t('dp.today')}
             </button>
           </div>
         </div>
@@ -2069,63 +2109,69 @@ function DatePicker({
 const has = (v: unknown): boolean => v !== null && v !== undefined;
 const asStr = (v: unknown, suffix = ''): string | null => (has(v) ? `${String(v)}${suffix}` : null);
 
-// ⟵ body-composition chart channel descriptors
+// ⟵ body-composition chart channel descriptors (labels are i18n KEYS —
+// translated at render time so a language switch re-renders them)
 const BODY_METRIC: Record<
   'weightKg' | 'bodyFatPct' | 'visceralFatLevel' | 'skeletalMusclePct',
-  { label: string; unit: string }
+  { label: MsgKey; unit: string }
 > = {
-  weightKg: { label: 'Weight', unit: ' kg' },
-  bodyFatPct: { label: 'Body fat', unit: '%' },
-  visceralFatLevel: { label: 'Visceral fat level', unit: '' },
-  skeletalMusclePct: { label: 'Skeletal muscle', unit: '%' },
+  weightKg: { label: 'metric.weight', unit: ' kg' },
+  bodyFatPct: { label: 'metric.bodyFat', unit: '%' },
+  visceralFatLevel: { label: 'metric.visceralLevel', unit: '' },
+  skeletalMusclePct: { label: 'metric.skeletalMuscle', unit: '%' },
 };
 
 // ⟵ sleep + daily-metric chart channel descriptors
 const SLEEP_METRIC: Record<
   'hours' | 'score' | 'hrv' | 'sleepHr' | 'battery',
-  { fn: (s: SleepRow) => number | null; color: string; unit: string; label: string }
+  { fn: (s: SleepRow) => number | null; color: string; unit: string; label: MsgKey }
 > = {
   hours: {
     fn: (s) => (s.totalSleepS !== null ? s.totalSleepS / 3600 : null),
     color: '#3b5bd6',
     unit: ' h',
-    label: 'Sleep duration',
+    label: 'metric.sleepDuration',
   },
-  score: { fn: (s) => s.sleepScore, color: '#9c6ade', unit: '', label: 'Sleep score' },
-  hrv: { fn: (s) => s.hrvAvg, color: '#d6409f', unit: ' ms', label: 'Overnight HRV' },
-  sleepHr: { fn: (s) => s.avgHr, color: '#e5484d', unit: ' bpm', label: 'Avg sleep HR' },
+  score: { fn: (s) => s.sleepScore, color: '#9c6ade', unit: '', label: 'metric.sleepScore' },
+  hrv: { fn: (s) => s.hrvAvg, color: '#d6409f', unit: ' ms', label: 'metric.overnightHrv' },
+  sleepHr: { fn: (s) => s.avgHr, color: '#e5484d', unit: ' bpm', label: 'metric.avgSleepHr' },
   battery: {
     fn: (s) => s.bodyBatteryChange,
     color: '#30a46c',
     unit: '',
-    label: 'Body battery change',
+    label: 'metric.batteryChange',
   },
 };
 
 const DAILY_METRIC: Record<
   'steps' | 'restingHr' | 'stressAvg' | 'battery' | 'activeCal' | 'floors',
-  { fn: (w: DailyWellnessRow) => number | null; color: string; unit: string; label: string }
+  { fn: (w: DailyWellnessRow) => number | null; color: string; unit: string; label: MsgKey }
 > = {
-  steps: { fn: (w) => w.steps, color: '#6e56cf', unit: '', label: 'Steps' },
+  steps: { fn: (w) => w.steps, color: '#6e56cf', unit: '', label: 'metric.steps' },
   restingHr: {
     fn: (w) => w.restingHr,
     color: '#e5484d',
     unit: ' bpm',
-    label: 'Resting heart rate',
+    label: 'metric.restingHeartRate',
   },
-  stressAvg: { fn: (w) => w.stressAvg, color: '#d29922', unit: '', label: 'Average stress' },
+  stressAvg: { fn: (w) => w.stressAvg, color: '#d29922', unit: '', label: 'metric.avgStress' },
   battery: {
     fn: (w) => w.batteryLatest,
     color: '#30a46c',
     unit: '',
-    label: 'Body battery (latest)',
+    label: 'metric.batteryLatest',
   },
-  activeCal: { fn: (w) => w.activeCal, color: '#d6409f', unit: ' kcal', label: 'Active calories' },
+  activeCal: {
+    fn: (w) => w.activeCal,
+    color: '#d6409f',
+    unit: ' kcal',
+    label: 'metric.activeCalories',
+  },
   floors: {
     fn: (w) => (w.floorsAsc !== null ? w.floorsAsc : null),
     color: '#0091ff',
     unit: '',
-    label: 'Floors ascended',
+    label: 'metric.floorsAscended',
   },
 };
 
@@ -2167,10 +2213,11 @@ export default function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
   // hamburger dropdown in the header (Providers Sync / Gear / Settings / Sign out)
   const [menuOpen, setMenuOpen] = useState(false);
-  // settings-owned preferences; the module-level formatter unit is kept in
-  // sync BEFORE the re-render so every fmt* call speaks the chosen unit.
-  // localStorage gives the instant boot value; the server (user_preferences,
-  // one typed column per setting) wins once /me answers — account > device.
+  // settings-owned preferences; the module-level formatter unit + locale are
+  // kept in sync BEFORE the re-render so every fmt* call speaks the chosen
+  // unit/language. localStorage gives the instant boot value; the server
+  // (user_preferences, one typed column per setting) wins once /me answers —
+  // account > device.
   const [unit, setUnitState] = useState<Unit>(() => {
     const stored = localStorage.getItem('stridash.units') === 'mi' ? 'mi' : 'km';
     setUnit(stored);
@@ -2179,9 +2226,22 @@ export default function App() {
   const [theme, setThemeState] = useState<'dark' | 'light'>(() =>
     localStorage.getItem('stridash.theme') === 'light' ? 'light' : 'dark',
   );
+  // UI language — same boot pattern: localStorage value first (unknown codes
+  // fall back to English), account adoption overrides once /me answers
+  const [lang, setLangState] = useState<Lang>(() => {
+    const stored = localStorage.getItem('stridash.language') as Lang | null;
+    const boot = LANGUAGES.some((l) => l.code === stored) ? stored! : 'en';
+    setLang(boot);
+    setLocale(localeOf(boot));
+    return boot;
+  });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  // keep <html lang> honest for screen readers + translation tools
+  useEffect(() => {
+    document.documentElement.lang = localeOf(lang);
+  }, [lang]);
   // adopt the account's stored preferences after login (runs once per token;
   // every change made in Settings also PATCHes the server, so they agree)
   useEffect(() => {
@@ -2196,6 +2256,13 @@ export default function App() {
         if (m.preferences?.theme) {
           localStorage.setItem('stridash.theme', m.preferences.theme);
           setThemeState(m.preferences.theme);
+        }
+        if (m.preferences?.language && LANGUAGES.some((l) => l.code === m.preferences?.language)) {
+          const l = m.preferences.language;
+          setLang(l); // module-level dictionaries + Intl locale for fmt* calls
+          setLocale(localeOf(l));
+          localStorage.setItem('stridash.language', l);
+          setLangState(l);
         }
       })
       .catch(() => undefined); // prefs are cosmetic — never block the dashboard
@@ -2394,7 +2461,7 @@ export default function App() {
    * doesn't hammer providers in parallel. Returns what happened so the
    * connections page can show it on the card that was tapped. */
   async function syncConnection(id: string): Promise<{ ok: boolean; text: string }> {
-    if (!token || syncingId) return { ok: false, text: 'another sync is already running' };
+    if (!token || syncingId) return { ok: false, text: t('conn.anotherSync') };
     setSyncingId(id);
     try {
       const res = await api<SyncResponseJson>(`/connections/${id}/sync`, { method: 'POST', token });
@@ -2498,18 +2565,18 @@ export default function App() {
       <main className="login-page">
         <form onSubmit={login} className="login-card">
           <h1>🦾 Stridash</h1>
-          <p>One dashboard for every stride.</p>
+          <p>{t('auth.tagline')}</p>
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             type="email"
-            placeholder="email"
+            placeholder={t('auth.email')}
           />
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             type="password"
-            placeholder="password"
+            placeholder={t('auth.password')}
           />
           <label className="remember-me">
             <input
@@ -2517,10 +2584,10 @@ export default function App() {
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
             />
-            <span>remember me on this device</span>
+            <span>{t('auth.remember')}</span>
           </label>
           <button className="btn" type="submit">
-            Sign in
+            {t('auth.signIn')}
           </button>
           {error && <p className="error">{error}</p>}
         </form>
@@ -2539,7 +2606,7 @@ export default function App() {
       <a
         className="brand"
         href="/"
-        title="back to the dashboard"
+        title={t('nav.brandTitle')}
         onClick={(e) => {
           e.preventDefault();
           goHome();
@@ -2551,7 +2618,7 @@ export default function App() {
         <button
           type="button"
           className="hamburger"
-          aria-label="menu"
+          aria-label={t('nav.menu')}
           aria-expanded={menuOpen}
           onClick={(e) => {
             e.stopPropagation(); // the outside-click listener would re-close it
@@ -2569,7 +2636,7 @@ export default function App() {
                 openConnections();
               }}
             >
-              Providers Sync
+              {t('nav.providers')}
             </a>
             <a
               href="/gear"
@@ -2578,7 +2645,7 @@ export default function App() {
                 openGear();
               }}
             >
-              Gear
+              {t('nav.gear')}
             </a>
             <a
               href="/settings"
@@ -2587,17 +2654,17 @@ export default function App() {
                 openSettings();
               }}
             >
-              Settings
+              {t('nav.settings')}
             </a>
             <button type="button" className="danger" onClick={signOut}>
-              Sign Out
+              {t('nav.signOut')}
             </button>
           </nav>
         )}
       </div>
     </header>
   );
-  const footer = <footer>Stridash · all data read from your own Stridash instance</footer>;
+  const footer = <footer>{t('footer.line')}</footer>;
 
   // the activity page is its own URL: /activity/<id>, shareable like the filters
   if (route.name === 'activity') {
@@ -2610,7 +2677,7 @@ export default function App() {
           preview={activities.find((a) => a.id === route.id) ?? null}
           onBack={goHome}
         />
-        {loading && <p>Loading…</p>}
+        {loading && <p>{t('common.loading')}</p>}
         {footer}
       </main>
     );
@@ -2645,6 +2712,13 @@ export default function App() {
             localStorage.setItem('stridash.theme', t);
             setThemeState(t);
           }}
+          lang={lang}
+          onLangChange={(l) => {
+            setLang(l); // module-level dictionaries read this on the re-render
+            setLocale(localeOf(l));
+            localStorage.setItem('stridash.language', l);
+            setLangState(l);
+          }}
           onDeleted={() => {
             clearTokens();
             setToken(null);
@@ -2672,7 +2746,7 @@ export default function App() {
           }}
           onBack={goHome}
         />
-        {loading && <p>Loading…</p>}
+        {loading && <p>{t('common.loading')}</p>}
         {footer}
       </main>
     );
@@ -2685,7 +2759,7 @@ export default function App() {
       {error && <p className="error">{error}</p>}
 
       <div className="range-bar">
-        <span className="range-label">range</span>
+        <span className="range-label">{t('dash.range')}</span>
         {[7, 30, 90, 365].map((d) => (
           <button
             key={d}
@@ -2699,60 +2773,65 @@ export default function App() {
           className={`btn ghost small ${activePreset === null ? 'active' : ''}`}
           onClick={() => applyPreset(null)}
         >
-          all
+          {t('dash.all')}
         </button>
         <DatePicker
           value={fromDate}
           onChange={setFromDate}
-          placeholder="from date"
+          placeholder={t('dash.fromDate')}
           max={toDate || undefined}
         />
         <span className="range-sep">→</span>
         <DatePicker
           value={toDate}
           onChange={setToDate}
-          placeholder="to date"
+          placeholder={t('dash.toDate')}
           min={fromDate || undefined}
         />
         {(fromDate || toDate) && (
           <button className="btn ghost small" onClick={() => applyPreset(null)}>
-            clear
+            {t('dash.clear')}
           </button>
         )}
       </div>
 
       <div className="cards">
-        <Card label="Latest weight" value={asStr(latest?.weightKg, ' kg') ?? 'no weigh-in yet'} />
-        <Card label="Body fat" value={asStr(latest?.bodyFatPct, '%')} />
-        <Card label="Visceral fat" value={asStr(latest?.visceralFatLevel)} />
-        <Card label="Muscle mass" value={asStr(latest?.skeletalMuscleMassKg, ' kg')} />
         <Card
-          label="Latest sleep"
+          label={t('dash.latestWeight')}
+          value={asStr(latest?.weightKg, ' kg') ?? t('dash.noWeighIn')}
+        />
+        <Card label={t('dash.bodyFat')} value={asStr(latest?.bodyFatPct, '%')} />
+        <Card label={t('dash.visceralFat')} value={asStr(latest?.visceralFatLevel)} />
+        <Card label={t('dash.muscleMass')} value={asStr(latest?.skeletalMuscleMassKg, ' kg')} />
+        <Card
+          label={t('dash.latestSleep')}
           value={
             lastSleep ? (
               <>
                 {((lastSleep.totalSleepS ?? 0) / 3600).toFixed(1)} h
-                {lastSleep.sleepScore !== null ? ` · score ${lastSleep.sleepScore}` : ''}
+                {lastSleep.sleepScore !== null
+                  ? ` · ${t('dash.score')} ${lastSleep.sleepScore}`
+                  : ''}
               </>
             ) : (
-              'no sleep in range'
+              t('dash.noSleep')
             )
           }
         />
         <Card
-          label="Latest steps"
-          value={latestWellness ? latestWellness.steps?.toLocaleString() : 'no steps in range'}
+          label={t('dash.latestSteps')}
+          value={latestWellness ? latestWellness.steps?.toLocaleString() : t('dash.noSteps')}
         />
         <Card
-          label="Resting HR"
+          label={t('dash.restingHr')}
           value={latestRestingHr?.restingHr != null ? `${latestRestingHr.restingHr} bpm` : '—'}
         />
-        <Card label="Activities" value={activitiesIn.length} />
-        <Card label="Weigh-ins" value={measurementsIn.length} />
+        <Card label={t('dash.activities')} value={activitiesIn.length} />
+        <Card label={t('dash.weighIns')} value={measurementsIn.length} />
       </div>
 
       <section>
-        <h2>Body composition</h2>
+        <h2>{t('dash.bodyComp')}</h2>
         <div className="metric-tabs">
           {(['weightKg', 'bodyFatPct', 'visceralFatLevel', 'skeletalMusclePct'] as const).map(
             (m) => (
@@ -2761,7 +2840,7 @@ export default function App() {
                 className={`btn ghost ${bodyMetric === m ? 'active' : ''}`}
                 onClick={() => setBodyMetric(m)}
               >
-                {BODY_METRIC[m].label}
+                {t(BODY_METRIC[m].label)}
               </button>
             ),
           )}
@@ -2774,21 +2853,21 @@ export default function App() {
               y: Number((m as unknown as Record<string, unknown>)[bodyMetric]),
             }))}
           color="#6e56cf"
-          label={BODY_METRIC[bodyMetric].label}
+          label={t(BODY_METRIC[bodyMetric].label)}
           unit={BODY_METRIC[bodyMetric].unit}
         />
       </section>
 
       <section>
-        <h2>Sleep</h2>
+        <h2>{t('dash.sleep')}</h2>
         <div className="metric-tabs">
           {(
             [
-              ['hours', 'Duration (h)'],
-              ['score', 'Score'],
-              ['hrv', 'Night HRV'],
-              ['sleepHr', 'Sleep HR'],
-              ['battery', 'Battery change'],
+              ['hours', 'tab.sleepDuration'],
+              ['score', 'tab.sleepScore'],
+              ['hrv', 'tab.nightHrv'],
+              ['sleepHr', 'tab.sleepHr'],
+              ['battery', 'tab.batteryChange'],
             ] as const
           ).map(([m, label]) => (
             <button
@@ -2796,7 +2875,7 @@ export default function App() {
               className={`btn ghost ${sleepMetric === m ? 'active' : ''}`}
               onClick={() => setSleepMetric(m)}
             >
-              {label}
+              {t(label)}
             </button>
           ))}
         </div>
@@ -2809,21 +2888,21 @@ export default function App() {
             }))}
           color={SLEEP_METRIC[sleepMetric].color}
           unit={SLEEP_METRIC[sleepMetric].unit}
-          label={SLEEP_METRIC[sleepMetric].label}
+          label={t(SLEEP_METRIC[sleepMetric].label)}
         />
       </section>
 
       <section>
-        <h2>Daily metrics</h2>
+        <h2>{t('dash.daily')}</h2>
         <div className="metric-tabs">
           {(
             [
-              ['steps', 'Steps'],
-              ['restingHr', 'Resting HR'],
-              ['stressAvg', 'Stress (avg)'],
-              ['battery', 'Body battery'],
-              ['activeCal', 'Active kcal'],
-              ['floors', 'Floors'],
+              ['steps', 'tab.steps'],
+              ['restingHr', 'tab.restingHrShort'],
+              ['stressAvg', 'tab.stress'],
+              ['battery', 'tab.bodyBattery'],
+              ['activeCal', 'tab.activeKcal'],
+              ['floors', 'tab.floors'],
             ] as const
           ).map(([m, label]) => (
             <button
@@ -2831,7 +2910,7 @@ export default function App() {
               className={`btn ghost ${dailyMetric === m ? 'active' : ''}`}
               onClick={() => setDailyMetric(m)}
             >
-              {label}
+              {t(label)}
             </button>
           ))}
         </div>
@@ -2844,31 +2923,31 @@ export default function App() {
             }))}
           color={DAILY_METRIC[dailyMetric].color}
           unit={DAILY_METRIC[dailyMetric].unit}
-          label={DAILY_METRIC[dailyMetric].label}
+          label={t(DAILY_METRIC[dailyMetric].label)}
         />
       </section>
 
       <section>
-        <h2>Activities</h2>
+        <h2>{t('dash.activities')}</h2>
         <div className="feed-filters">
           <select
             value={feedType}
             onChange={(e) => setFeedType(e.target.value)}
-            aria-label="filter activities by type"
+            aria-label={t('dash.ariaType')}
           >
-            <option value="">all types</option>
-            {feedTypeOptions.map((t) => (
-              <option key={t} value={t}>
-                {TYPE_EMOJI[t] ?? '⌚'} {t.toLowerCase().replace('_', ' ')}
+            <option value="">{t('dash.allTypes')}</option>
+            {feedTypeOptions.map((ty) => (
+              <option key={ty} value={ty}>
+                {TYPE_EMOJI[ty] ?? '⌚'} {ty.toLowerCase().replace('_', ' ')}
               </option>
             ))}
           </select>
           <select
             value={feedProv}
             onChange={(e) => setFeedProv(e.target.value)}
-            aria-label="filter activities by provider"
+            aria-label={t('dash.ariaProv')}
           >
-            <option value="">all providers</option>
+            <option value="">{t('dash.allProviders')}</option>
             {feedProvOptions.map((p) => (
               <option key={p} value={p}>
                 {p.toLowerCase()}
@@ -2877,23 +2956,21 @@ export default function App() {
           </select>
         </div>
         {activitiesFeed.length === 0 && (
-          <p className="empty">
-            {activitiesIn.length ? 'No activities match these filters.' : 'No activities in range.'}
-          </p>
+          <p className="empty">{activitiesIn.length ? t('dash.noMatch') : t('dash.noneInRange')}</p>
         )}
         <table className="list">
           <thead>
             <tr>
               <th></th>
-              <th>when</th>
-              <th>type</th>
-              <th>provider</th>
-              <th>workout</th>
-              <th>distance</th>
-              <th>time</th>
-              <th>avg speed</th>
-              <th>HR</th>
-              <th>power</th>
+              <th>{t('feed.when')}</th>
+              <th>{t('feed.type')}</th>
+              <th>{t('feed.provider')}</th>
+              <th>{t('feed.workout')}</th>
+              <th>{t('feed.distance')}</th>
+              <th>{t('feed.time')}</th>
+              <th>{t('feed.avgSpeed')}</th>
+              <th>{t('feed.hr')}</th>
+              <th>{t('feed.power')}</th>
               <th></th>
             </tr>
           </thead>
@@ -2921,7 +2998,7 @@ export default function App() {
                       openActivity(a.id);
                     }}
                   >
-                    details
+                    {t('feed.details')}
                   </a>
                 </td>
               </tr>
@@ -2930,8 +3007,8 @@ export default function App() {
         </table>
       </section>
 
-      {loading && <p>Loading…</p>}
-      <footer>Stridash · all data read from your own Stridash instance</footer>
+      {loading && <p>{t('common.loading')}</p>}
+      <footer>{t('footer.line')}</footer>
     </main>
   );
 }

@@ -618,7 +618,7 @@ describe('account preferences', () => {
     const res = await app.request('/api/me', authed(token));
     expect(res.status).toBe(200);
     const me = (await json(res)) as Record<string, unknown>;
-    expect(me.preferences).toEqual({ units: 'km', theme: 'dark' });
+    expect(me.preferences).toEqual({ units: 'km', theme: 'dark', language: 'en' });
   });
 
   it('persists partial updates and returns the new pair', async () => {
@@ -630,12 +630,37 @@ describe('account preferences', () => {
     expect(((await json(res)) as { preferences: unknown }).preferences).toEqual({
       units: 'mi',
       theme: 'dark',
+      language: 'en',
     });
     // durable: a fresh /me still sees it (it is a real row now)
     const me = (await json(await app.request('/api/me', authed(token)))) as {
       preferences: unknown;
     };
-    expect(me.preferences).toEqual({ units: 'mi', theme: 'dark' });
+    expect(me.preferences).toEqual({ units: 'mi', theme: 'dark', language: 'en' });
+  });
+
+  it('persists the UI language like the other settings', async () => {
+    const res = await app.request('/api/me', {
+      method: 'PATCH',
+      ...authed(token, { body: JSON.stringify({ language: 'es' }) }),
+    });
+    expect(res.status).toBe(200);
+    expect(((await json(res)) as { preferences: { language: string } }).preferences.language).toBe(
+      'es',
+    );
+    // durable across /me reads; units/theme stay untouched by the language PATCH
+    const me = (await json(await app.request('/api/me', authed(token)))) as {
+      preferences: { units: string; theme: string; language: string };
+    };
+    expect(me.preferences).toEqual({ units: 'mi', theme: 'dark', language: 'es' });
+  });
+
+  it('rejects an unsupported language code', async () => {
+    const res = await app.request('/api/me', {
+      method: 'PATCH',
+      ...authed(token, { body: JSON.stringify({ language: 'xx' }) }),
+    });
+    expect(res.status).toBe(400);
   });
 
   it('rejects unknown settings keys and empty updates', async () => {

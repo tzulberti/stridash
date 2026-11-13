@@ -342,6 +342,7 @@ users.
 | `user_id` | `uuid` (v7) FK → users, unique, cascade | |
 | `units` | enum | `km` (default) \| `mi` — distance/speed/pace display |
 | `theme` | enum | `dark` (default) \| `light` |
+| `language` | enum | `en` (default) + `es` `pt` `fr` `de` `it` `nl` `ru` `ja` `ko` `zh` `hi` — web dashboard UI language (2026-11-13 migration; existing rows backfilled to `en`) |
 | `created_at` / `updated_at` | timestamptz | |
 
 ## Modeling decisions worth remembering

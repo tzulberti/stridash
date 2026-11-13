@@ -49,7 +49,11 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     return c.json({
       ...account,
       createdAt: user.createdAt.toISOString(),
-      preferences: { units: preferences?.units ?? 'km', theme: preferences?.theme ?? 'dark' },
+      preferences: {
+        units: preferences?.units ?? 'km',
+        theme: preferences?.theme ?? 'dark',
+        language: preferences?.language ?? 'en',
+      },
     });
   });
 
@@ -58,6 +62,9 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   const preferencesSchema = z.object({
     units: z.enum(['km', 'mi']).optional(),
     theme: z.enum(['dark', 'light']).optional(),
+    language: z
+      .enum(['en', 'es', 'pt', 'fr', 'de', 'it', 'nl', 'ru', 'ja', 'ko', 'zh', 'hi'])
+      .optional(),
   });
 
   routes.patch('/me', async (c) => {
@@ -73,7 +80,13 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
         create: { userId, ...parsed.data },
         update: parsed.data,
       });
-      return c.json({ preferences: { units: preferences.units, theme: preferences.theme } });
+      return c.json({
+        preferences: {
+          units: preferences.units,
+          theme: preferences.theme,
+          language: preferences.language,
+        },
+      });
     } catch (err) {
       if (
         typeof err === 'object' &&

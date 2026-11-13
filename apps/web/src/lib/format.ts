@@ -25,6 +25,17 @@ export function unitLabel(): string {
   return unit;
 }
 
+/** Display locale for date formatting — module-level like the unit, set from
+ * the chosen UI language (see lib/i18n) so every fmt* call and chart tick
+ * speaks one locale. */
+let locale = 'en';
+export function getLocale(): string {
+  return locale;
+}
+export function setLocale(l: string): void {
+  locale = l;
+}
+
 export function fmtKm(m: number | null | undefined): string {
   if (m == null) return '—';
   return `${(m / M_PER_UNIT[unit]).toFixed(2)} ${unit}`;
@@ -56,7 +67,7 @@ export function fmtSplitTime(s: number): string {
 }
 export function fmtDate(iso: string | undefined): string {
   return iso
-    ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    ? new Date(iso).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })
     : '—';
 }
 
