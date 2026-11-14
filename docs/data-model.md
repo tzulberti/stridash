@@ -107,6 +107,12 @@ don't map get parked in `raw` for later backfill.
 | `avg_cadence` / `max_cadence` | int nullable | rpm (or run step-cadence as delivered) |
 | `calories_kcal` | int nullable | |
 | `training_load` | int nullable | source-reported TSS-like load; semantics vary by provider — `raw` is the authority |
+| `sweat_loss_ml` | float nullable | Garmin estimated sweat loss (Connect `waterEstimated`); null elsewhere |
+| `aerobic_te` / `anaerobic_te` | float nullable | Firstbeat training effect 0–5 (FIT session / Connect list row) |
+| `aerobic_te_message` / `anaerobic_te_message` | text nullable | benefit codes as-received (`IMPROVING_LACTATE_THRESHOLD_12`); beautified client-side |
+| `vo2max` | float nullable | session-detected VO2max estimate (mL/kg/min) |
+| `recovery_minutes` | float nullable | FIT `recovery_time` — minutes until the next hard effort is sensible |
+| `normalized_power_w` | float nullable | FIT/Connect normalized power |
 | `indoor` | bool | Zwift/trainer rides are flagged here |
 | `gear_id` | `uuid` (v7) FK → gear nullable | |
 | `device_id` | `uuid` (v7) FK → devices nullable | the recorder (watch / head unit); null for Zwift/Omron and not-yet-backfilled rows |

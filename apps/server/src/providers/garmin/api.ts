@@ -169,6 +169,10 @@ function num(v: unknown): number | undefined {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 }
 
+function str(v: unknown): string | undefined {
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
 /** Garmin DTO timestamps are "2026-11-11T10:49:26.0" — GMT, no zone suffix,
  * 1-digit fractional seconds. Strict UTC parse (unit-tested) so edit
  * detection compares real instants, not strings. */
@@ -214,6 +218,15 @@ export function detailToRow(detail: Record<string, unknown>): GarminActivityRow 
     calories: num(s.calories),
     deviceId: typeof deviceId?.deviceId === 'number' ? deviceId.deviceId : undefined,
     activityType: { typeKey: typeof type?.typeKey === 'string' ? type.typeKey : undefined },
+    // the detail payload names the aerobic TE just "trainingEffect" and
+    // normalized power "normalizedPower" — same values, different keys
+    waterEstimated: num(s.waterEstimated),
+    aerobicTrainingEffect: num(s.trainingEffect),
+    anaerobicTrainingEffect: num(s.anaerobicTrainingEffect),
+    aerobicTrainingEffectMessage: str(s.aerobicTrainingEffectMessage),
+    anaerobicTrainingEffectMessage: str(s.anaerobicTrainingEffectMessage),
+    vO2MaxValue: num(s.vO2MaxValue),
+    normPower: num(s.normalizedPower),
   };
 }
 
@@ -281,6 +294,16 @@ export interface GarminActivityRow {
   deviceId?: number;
   activityType?: { typeId?: number; typeKey?: string };
   eventTypeId?: { typeKey?: string };
+  // — Connect-computed physiology (verified live 2026-11: the list rows carry
+  // these outright; detailToRow synthesizes them from summaryDTO names) —
+  waterEstimated?: number; // estimated sweat loss, mL
+  aerobicTrainingEffect?: number; // 0–5
+  anaerobicTrainingEffect?: number;
+  /// benefit codes as-received ("IMPROVING_LACTATE_THRESHOLD_12")
+  aerobicTrainingEffectMessage?: string;
+  anaerobicTrainingEffectMessage?: string;
+  vO2MaxValue?: number;
+  normPower?: number;
 }
 
 export function tokenExpiryMs(token: string): number | null {

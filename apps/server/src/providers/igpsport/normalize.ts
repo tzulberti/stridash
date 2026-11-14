@@ -58,7 +58,9 @@ export interface FitSession {
   totalAnaerobicTrainingEffect?: number;
   primaryBenefit?: string;
   vo2Max?: number;
-  recoveryTimeH?: number;
+  /// FIT recovery_time — minutes until the next hard effort is sensible (the
+  /// field was first stored as recoveryTimeH before the unit was confirmed)
+  recoveryMinutes?: number;
   avgRespirationRate?: number;
   maxRespirationRate?: number;
   /** source-reported HR-zone minutes, zone 1 first (FIT time_in_zone) */
@@ -124,6 +126,20 @@ export interface ActivityInput {
   maxCadence: number | null;
   caloriesKcal: number | null;
   indoor: boolean;
+  // — physiology, session/detail-sourced where the provider reports it
+  // (Garmin Connect list row, FIT session messages); null/omitted elsewhere —
+  /// estimated sweat loss, mL (Garmin "waterEstimated")
+  sweatLossMl?: number | null;
+  aerobicTe?: number | null;
+  anaerobicTe?: number | null;
+  /// benefit codes as-received ("IMPROVING_LACTATE_THRESHOLD_12")
+  aerobicTeMessage?: string | null;
+  anaerobicTeMessage?: string | null;
+  /// session-detected VO2max estimate (mL/kg/min)
+  vo2max?: number | null;
+  /// FIT recovery_time, minutes
+  recoveryMinutes?: number | null;
+  normalizedPowerW?: number | null;
   raw: Record<string, unknown>;
 }
 
@@ -170,7 +186,7 @@ export interface FitParseResult {
 export function fitToActivity(
   row: IgpSportActivityRow,
   records: FitRecord[],
-  extras: { indoor: boolean },
+  extras: { indoor: boolean; session?: FitSession | null },
 ): FitParseResult | null {
   if (!records.length) return null;
 
@@ -253,6 +269,13 @@ export function fitToActivity(
     maxCadence: maxCadenceVal !== null ? Math.round(maxCadenceVal) : null,
     caloriesKcal: null,
     indoor: extras.indoor,
+    // session-reported physiology when the FIT carries it (NP/TE/VO2max do
+    // on some units; sweat/benefit messages are Garmin-Connect-only)
+    normalizedPowerW: extras.session?.normalizedPowerW ?? null,
+    aerobicTe: extras.session?.totalTrainingEffect ?? null,
+    anaerobicTe: extras.session?.totalAnaerobicTrainingEffect ?? null,
+    vo2max: extras.session?.vo2Max ?? null,
+    recoveryMinutes: extras.session?.recoveryMinutes ?? null,
     raw: {
       provider: 'IGPSPORT',
       sourceRow: row,

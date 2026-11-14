@@ -54,6 +54,14 @@ describe('detailToRow', () => {
         averagePower: 398,
         maxPower: 537,
         calories: 343,
+        // physiology names differ from the list row: "trainingEffect" is the
+        // aerobic TE, normalized power is "normalizedPower" (live-probed)
+        waterEstimated: 389,
+        trainingEffect: 3.5999999046325684,
+        anaerobicTrainingEffect: 1.2000000476837158,
+        aerobicTrainingEffectMessage: 'IMPROVING_LACTATE_THRESHOLD_12',
+        anaerobicTrainingEffectMessage: 'MINOR_ANAEROBIC_BENEFIT_15',
+        normalizedPower: 400,
       },
     });
     expect(row.activityId).toBe(25041484850);
@@ -73,6 +81,13 @@ describe('detailToRow', () => {
     expect(row.calories).toBe(343);
     expect(row.deviceId).toBeUndefined(); // numeric-string deviceIds are not numeric
     expect(row.activityType?.typeKey).toBe('running');
+    expect(row.waterEstimated).toBe(389);
+    expect(row.aerobicTrainingEffect).toBeCloseTo(3.6, 5);
+    expect(row.anaerobicTrainingEffect).toBeCloseTo(1.2, 5);
+    expect(row.aerobicTrainingEffectMessage).toBe('IMPROVING_LACTATE_THRESHOLD_12');
+    expect(row.anaerobicTrainingEffectMessage).toBe('MINOR_ANAEROBIC_BENEFIT_15');
+    expect(row.normPower).toBe(400);
+    expect(row.vO2MaxValue).toBeUndefined(); // detail carries no session VO2max
   });
 
   it('tolerates a sparse detail payload (nulls stay undefined)', () => {
@@ -80,5 +95,7 @@ describe('detailToRow', () => {
     expect(row.activityId).toBe(42);
     expect(row.distance).toBeUndefined();
     expect(row.activityType?.typeKey).toBeUndefined();
+    expect(row.waterEstimated).toBeUndefined();
+    expect(row.aerobicTrainingEffectMessage).toBeUndefined();
   });
 });

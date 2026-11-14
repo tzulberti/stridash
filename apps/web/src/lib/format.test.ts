@@ -14,6 +14,7 @@ import {
   fmtDeltaSecs,
   pctDelta,
   numDelta,
+  teMessageHuman,
   metersPerUnit,
   setUnit,
   TYPE_EMOJI,
@@ -105,6 +106,26 @@ describe('compare deltas', () => {
     expect(numDelta(12.4, 12.6)).toBe('±0'); // rounds once
     expect(numDelta(10, null)).toBeNull();
     expect(numDelta(null, 10, ' m')).toBeNull();
+  });
+});
+
+describe('teMessageHuman (Garmin benefit codes)', () => {
+  it('beautifies the live-probed codes', () => {
+    expect(teMessageHuman('IMPROVING_LACTATE_THRESHOLD_12')).toBe('Improving lactate threshold');
+    expect(teMessageHuman('MINOR_ANAEROBIC_BENEFIT_15')).toBe('Minor anaerobic benefit');
+    expect(teMessageHuman('RECOVERY_10')).toBe('Recovery');
+  });
+
+  it('keeps unknown shapes readable instead of mangling them', () => {
+    expect(teMessageHuman('WEIRD_CODE')).toBe('Weird code'); // no ordinal to strip
+    expect(teMessageHuman('ALREADY_HUMAN_TEXT')).toBe('Already human text');
+  });
+
+  it('nulls and empty strings stay null', () => {
+    expect(teMessageHuman(null)).toBeNull();
+    expect(teMessageHuman(undefined)).toBeNull();
+    expect(teMessageHuman('')).toBeNull();
+    expect(teMessageHuman('___12')).toBeNull(); // only the ordinal survived stripping
   });
 });
 

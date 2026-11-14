@@ -876,6 +876,7 @@ import {
   fmtDeltaSecs,
   pctDelta,
   numDelta,
+  teMessageHuman,
   TYPE_EMOJI,
   FEED_TYPES,
   FEED_PROVIDERS,
@@ -1081,6 +1082,40 @@ function ActivityDetail({
     push('maxHr', 'split.maxHr', act.maxHr, b.maxHr, bpm, pctDelta);
     push('avgPower', 'compare.avgPower', act.avgPowerW, b.avgPowerW, watts, pctDelta);
     push('maxPower', 'compare.maxPower', act.maxPowerW, b.maxPowerW, watts, pctDelta);
+    push('np', 'detail.np', act.normalizedPowerW, b.normalizedPowerW, watts, pctDelta);
+    push(
+      'sweat',
+      'detail.sweat',
+      act.sweatLossMl,
+      b.sweatLossMl,
+      (v) => `${Math.round(v)} mL`,
+      pctDelta,
+    );
+    push(
+      'aerobicTe',
+      'detail.aerobicTe',
+      act.aerobicTe,
+      b.aerobicTe,
+      (v) => v.toFixed(1),
+      pctDelta,
+    );
+    push(
+      'anaerobicTe',
+      'detail.anaerobicTe',
+      act.anaerobicTe,
+      b.anaerobicTe,
+      (v) => v.toFixed(1),
+      pctDelta,
+    );
+    push('vo2max', 'detail.vo2max', act.vo2max, b.vo2max, (v) => v.toFixed(1), pctDelta);
+    push(
+      'recovery',
+      'detail.recovery',
+      act.recoveryMinutes,
+      b.recoveryMinutes,
+      (v) => `${(v / 60).toFixed(1)} h`,
+      pctDelta,
+    );
     push('calories', 'detail.calories', act.caloriesKcal, b.caloriesKcal, bpm, pctDelta);
     push('ascent', 'detail.ascent', act.totalAscentM, b.totalAscentM, bpm, pctDelta);
     return out;
@@ -1426,6 +1461,34 @@ function ActivityDetail({
         <Card label={t('detail.calories')} value={asStr(act.caloriesKcal, ' kcal')} />
         {act.trainingLoad != null ? (
           <Card label={t('detail.trainingLoad')} value={String(act.trainingLoad)} />
+        ) : null}
+        {/* — physiology (Garmin-Computed; cards appear only when reported) — */}
+        {act.sweatLossMl != null ? (
+          <Card label={t('detail.sweat')} value={asStr(Math.round(act.sweatLossMl), ' mL')} />
+        ) : null}
+        {act.aerobicTe != null ? (
+          <Card label={t('detail.aerobicTe')} value={act.aerobicTe.toFixed(1)} />
+        ) : null}
+        {act.anaerobicTe != null ? (
+          <Card label={t('detail.anaerobicTe')} value={act.anaerobicTe.toFixed(1)} />
+        ) : null}
+        {teMessageHuman(act.aerobicTeMessage) ? (
+          <Card label={t('detail.aerobicBenefit')} value={teMessageHuman(act.aerobicTeMessage)!} />
+        ) : null}
+        {teMessageHuman(act.anaerobicTeMessage) ? (
+          <Card
+            label={t('detail.anaerobicBenefit')}
+            value={teMessageHuman(act.anaerobicTeMessage)!}
+          />
+        ) : null}
+        {act.vo2max != null ? (
+          <Card label={t('detail.vo2max')} value={act.vo2max.toFixed(1)} />
+        ) : null}
+        {act.recoveryMinutes != null ? (
+          <Card label={t('detail.recovery')} value={`${(act.recoveryMinutes / 60).toFixed(1)} h`} />
+        ) : null}
+        {act.normalizedPowerW != null ? (
+          <Card label={t('detail.np')} value={asStr(Math.round(act.normalizedPowerW), ' W')} />
         ) : null}
         {act.indoor ? <Card label={t('detail.mode')} value={t('detail.indoorVal')} /> : null}
         {(() => {

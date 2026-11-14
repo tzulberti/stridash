@@ -140,6 +140,17 @@ export interface ActivityInput {
   indoor: boolean;
   /** source-reported HR-zone minutes (FIT time_in_zone) */
   hrZonesMin: number[] | null;
+  // — physiology (Connect list row + FIT session; see the field comments on
+  // the shared Activity type in packages/types) —
+  sweatLossMl?: number | null;
+  aerobicTe?: number | null;
+  anaerobicTe?: number | null;
+  /** benefit codes as-received ("IMPROVING_LACTATE_THRESHOLD_12") */
+  aerobicTeMessage?: string | null;
+  anaerobicTeMessage?: string | null;
+  vo2max?: number | null;
+  recoveryMinutes?: number | null;
+  normalizedPowerW?: number | null;
   raw: Record<string, unknown>;
 }
 
@@ -240,6 +251,16 @@ export function fitToActivity(
     trainingLoad: session?.trainingLoadPeak ?? null, // source-reported, ambiguous unit — see types
     caloriesKcal: session?.totalCalories ?? row.calories ?? null,
     hrZonesMin: session?.hrZonesMin ?? null,
+    // physiology: FIT session first, Connect list row as fallback; sweat and
+    // the benefit messages are Connect-computed only (FIT has neither)
+    sweatLossMl: row.waterEstimated ?? null,
+    aerobicTe: session?.totalTrainingEffect ?? row.aerobicTrainingEffect ?? null,
+    anaerobicTe: session?.totalAnaerobicTrainingEffect ?? row.anaerobicTrainingEffect ?? null,
+    aerobicTeMessage: row.aerobicTrainingEffectMessage ?? null,
+    anaerobicTeMessage: row.anaerobicTrainingEffectMessage ?? null,
+    vo2max: session?.vo2Max ?? row.vO2MaxValue ?? null,
+    recoveryMinutes: session?.recoveryMinutes ?? null,
+    normalizedPowerW: session?.normalizedPowerW ?? row.normPower ?? null,
     indoor,
     raw: {
       provider: 'GARMIN',
@@ -247,7 +268,8 @@ export function fitToActivity(
       typeKey: row.activityType?.typeKey,
       approximateStartTime: series.timeMs.length === 0,
       // per-session physiology/scoring straight from the FIT (VO2max, TE,
-      // NP, recovery…): not columned anywhere, kept query-ready in jsonb
+      // NP, recovery…): columned under sweat/te/vo2max/recovery/np — the
+      // jsonb copy stays for provenance
       session,
       listRow: row,
     },
@@ -279,6 +301,15 @@ export function rowToActivity(row: GarminActivityRow): ActivityInput {
     trainingLoad: null,
     caloriesKcal: row.calories ?? null,
     hrZonesMin: null,
+    // row-only physiology (FIT unavailable — nothing session-sourced survives)
+    sweatLossMl: row.waterEstimated ?? null,
+    aerobicTe: row.aerobicTrainingEffect ?? null,
+    anaerobicTe: row.anaerobicTrainingEffect ?? null,
+    aerobicTeMessage: row.aerobicTrainingEffectMessage ?? null,
+    anaerobicTeMessage: row.anaerobicTrainingEffectMessage ?? null,
+    vo2max: row.vO2MaxValue ?? null,
+    recoveryMinutes: null,
+    normalizedPowerW: row.normPower ?? null,
     indoor: false,
     raw: {
       provider: 'GARMIN',

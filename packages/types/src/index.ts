@@ -151,6 +151,21 @@ export interface Activity {
   caloriesKcal: number | null;
   /** source-reported training load / stress (TSS-like); semantics vary by provider */
   trainingLoad: number | null;
+  // — physiology (Garmin Connect + FIT session; null for other providers) —
+  /** estimated sweat loss, mL (Garmin "waterEstimated") */
+  sweatLossMl: number | null;
+  /** Firstbeat aerobic / anaerobic training effect (0–5) */
+  aerobicTe: number | null;
+  anaerobicTe: number | null;
+  /** benefit codes as-received ("IMPROVING_LACTATE_THRESHOLD_12"); beautified client-side */
+  aerobicTeMessage: string | null;
+  anaerobicTeMessage: string | null;
+  /** session-detected VO2max estimate (mL/kg/min) */
+  vo2max: number | null;
+  /** FIT recovery_time — minutes until the next hard effort is sensible */
+  recoveryMinutes: number | null;
+  /** FIT/Connect normalized power (W) */
+  normalizedPowerW: number | null;
   /** providers that delivered this row (a length-2 list = same ride arrived twice) */
   providers?: string[];
   /** provider detail-endpoint payload as-received (Zwift carries ~45 fields

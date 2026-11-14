@@ -191,6 +191,30 @@ VO2max, recovery time, aerobic/anaerobic training effect, normalized power,
 power, avg/max respiration, total calories. Source-reported HR-zone minutes
 (FIT `time_in_zone`) go to the `hr_zones_min` column, zone 1 first.
 
+## Physiology columns (verified live 2026-11-14)
+
+The Connect **list rows carry the Connect-computed physiology outright** (no
+per-activity detail fetch is needed for ingest) — `waterEstimated` (estimated
+sweat loss, mL), `aerobicTrainingEffect`/`anaerobicTrainingEffect` (Firstbeat
+0–5), their benefit-message codes (`IMPROVING_LACTATE_THRESHOLD_12` —
+provider data as-received, beautified client-side by `teMessageHuman`),
+`vO2MaxValue` and `normPower`. These land in typed columns alongside the
+session-sourced values (session first, list row as fallback):
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| `sweat_loss_ml` | list row `waterEstimated` | Connect-computed; FIT has no sweat field |
+| `aerobic_te` / `anaerobic_te` | FIT session, else list row | same value either way |
+| `aerobic_te_message` / `anaerobic_te_message` | list row | benefit codes as-received |
+| `vo2max` | FIT session `vo2Max`, else list row `vO2MaxValue` | session estimate, mL/kg/min |
+| `recovery_minutes` | FIT session `recovery_time` | **minutes** — the field was first stored as `recoveryTimeH` before the unit was confirmed; the 20261114030000 backfill COALESCEs both eras |
+| `normalized_power_w` | FIT session, else list row `normPower` | W |
+
+Migration `20261114030000_activity_physiology` backfilled every existing row
+straight from the stored `raw.listRow`/`raw.session` payloads, so no re-sync
+was needed. iGPSPORT gets the same columns from its FIT session when the unit
+reports them (NP/TE/VO2max/recovery); Zwift reports none.
+
 ## Wellness (sleep + daily metrics, 2026-11)
 
 The DI (native API) bearer ALSO answers the wellness tier. Verified live:

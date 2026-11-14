@@ -194,7 +194,7 @@ function extractSession(data: any): FitSession | null {
     avgRespirationRate: num(s?.enhanced_avg_respiration_rate),
     maxRespirationRate: num(s?.enhanced_max_respiration_rate),
     vo2Max: num(am?.vo2_max ?? um?.vo2_max),
-    recoveryTimeH: num(am?.recovery_time),
+    recoveryMinutes: num(am?.recovery_time),
     // source-reported minutes per HR zone, zone 1 first
     hrZonesMin: hrZones(tiz?.time_in_hr_zone),
   };

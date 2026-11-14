@@ -18,6 +18,7 @@ import { regionForKey } from '../providers/igpsport/regions.js';
 import {
   type ActivityInput,
   type FitRecord,
+  type FitSession,
   fitToActivity,
 } from '../providers/igpsport/normalize.js';
 import { parseFitFile } from '../providers/igpsport/fit.js';
@@ -74,6 +75,14 @@ function toActivityCreate(userId: string, connectionId: string, input: ActivityI
     avgCadence: input.avgCadence,
     maxCadence: input.maxCadence,
     trainingLoad: null, // provider hasn't delivered a TSS-like number for FIT runs
+    sweatLossMl: input.sweatLossMl ?? null,
+    aerobicTe: input.aerobicTe ?? null,
+    anaerobicTe: input.anaerobicTe ?? null,
+    aerobicTeMessage: input.aerobicTeMessage ?? null,
+    anaerobicTeMessage: input.anaerobicTeMessage ?? null,
+    vo2max: input.vo2max ?? null,
+    recoveryMinutes: input.recoveryMinutes ?? null,
+    normalizedPowerW: input.normalizedPowerW ?? null,
     caloriesKcal: input.caloriesKcal,
     indoor: input.indoor,
     raw: input.raw as unknown as Prisma.InputJsonValue,
@@ -277,9 +286,11 @@ async function ingestRide(
   if (fitBuf) {
     let records: FitRecord[] = [];
     let deviceId: string | null = null;
+    let fitSession: FitSession | null = null;
     try {
       const parsed = await parseFitFile(fitBuf);
       records = parsed.records;
+      fitSession = parsed.session;
       // the FIT's single device_info message = the head unit that recorded
       // the ride; iGPSPORT offers no device registry, so no model name
       if (parsed.device) {
@@ -303,7 +314,10 @@ async function ingestRide(
     }
     if (records.length) {
       const rowIndoor = (row as Record<string, unknown>).indoor === 1;
-      const parsed = fitToActivity(row, records, { indoor: rowIndoor });
+      const parsed = fitToActivity(row, records, {
+        indoor: rowIndoor,
+        session: fitSession,
+      });
       if (parsed)
         await upsertActivity(connection, rideId, parsed.activity, parsed.series, deviceId);
       return;

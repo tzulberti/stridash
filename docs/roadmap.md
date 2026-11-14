@@ -70,6 +70,13 @@ no refresh token (re-exchange on expiry). The auth half is a swap-in.)*
       normalized power, training load, recovery) in `raw.session`,
       source-reported HR zones; verified live (200/200 activities,
       ~579k samples) — see `docs/garmin.md` FIT fidelity notes
+- [x] Physiology columns surfaced (2026-11): sweat loss, aerobic/anaerobic
+      training effect + benefit messages, session VO2max, recovery time
+      (minutes), normalized power — mapped from the Connect list row (which
+      already carries them) and the FIT session, backfilled from stored raw
+      payloads by migration `20261114030000_activity_physiology`; shown in
+      the detail cards and the compare table — see `docs/garmin.md`
+      "Physiology columns"
 - [x] Live E2E against a real account (needs a real Garmin login to run)
 - [x] Wellness ingest (2026-11): nightly sleep (stages, score, HRV, naps) +
       daily steps/floors/calories/HR/stress/body battery — see `docs/garmin.md`

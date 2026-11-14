@@ -44,6 +44,37 @@ describe('rowToActivity', () => {
     expect((a.raw as Record<string, unknown>).approximateStartTime).toBe(true);
   });
 
+  it('maps the Connect-computed physiology from the list row (verified live)', () => {
+    const a = rowToActivity(
+      row({
+        waterEstimated: 389,
+        aerobicTrainingEffect: 3.6,
+        anaerobicTrainingEffect: 1.2,
+        aerobicTrainingEffectMessage: 'IMPROVING_LACTATE_THRESHOLD_12',
+        anaerobicTrainingEffectMessage: 'MINOR_ANAEROBIC_BENEFIT_15',
+        vO2MaxValue: 49,
+        normPower: 400,
+      }),
+    );
+    expect(a.sweatLossMl).toBe(389);
+    expect(a.aerobicTe).toBeCloseTo(3.6, 5);
+    expect(a.anaerobicTe).toBeCloseTo(1.2, 5);
+    expect(a.aerobicTeMessage).toBe('IMPROVING_LACTATE_THRESHOLD_12');
+    expect(a.anaerobicTeMessage).toBe('MINOR_ANAEROBIC_BENEFIT_15');
+    expect(a.vo2max).toBe(49);
+    expect(a.recoveryMinutes).toBeNull(); // FIT-session-only, absent without a session
+    expect(a.normalizedPowerW).toBe(400);
+  });
+
+  it('leaves physiology null when the row carries none', () => {
+    const a = rowToActivity(row());
+    expect(a.sweatLossMl).toBeNull();
+    expect(a.aerobicTe).toBeNull();
+    expect(a.anaerobicTe).toBeNull();
+    expect(a.vo2max).toBeNull();
+    expect(a.normalizedPowerW).toBeNull();
+  });
+
   it('keeps the raw source row', () => {
     const a = rowToActivity(row({ activityName: undefined }));
     expect(a.headline).toBe('Garmin activity');

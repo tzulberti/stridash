@@ -328,6 +328,21 @@ model Activity {
   /// Source-reported training load / stress (TSS-like); semantics vary by
   /// provider — the raw payload is the authority
   trainingLoad Int?         @map("training_load")
+  // — physiology (Garmin Connect list row + FIT session; null elsewhere) —
+  /// Connect-computed estimated sweat loss (mL; "waterEstimated")
+  sweatLossMl  Float?       @map("sweat_loss_ml")
+  /// Firstbeat aerobic / anaerobic training effect (0–5)
+  aerobicTe    Float?       @map("aerobic_te")
+  anaerobicTe  Float?       @map("anaerobic_te")
+  /// Benefit codes as-received (e.g. "IMPROVING_LACTATE_THRESHOLD_12");
+  /// beautified client-side
+  aerobicTeMessage   String? @map("aerobic_te_message")
+  anaerobicTeMessage String? @map("anaerobic_te_message")
+  /// Session-detected VO2max estimate (mL/kg/min)
+  vo2max       Float?       @map("vo2max")
+  /// FIT recovery_time — minutes until the next hard effort is sensible
+  recoveryMinutes    Float? @map("recovery_minutes")
+  normalizedPowerW   Float? @map("normalized_power_w")
   indoor       Boolean      @default(false)
   gearId       String?      @db.Uuid @map("gear_id")
   /// Recording device (watch / cycling head unit), nullable — backfilled by

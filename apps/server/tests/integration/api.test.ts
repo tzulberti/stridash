@@ -299,6 +299,35 @@ describe('activities list', () => {
     const res = await app.request('/api/activities?from=not-a-date', authed(aliceToken));
     expect(res.status).toBe(400);
   });
+
+  it('serves the physiology columns through the detail endpoint', async () => {
+    // the ingest writes these from the Connect list row + FIT session; any
+    // value set must round-trip the API unchanged (verified live 2026-11-14
+    // against the backfill of the same numbers)
+    await prisma.activity.update({
+      where: { id: runId },
+      data: {
+        sweatLossMl: 389,
+        aerobicTe: 3.6,
+        anaerobicTe: 1.2,
+        aerobicTeMessage: 'IMPROVING_LACTATE_THRESHOLD_12',
+        anaerobicTeMessage: 'MINOR_ANAEROBIC_BENEFIT_15',
+        vo2max: 49.36,
+        recoveryMinutes: 1584,
+        normalizedPowerW: 400,
+      },
+    });
+    const body = await json(await app.request(`/api/activities/${runId}`, authed(aliceToken)));
+    const a = (body.items as Json[])[0];
+    expect(a.sweatLossMl).toBe(389);
+    expect(a.aerobicTe).toBeCloseTo(3.6, 5);
+    expect(a.anaerobicTe).toBeCloseTo(1.2, 5);
+    expect(a.aerobicTeMessage).toBe('IMPROVING_LACTATE_THRESHOLD_12');
+    expect(a.anaerobicTeMessage).toBe('MINOR_ANAEROBIC_BENEFIT_15');
+    expect(a.vo2max).toBeCloseTo(49.36, 2);
+    expect(a.recoveryMinutes).toBe(1584);
+    expect(a.normalizedPowerW).toBe(400);
+  });
 });
 
 // ─── Connections: lifecycle + sync contract ──────────────────────────────────

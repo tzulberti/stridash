@@ -110,6 +110,16 @@ export function numDelta(
   return `${d > 0 ? '+' : '−'}${Math.abs(d)}${suffix}`;
 }
 
+/** Garmin training-effect benefit code → human text: strips the enum ordinal
+ * ("IMPROVING_LACTATE_THRESHOLD_12" → "Improving lactate threshold"). Codes
+ * are provider data as-received; anything without the shape passes through. */
+export function teMessageHuman(code: string | null | undefined): string | null {
+  if (!code) return null;
+  const base = code.replace(/_\d+$/, '').toLowerCase().replace(/_/g, ' ').trim();
+  if (!base) return null;
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
 // ─── Feed constants ─────────────────────────────────────────────────────────
 
 export const TYPE_EMOJI: Record<string, string> = {
