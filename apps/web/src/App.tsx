@@ -455,16 +455,21 @@ function CompareChart({
   a,
   b,
   label,
+  unit,
   xMode = 'time',
   height = 180,
 }: {
   a: Point[];
   b: Point[];
   label?: string;
+  unit?: string;
   /** which X axis: elapsed time (default) or distance in meters */
   xMode?: 'time' | 'distance';
   height?: number;
 }) {
+  // cursor x in data space — declared before the early return so hook counts
+  // stay stable across renders with and without data
+  const [hoverX, setHoverX] = useState<number | null>(null);
   if (a.length < 2 || b.length < 2) return <div className="empty">{t('chart.noData')}</div>;
 
   const W = 900;
@@ -511,8 +516,46 @@ function CompareChart({
         return { x: t, label: fmtTick(t, spanDays, x0) };
       });
 
+  // hover: the sample nearest the cursor's x on EACH series (the two series
+  // sample at different clocks, so one shared index can't work)
+  const nearest = (pts: Point[], x: number): Point | undefined => {
+    let best: Point | undefined;
+    let bd = Infinity;
+    for (const p of pts) {
+      const d = Math.abs(p.x - x);
+      if (d < bd) {
+        bd = d;
+        best = p;
+      }
+    }
+    return best;
+  };
+  const svgMove = (e: React.MouseEvent<SVGSVGElement>): void => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * W;
+    const dx = x0 + ((mx - padL) / plotW) * spanX;
+    setHoverX(Math.min(Math.max(dx, x0), x1));
+  };
+  const ha = hoverX != null ? nearest(a, hoverX) : undefined;
+  const hb = hoverX != null ? nearest(b, hoverX) : undefined;
+  const pa = ha ? toXY(ha) : null;
+  const pb = hb ? toXY(hb) : null;
+  const hx = hoverX != null ? padL + ((hoverX - x0) / spanX) * plotW : 0;
+  const tipW = 150;
+  const tipH = 54;
+  const my = pa && pb ? (pa[1] + pb[1]) / 2 : (pa?.[1] ?? pb?.[1] ?? padT);
+  const tipX = hx + 10 + tipW > W - padR ? hx - tipW - 10 : hx + 10;
+  const tipY = Math.min(Math.max(my - tipH / 2, padT), H - padB - tipH);
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="chart" role="img" aria-label={label}>
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="chart"
+      role="img"
+      aria-label={label}
+      onMouseMove={svgMove}
+      onMouseLeave={() => setHoverX(null)}
+    >
       {yTicks.map((tv) => {
         const y = padT + (1 - (tv - y0) / spanY) * plotH;
         return (
@@ -551,6 +594,51 @@ function CompareChart({
       </text>
       <path d={pathOf(a)} fill="none" stroke={COMPARE_A} strokeWidth={1.75} />
       <path d={pathOf(b)} fill="none" stroke={COMPARE_B} strokeWidth={1.75} />
+      {/* hover: crosshair + one highlighted sample per series + tooltip with
+          the x label and both values in the series colors */}
+      {hoverX != null && (
+        <g>
+          <line x1={hx} x2={hx} y1={padT} y2={H - padB} className="chart-cross" />
+          {pa && (
+            <circle
+              cx={pa[0]}
+              cy={pa[1]}
+              r={3.5}
+              fill={COMPARE_A}
+              stroke="#14171f"
+              strokeWidth={1.5}
+            />
+          )}
+          {pb && (
+            <circle
+              cx={pb[0]}
+              cy={pb[1]}
+              r={3.5}
+              fill={COMPARE_B}
+              stroke="#14171f"
+              strokeWidth={1.5}
+            />
+          )}
+          <g transform={`translate(${tipX},${tipY})`}>
+            <rect width={tipW} height={tipH} rx={6} className="chart-tip" />
+            <text x={8} y={14} className="chart-tip-date">
+              {isDist ? fmtKm(hoverX) : spanDays < 1.5 ? fmtElapsed(hoverX - x0) : fmtDay(hoverX)}
+            </text>
+            {ha && (
+              <text x={8} y={30} className="chart-tip-val" fill={COMPARE_A}>
+                {fmtVal(ha.y)}
+                {unit}
+              </text>
+            )}
+            {hb && (
+              <text x={8} y={46} className="chart-tip-val" fill={COMPARE_B}>
+                {fmtVal(hb.y)}
+                {unit}
+              </text>
+            )}
+          </g>
+        </g>
+      )}
     </svg>
   );
 }
@@ -990,6 +1078,7 @@ function ActivityDetail({
           titleKey: MsgKey;
           pointsA: Point[];
           pointsB: Point[];
+          unit: string;
         }>,
       };
     const aligned = (s: ActivitySeriesRow['series']): boolean =>
@@ -1000,12 +1089,18 @@ function ActivityDetail({
         x: (xMode === 'distance' ? s.distanceM?.[i] : s.timeMs?.[i]) ?? i,
         y: v,
       }));
-    const charts: Array<{ key: string; titleKey: MsgKey; pointsA: Point[]; pointsB: Point[] }> = [];
-    for (const [key, titleKey] of SERIES_CHANNELS) {
+    const charts: Array<{
+      key: string;
+      titleKey: MsgKey;
+      pointsA: Point[];
+      pointsB: Point[];
+      unit: string;
+    }> = [];
+    for (const [key, titleKey, , unit] of SERIES_CHANNELS) {
       const va = (sa as Record<string, number[] | undefined>)[key];
       const vb = (sb as Record<string, number[] | undefined>)[key];
       if (!va || !vb || va.length < 2 || vb.length < 2) continue;
-      charts.push({ key, titleKey, pointsA: pts(sa, va), pointsB: pts(sb, vb) });
+      charts.push({ key, titleKey, pointsA: pts(sa, va), pointsB: pts(sb, vb), unit });
     }
     return { xMode, charts };
   }, [rows, compareAct]);
@@ -1218,21 +1313,23 @@ function ActivityDetail({
       {act.workoutName && (
         <p className="conn-sub">{t('detail.workout', { name: act.workoutName })}</p>
       )}
-      <div className="metric-tabs">
-        <button
-          className={`btn ghost ${xAxis === 'time' ? 'active' : ''}`}
-          onClick={() => setXAxis('time')}
-        >
-          {t('detail.timeTab')}
-        </button>
-        <button
-          className={`btn ghost ${xAxis === 'distance' ? 'active' : ''}`}
-          disabled={!hasDistance}
-          onClick={() => setXAxis('distance')}
-        >
-          {t('detail.distanceTab')}
-        </button>
-      </div>
+      {compareId === '' ? (
+        <div className="metric-tabs">
+          <button
+            className={`btn ghost ${xAxis === 'time' ? 'active' : ''}`}
+            onClick={() => setXAxis('time')}
+          >
+            {t('detail.timeTab')}
+          </button>
+          <button
+            className={`btn ghost ${xAxis === 'distance' ? 'active' : ''}`}
+            disabled={!hasDistance}
+            onClick={() => setXAxis('distance')}
+          >
+            {t('detail.distanceTab')}
+          </button>
+        </div>
+      ) : null}
       <div className="cards">
         <Card label={t('detail.start')} value={fmtDate(act.startTime)} />
         <Card label={t('detail.distanceC')} value={fmtKm(act.distanceM)} />
@@ -1333,15 +1430,22 @@ function ActivityDetail({
       {similar !== null && similar.length > 0 ? (
         <section>
           <h3>{t('compare.title')}</h3>
-          <select value={compareId} onChange={(e) => setCompareId(e.target.value)}>
-            <option value="">{t('compare.pick')}</option>
-            {similar.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.headline} · {fmtDate(s.startTime)} ·{' '}
-                {s.distanceM != null ? fmtKm(s.distanceM) : fmtMin(s.durationS)}
-              </option>
-            ))}
-          </select>
+          <div className="cmp-pick-row">
+            <select value={compareId} onChange={(e) => setCompareId(e.target.value)}>
+              <option value="">{t('compare.pick')}</option>
+              {similar.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.headline} · {fmtDate(s.startTime)} ·{' '}
+                  {s.distanceM != null ? fmtKm(s.distanceM) : fmtMin(s.durationS)}
+                </option>
+              ))}
+            </select>
+            {compareId ? (
+              <button type="button" className="btn ghost small" onClick={() => setCompareId('')}>
+                ✕ {t('compare.remove')}
+              </button>
+            ) : null}
+          </div>
           {compareId && !compareAct ? <p>{t('detail.loading')}</p> : null}
           {compareAct ? (
             <>
@@ -1440,6 +1544,7 @@ function ActivityDetail({
                     a={c.pointsA}
                     b={c.pointsB}
                     label={t(c.titleKey)}
+                    unit={c.unit}
                     xMode={compareCharts.xMode}
                   />
                 </div>
@@ -1450,33 +1555,36 @@ function ActivityDetail({
       ) : null}
 
       {rows === null && !error ? <p>{t('detail.loadingSeries')}</p> : null}
-      {charts.map((c) => (
-        <section key={c.key}>
-          <h3>{t(c.titleKey)}</h3>
-          <LineChart
-            points={c.points}
-            color={c.color}
-            label={t(c.titleKey)}
-            unit={c.unit}
-            zoneThresholds={c.zones}
-            xMode={xAxis === 'distance' && hasDistance ? 'distance' : 'time'}
-          />
-          {c.key === 'hrBpm' && c.zones ? (
-            <div className="zone-legend">
-              {Array.from({ length: c.zones.length + 1 }, (_, i) => (
-                <span key={i} className="zone-item">
-                  <span
-                    className="zone-sw"
-                    style={{ background: ZONE_COLORS[Math.min(i, ZONE_COLORS.length - 1)] }}
-                  />
-                  Z{i + 1}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ))}
-      {rows !== null && charts.length === 0 && !error ? (
+      {/* while a comparison is active the overlaid charts above replace these
+          single-activity ones — no duplicated heart-rate/speed walls */}
+      {compareId === '' &&
+        charts.map((c) => (
+          <section key={c.key}>
+            <h3>{t(c.titleKey)}</h3>
+            <LineChart
+              points={c.points}
+              color={c.color}
+              label={t(c.titleKey)}
+              unit={c.unit}
+              zoneThresholds={c.zones}
+              xMode={xAxis === 'distance' && hasDistance ? 'distance' : 'time'}
+            />
+            {c.key === 'hrBpm' && c.zones ? (
+              <div className="zone-legend">
+                {Array.from({ length: c.zones.length + 1 }, (_, i) => (
+                  <span key={i} className="zone-item">
+                    <span
+                      className="zone-sw"
+                      style={{ background: ZONE_COLORS[Math.min(i, ZONE_COLORS.length - 1)] }}
+                    />
+                    Z{i + 1}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ))}
+      {compareId === '' && rows !== null && charts.length === 0 && !error ? (
         <p className="empty">{t('detail.noSeries')}</p>
       ) : null}
 

@@ -148,6 +148,7 @@ export const ru: Record<MsgKey, string> = {
   'compare.maxSpeed': 'Макс. скорость',
   'compare.avgPower': 'Ср. мощность',
   'compare.maxPower': 'Макс. мощность',
+  'compare.remove': 'Убрать сравнение',
   'series.speed': 'Скорость',
   'series.hr': 'Пульс',
   'series.power': 'Мощность',

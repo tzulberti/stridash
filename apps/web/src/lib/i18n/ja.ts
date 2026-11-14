@@ -148,6 +148,7 @@ export const ja: Record<MsgKey, string> = {
   'compare.maxSpeed': '最大速度',
   'compare.avgPower': '平均パワー',
   'compare.maxPower': '最大パワー',
+  'compare.remove': '比較を解除',
   'series.speed': '速度',
   'series.hr': '心拍数',
   'series.power': 'パワー',

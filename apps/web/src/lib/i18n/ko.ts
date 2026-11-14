@@ -148,6 +148,7 @@ export const ko: Record<MsgKey, string> = {
   'compare.maxSpeed': '최대 속도',
   'compare.avgPower': '평균 파워',
   'compare.maxPower': '최대 파워',
+  'compare.remove': '비교 해제',
   'series.speed': '속도',
   'series.hr': '심박수',
   'series.power': '파워',

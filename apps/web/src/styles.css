@@ -493,6 +493,15 @@ footer {
   text-align: center;
 }
 
+/* picker + remove-comparison button */
+.cmp-pick-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
 /* disabled toggles (e.g. 'distance' axis with no distance stream) */
 .btn:disabled {
   opacity: 0.35;

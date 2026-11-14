@@ -147,6 +147,7 @@ export const zh: Record<MsgKey, string> = {
   'compare.maxSpeed': '最大速度',
   'compare.avgPower': '平均功率',
   'compare.maxPower': '最大功率',
+  'compare.remove': '取消对比',
   'series.speed': '速度',
   'series.hr': '心率',
   'series.power': '功率',

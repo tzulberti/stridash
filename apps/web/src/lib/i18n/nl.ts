@@ -148,6 +148,7 @@ export const nl: Record<MsgKey, string> = {
   'compare.maxSpeed': 'Max. snelheid',
   'compare.avgPower': 'Gem. vermogen',
   'compare.maxPower': 'Max. vermogen',
+  'compare.remove': 'Vergelijking verwijderen',
   'series.speed': 'Snelheid',
   'series.hr': 'Hartslag',
   'series.power': 'Vermogen',

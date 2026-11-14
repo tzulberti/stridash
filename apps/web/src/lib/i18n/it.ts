@@ -148,6 +148,7 @@ export const it: Record<MsgKey, string> = {
   'compare.maxSpeed': 'Vel. massima',
   'compare.avgPower': 'Potenza media',
   'compare.maxPower': 'Potenza massima',
+  'compare.remove': 'Rimuovi confronto',
   'series.speed': 'Velocità',
   'series.hr': 'Frequenza cardiaca',
   'series.power': 'Potenza',

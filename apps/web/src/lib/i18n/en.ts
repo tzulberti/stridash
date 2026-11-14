@@ -159,6 +159,7 @@ export const en = {
   'compare.maxSpeed': 'Max speed',
   'compare.avgPower': 'Avg power',
   'compare.maxPower': 'Max power',
+  'compare.remove': 'Remove comparison',
   'series.speed': 'Speed',
   'series.hr': 'Heart rate',
   'series.power': 'Power',

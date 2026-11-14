@@ -140,7 +140,10 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       per-unit splits table (paired by unit index, Δ pace in seconds per unit,
       Δ elevation in meters) when both sides carry distance streams, and
       per-channel overlaid two-line charts (A green / B red; distance
-      x-axis only when both series carry a distance stream)
+      x-axis only when both series carry a distance stream) with hover
+      tooltips reading both series; while a comparison is active the
+      single-activity charts and the axis tabs hide (the overlaid charts
+      replace them) and a "Remove comparison" button restores them
 - [ ] Onboarding: create user → connect providers → first sync (UI)
 - [ ] Connections screen with "sync now" buttons + `sync_logs` error surfacing
 - [ ] Manual entry UI

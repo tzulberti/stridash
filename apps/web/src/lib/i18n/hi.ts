@@ -148,6 +148,7 @@ export const hi: Record<MsgKey, string> = {
   'compare.maxSpeed': 'अधिकतम गति',
   'compare.avgPower': 'औसत शक्ति',
   'compare.maxPower': 'अधिकतम शक्ति',
+  'compare.remove': 'तुलना हटाएँ',
   'series.speed': 'गति',
   'series.hr': 'हृदय गति',
   'series.power': 'शक्ति',
