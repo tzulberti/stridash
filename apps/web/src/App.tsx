@@ -456,6 +456,8 @@ function CompareChart({
   b,
   label,
   unit,
+  nameA,
+  nameB,
   xMode = 'time',
   height = 180,
 }: {
@@ -463,6 +465,9 @@ function CompareChart({
   b: Point[];
   label?: string;
   unit?: string;
+  /** short activity names for the tooltip lines (identity of each color) */
+  nameA?: string;
+  nameB?: string;
   /** which X axis: elapsed time (default) or distance in meters */
   xMode?: 'time' | 'distance';
   height?: number;
@@ -541,8 +546,8 @@ function CompareChart({
   const pa = ha ? toXY(ha) : null;
   const pb = hb ? toXY(hb) : null;
   const hx = hoverX != null ? padL + ((hoverX - x0) / spanX) * plotW : 0;
-  const tipW = 150;
-  const tipH = 54;
+  const tipW = 210;
+  const tipH = 86;
   const my = pa && pb ? (pa[1] + pb[1]) / 2 : (pa?.[1] ?? pb?.[1] ?? padT);
   const tipX = hx + 10 + tipW > W - padR ? hx - tipW - 10 : hx + 10;
   const tipY = Math.min(Math.max(my - tipH / 2, padT), H - padB - tipH);
@@ -624,17 +629,32 @@ function CompareChart({
             <text x={8} y={14} className="chart-tip-date">
               {isDist ? fmtKm(hoverX) : spanDays < 1.5 ? fmtElapsed(hoverX - x0) : fmtDay(hoverX)}
             </text>
+            {/* per series: swatch + name, then the value in the series color
+                (inline style — the chart-tip-val class would override a
+                fill attribute) */}
             {ha && (
-              <text x={8} y={30} className="chart-tip-val" fill={COMPARE_A}>
-                {fmtVal(ha.y)}
-                {unit}
-              </text>
+              <>
+                <rect x={8} y={22} width={9} height={9} rx={2} fill={COMPARE_A} />
+                <text x={22} y={30} className="chart-tip-val">
+                  {nameA}
+                </text>
+                <text x={22} y={44} className="chart-tip-val" style={{ fill: COMPARE_A }}>
+                  {fmtVal(ha.y)}
+                  {unit}
+                </text>
+              </>
             )}
             {hb && (
-              <text x={8} y={46} className="chart-tip-val" fill={COMPARE_B}>
-                {fmtVal(hb.y)}
-                {unit}
-              </text>
+              <>
+                <rect x={8} y={54} width={9} height={9} rx={2} fill={COMPARE_B} />
+                <text x={22} y={62} className="chart-tip-val">
+                  {nameB}
+                </text>
+                <text x={22} y={76} className="chart-tip-val" style={{ fill: COMPARE_B }}>
+                  {fmtVal(hb.y)}
+                  {unit}
+                </text>
+              </>
             )}
           </g>
         </g>
@@ -1105,6 +1125,28 @@ function ActivityDetail({
     return { xMode, charts };
   }, [rows, compareAct]);
 
+  /** short identities for the compare tooltip lines; when both activities
+   * share a headline (the same ride delivered by two providers) the name
+   * alone can't tell them apart, so tag each with its series provider */
+  const cmpNames = useMemo(() => {
+    if (!compareAct) return null;
+    const trunc = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}…` : s);
+    const provA = rows?.[0]?.provider;
+    const provB = compareAct.series?.[0]?.provider;
+    const same = act?.headline === compareAct.headline;
+    return {
+      a: same
+        ? `${trunc(act?.headline ?? '', 14)} (${provA ?? 'A'})`
+        : trunc(act?.headline ?? '', 24),
+      b: same
+        ? `${trunc(compareAct.headline, 14)} (${provB ?? 'B'})`
+        : trunc(compareAct.headline, 24),
+      provA,
+      provB,
+      same,
+    };
+  }, [act, compareAct, rows]);
+
   // streams come back as labeled numeric arrays aligned with timeMs — plot
   // against the real sample clock so the axes show elapsed time; distance
   // mode plots them against the distance stream instead. The HR chart gets
@@ -1453,10 +1495,12 @@ function ActivityDetail({
                 <span className="cmp-item">
                   <span className="cmp-sw" style={{ background: COMPARE_A }} />
                   {act.headline} · {fmtDate(act.startTime)}
+                  {cmpNames?.same && cmpNames.provA ? ` · ${cmpNames.provA}` : ''}
                 </span>
                 <span className="cmp-item">
                   <span className="cmp-sw" style={{ background: COMPARE_B }} />
                   {compareAct.headline} · {fmtDate(compareAct.startTime)}
+                  {cmpNames?.same && cmpNames.provB ? ` · ${cmpNames.provB}` : ''}
                 </span>
               </div>
               <div className="table-scroll">
@@ -1545,6 +1589,8 @@ function ActivityDetail({
                     b={c.pointsB}
                     label={t(c.titleKey)}
                     unit={c.unit}
+                    nameA={cmpNames?.a}
+                    nameB={cmpNames?.b}
                     xMode={compareCharts.xMode}
                   />
                 </div>
