@@ -172,6 +172,7 @@ export const hi: Record<MsgKey, string> = {
   'series.vertOscillation': 'लंबवत दोलन',
   'series.groundContact': 'ज़मीन संपर्क %',
   'series.vertRatio': 'लंबवत अनुपात',
+  'series.temperature': 'तापमान',
 
   'gear.heading': 'उपकरण',
   'gear.intro':
@@ -214,6 +215,9 @@ export const hi: Record<MsgKey, string> = {
   'settings.dark': 'गहरा',
   'settings.light': 'हल्का',
   'settings.language': 'भाषा',
+  'settings.charts': 'गतिविधि चार्ट',
+  'settings.chartsDesc':
+    'चुनें कि प्रत्येक प्रदाता गतिविधि पृष्ठ पर कौन से चार्ट दिखाए, और क्रम बदलने के लिए उन्हें खींचें।',
   'settings.export': 'निर्यात',
   'settings.exportDesc':
     'आपके खाते का पूरा JSON डंप डाउनलोड करता है: गतिविधियाँ (प्रदाता के कच्चे डेटा और स्रोत के साथ), माप, नींद, दैनिक स्वास्थ्य और उपकरण। टोकन कभी शामिल नहीं होते; प्रति-सैंपल श्रृंखलाएँ डंप में नहीं आतीं (बहुत बड़ी) पर प्रत्येक गतिविधि में उपलब्ध रहती हैं।',

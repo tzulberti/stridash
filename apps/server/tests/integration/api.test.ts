@@ -534,6 +534,116 @@ describe('activity re-sync', () => {
   });
 });
 
+// ─── Chart preferences (per-provider activity chart list) ────────────────────
+
+describe('chart preferences', () => {
+  it('stores an ordered per-provider list and serves it through /me', async () => {
+    const channels = [
+      { key: 'hrBpm', visible: true },
+      { key: 'speedMs', visible: false },
+      { key: 'powerW', visible: true },
+    ];
+    const put = await app.request('/api/preferences/charts/GARMIN', {
+      method: 'PUT',
+      ...authed(aliceToken, { method: 'PUT' }),
+      body: JSON.stringify({ channels }),
+    });
+    expect(put.status).toBe(200);
+    expect((await json(put)).chartChannels).toEqual({ GARMIN: channels });
+
+    const me = await json(await app.request('/api/me', authed(aliceToken)));
+    const prefs = me.preferences as Json;
+    expect(prefs.chartChannels).toEqual({ GARMIN: channels });
+  });
+
+  it('replaces the list wholesale (reorder + toggle persist)', async () => {
+    const first = await app.request('/api/preferences/charts/ZWIFT', {
+      method: 'PUT',
+      ...authed(aliceToken, { method: 'PUT' }),
+      body: JSON.stringify({
+        channels: [
+          { key: 'powerW', visible: true },
+          { key: 'hrBpm', visible: true },
+          { key: 'speedMs', visible: true },
+        ],
+      }),
+    });
+    expect(first.status).toBe(200);
+    const second = await app.request('/api/preferences/charts/ZWIFT', {
+      method: 'PUT',
+      ...authed(aliceToken, { method: 'PUT' }),
+      body: JSON.stringify({
+        channels: [
+          { key: 'altitudeM', visible: false },
+          { key: 'powerW', visible: true },
+        ],
+      }),
+    });
+    expect(second.status).toBe(200);
+    const me = await json(await app.request('/api/me', authed(aliceToken)));
+    expect((me.preferences as Json).chartChannels).toEqual({
+      GARMIN: [
+        { key: 'hrBpm', visible: true },
+        { key: 'speedMs', visible: false },
+        { key: 'powerW', visible: true },
+      ],
+      ZWIFT: [
+        { key: 'altitudeM', visible: false },
+        { key: 'powerW', visible: true },
+      ],
+    });
+  });
+
+  it('keeps users isolated', async () => {
+    const bobChannels = [{ key: 'cadenceRpm', visible: false }];
+    await app.request('/api/preferences/charts/GARMIN', {
+      method: 'PUT',
+      ...authed(bobToken, { method: 'PUT' }),
+      body: JSON.stringify({ channels: bobChannels }),
+    });
+    const me = await json(await app.request('/api/me', authed(aliceToken)));
+    expect((me.preferences as Json).chartChannels).toEqual({
+      GARMIN: [
+        { key: 'hrBpm', visible: true },
+        { key: 'speedMs', visible: false },
+        { key: 'powerW', visible: true },
+      ],
+      ZWIFT: [
+        { key: 'altitudeM', visible: false },
+        { key: 'powerW', visible: true },
+      ],
+    });
+  });
+
+  it('rejects unknown channels, duplicates and unknown providers', async () => {
+    const bad = await app.request('/api/preferences/charts/GARMIN', {
+      method: 'PUT',
+      ...authed(aliceToken, { method: 'PUT' }),
+      body: JSON.stringify({ channels: [{ key: 'wattsPerHeartbeat', visible: true }] }),
+    });
+    expect(bad.status).toBe(400);
+
+    const dup = await app.request('/api/preferences/charts/GARMIN', {
+      method: 'PUT',
+      ...authed(aliceToken, { method: 'PUT' }),
+      body: JSON.stringify({
+        channels: [
+          { key: 'hrBpm', visible: true },
+          { key: 'hrBpm', visible: false },
+        ],
+      }),
+    });
+    expect(dup.status).toBe(400);
+
+    const unknownProvider = await app.request('/api/preferences/charts/OMRON', {
+      method: 'PUT',
+      ...authed(aliceToken, { method: 'PUT' }),
+      body: JSON.stringify({ channels: [{ key: 'hrBpm', visible: true }] }),
+    });
+    expect(unknownProvider.status).toBe(404);
+  });
+});
+
 // ─── Connections: lifecycle + sync contract ──────────────────────────────────
 
 describe('connections', () => {
@@ -851,7 +961,12 @@ describe('account preferences', () => {
     const res = await app.request('/api/me', authed(token));
     expect(res.status).toBe(200);
     const me = (await json(res)) as Record<string, unknown>;
-    expect(me.preferences).toEqual({ units: 'km', theme: 'dark', language: 'en' });
+    expect(me.preferences).toEqual({
+      units: 'km',
+      theme: 'dark',
+      language: 'en',
+      chartChannels: {},
+    });
   });
 
   it('persists partial updates and returns the new pair', async () => {
@@ -869,7 +984,12 @@ describe('account preferences', () => {
     const me = (await json(await app.request('/api/me', authed(token)))) as {
       preferences: unknown;
     };
-    expect(me.preferences).toEqual({ units: 'mi', theme: 'dark', language: 'en' });
+    expect(me.preferences).toEqual({
+      units: 'mi',
+      theme: 'dark',
+      language: 'en',
+      chartChannels: {},
+    });
   });
 
   it('persists the UI language like the other settings', async () => {
@@ -885,7 +1005,12 @@ describe('account preferences', () => {
     const me = (await json(await app.request('/api/me', authed(token)))) as {
       preferences: { units: string; theme: string; language: string };
     };
-    expect(me.preferences).toEqual({ units: 'mi', theme: 'dark', language: 'es' });
+    expect(me.preferences).toEqual({
+      units: 'mi',
+      theme: 'dark',
+      language: 'es',
+      chartChannels: {},
+    });
   });
 
   it('rejects an unsupported language code', async () => {

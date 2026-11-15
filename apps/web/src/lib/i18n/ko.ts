@@ -172,6 +172,7 @@ export const ko: Record<MsgKey, string> = {
   'series.vertOscillation': '수직 진동',
   'series.groundContact': '접지 시간 %',
   'series.vertRatio': '수직 비율',
+  'series.temperature': '온도',
 
   'gear.heading': '장비',
   'gear.intro':
@@ -214,6 +215,9 @@ export const ko: Record<MsgKey, string> = {
   'settings.dark': '다크',
   'settings.light': '라이트',
   'settings.language': '언어',
+  'settings.charts': '활동 차트',
+  'settings.chartsDesc':
+    '활동 페이지에 각 공급자가 표시할 차트를 선택하고, 드래그하여 순서를 바꿔 보세요.',
   'settings.export': '내보내기',
   'settings.exportDesc':
     '계정의 전체 데이터를 JSON으로 내려받습니다: 활동(공급자 원본 데이터와 출처 포함), 측정값, 수면, 일일 웰니스, 장비. 토큰은 절대 포함되지 않으며, 샘플 단위 시계열은 용량 문제로 제외되지만 활동별로 계속 볼 수 있습니다.',

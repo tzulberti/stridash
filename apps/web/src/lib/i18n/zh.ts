@@ -171,6 +171,7 @@ export const zh: Record<MsgKey, string> = {
   'series.vertOscillation': '垂直振幅',
   'series.groundContact': '触地时间 %',
   'series.vertRatio': '垂直步幅比',
+  'series.temperature': '温度',
 
   'gear.heading': '装备',
   'gear.intro':
@@ -213,6 +214,8 @@ export const zh: Record<MsgKey, string> = {
   'settings.dark': '深色',
   'settings.light': '浅色',
   'settings.language': '语言',
+  'settings.charts': '活动图表',
+  'settings.chartsDesc': '选择每个提供商在活动页面显示哪些图表，拖动即可重新排序。',
   'settings.export': '导出',
   'settings.exportDesc':
     '下载您账户的完整 JSON 备份:活动(含平台原始数据及来源)、测量记录、睡眠、每日健康和装备。绝不包含令牌;逐样本的时间序列因体积过大不包含在备份中,但可在各活动页面查看。',

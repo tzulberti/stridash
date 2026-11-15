@@ -43,11 +43,22 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   });
 
   routes.get('/me', async (c) => {
+    const userId = c.get('userId');
     const user = await prisma.user.findUnique({
-      where: { id: c.get('userId') },
+      where: { id: userId },
       select: { email: true, displayName: true, createdAt: true, preferences: true },
     });
     if (!user) return c.json({ error: 'Not found' }, 404);
+    // per-provider chart configuration (rows only exist where the user
+    // customized; absent provider = canonical order, all channels visible)
+    const chartPrefs = await prisma.chartChannelPref.findMany({
+      where: { userId },
+      orderBy: [{ provider: 'asc' }, { position: 'asc' }],
+    });
+    const chartChannels: Record<string, Array<{ key: string; visible: boolean }>> = {};
+    for (const pref of chartPrefs) {
+      (chartChannels[pref.provider] ??= []).push({ key: pref.channel, visible: pref.visible });
+    }
     // a user without a preferences row (pre-migration edge) reads as defaults
     const { preferences, ...account } = user;
     return c.json({
@@ -57,6 +68,7 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
         units: preferences?.units ?? 'km',
         theme: preferences?.theme ?? 'dark',
         language: preferences?.language ?? 'en',
+        chartChannels,
       },
     });
   });
@@ -103,6 +115,70 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
       }
       throw err;
     }
+  });
+
+  /**
+   * Chart configuration for the activity page (the Settings tab's per-
+   * provider chart lists): for one provider, the FULL ordered channel list
+   * with a visible flag each — array order is display order, and hidden
+   * channels keep their slot so re-showing them doesn't reshuffle the
+   * layout. The body replaces that provider's rows wholesale; a provider
+   * left untouched (or emptied) falls back to "every channel visible, in
+   * the app's canonical order". Providers are the series-bearing ones —
+   * OMRON stores measurements and MANUAL rows carry no series.
+   */
+  const chartChannelsSchema = z.object({
+    channels: z
+      .array(
+        z.object({
+          key: z.enum([
+            'speedMs',
+            'hrBpm',
+            'powerW',
+            'cadenceRpm',
+            'altitudeM',
+            'temperatureC',
+            'respirationRate',
+            'staminaPct',
+            'stepLengthM',
+            'verticalOscillationM',
+            'stanceTimePct',
+            'verticalRatioPct',
+          ]),
+          visible: z.boolean(),
+        }),
+      )
+      .max(32),
+  });
+  const CHART_PROVIDERS = ['GARMIN', 'ZWIFT', 'IGPSPORT', 'STRAVA'] as const;
+
+  routes.put('/preferences/charts/:provider', async (c) => {
+    const provider = c.req.param('provider');
+    if (!CHART_PROVIDERS.includes(provider as (typeof CHART_PROVIDERS)[number])) {
+      return c.json({ error: 'Unknown provider' }, 404);
+    }
+    const parsed = chartChannelsSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid body', detail: parsed.error.flatten().fieldErrors }, 400);
+    const keys = parsed.data.channels.map((ch) => ch.key);
+    if (new Set(keys).size !== keys.length) {
+      return c.json({ error: 'Duplicate channel' }, 400);
+    }
+
+    const userId = c.get('userId');
+    await prisma.$transaction([
+      prisma.chartChannelPref.deleteMany({ where: { userId, provider: provider as never } }),
+      prisma.chartChannelPref.createMany({
+        data: parsed.data.channels.map((ch, position) => ({
+          userId,
+          provider: provider as never,
+          channel: ch.key,
+          position,
+          visible: ch.visible,
+        })),
+      }),
+    ]);
+    return c.json({ chartChannels: { [provider]: parsed.data.channels } });
   });
 
   // ─── Account data: full export + hard delete ───────────────────────────────

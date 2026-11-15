@@ -172,6 +172,7 @@ export const ja: Record<MsgKey, string> = {
   'series.vertOscillation': '上下動',
   'series.groundContact': '接地時間 %',
   'series.vertRatio': '上下比率',
+  'series.temperature': '気温',
 
   'gear.heading': 'ギア',
   'gear.intro':
@@ -214,6 +215,9 @@ export const ja: Record<MsgKey, string> = {
   'settings.dark': 'ダーク',
   'settings.light': 'ライト',
   'settings.language': '言語',
+  'settings.charts': 'アクティビティのグラフ',
+  'settings.chartsDesc':
+    'アクティビティページに各プロバイダーのどのグラフを表示するかを選び、ドラッグして並べ替えます。',
   'settings.export': 'エクスポート',
   'settings.exportDesc':
     'アカウントの全データを JSON でダウンロードします: アクティビティ（プロバイダーの生データと出所付き）、測定値、睡眠、日常のウェルネス、ギア。トークンは含まれません。サンプル単位の系列はサイズが大きいため含まれませんが、アクティビティごとに閲覧できます。',

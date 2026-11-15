@@ -172,6 +172,7 @@ export const fr: Record<MsgKey, string> = {
   'series.vertOscillation': 'Oscillation verticale',
   'series.groundContact': 'Contact au sol %',
   'series.vertRatio': 'Ratio vertical',
+  'series.temperature': 'Température',
 
   'gear.heading': 'Matériel',
   'gear.intro':
@@ -214,6 +215,9 @@ export const fr: Record<MsgKey, string> = {
   'settings.dark': 'sombre',
   'settings.light': 'clair',
   'settings.language': 'Langue',
+  'settings.charts': 'Graphiques d’activités',
+  'settings.chartsDesc':
+    'Choisissez les graphiques que chaque fournisseur affiche sur la page d’activité, puis faites-les glisser pour les réordonner.',
   'settings.export': 'Exportation',
   'settings.exportDesc':
     'Télécharge un export JSON complet de votre compte : activités (avec les données brutes des fournisseurs et leur provenance), mesures, sommeil, bien-être quotidien et matériel. Les jetons ne sont jamais inclus ; les séries échantillon par échantillon sont exclues de l’export (énormes) mais restent disponibles activité par activité.',

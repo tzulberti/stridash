@@ -172,6 +172,7 @@ export const it: Record<MsgKey, string> = {
   'series.vertOscillation': 'Oscillazione verticale',
   'series.groundContact': 'Contatto col suolo %',
   'series.vertRatio': 'Rapporto verticale',
+  'series.temperature': 'Temperatura',
 
   'gear.heading': 'Attrezzatura',
   'gear.intro':
@@ -214,6 +215,9 @@ export const it: Record<MsgKey, string> = {
   'settings.dark': 'scuro',
   'settings.light': 'chiaro',
   'settings.language': 'Lingua',
+  'settings.charts': 'Grafici delle attività',
+  'settings.chartsDesc':
+    'Scegli quali grafici mostra ogni fornitore nella pagina dell’attività e trascinali per riordinarli.',
   'settings.export': 'Esporta',
   'settings.exportDesc':
     'Scarica un dump JSON completo del tuo account: attività (con i payload grezzi dei fornitori e la provenienza), misurazioni, sonno, benessere giornaliero e attrezzatura. I token non sono mai inclusi; le serie campione per campione sono escluse dal dump (enormi) ma restano disponibili per attività.',

@@ -172,6 +172,7 @@ export const pt: Record<MsgKey, string> = {
   'series.vertOscillation': 'Oscilação vertical',
   'series.groundContact': 'Contato com o solo %',
   'series.vertRatio': 'Razão vertical',
+  'series.temperature': 'Temperatura',
 
   'gear.heading': 'Equipamentos',
   'gear.intro':
@@ -214,6 +215,9 @@ export const pt: Record<MsgKey, string> = {
   'settings.dark': 'escuro',
   'settings.light': 'claro',
   'settings.language': 'Idioma',
+  'settings.charts': 'Gráficos de atividades',
+  'settings.chartsDesc':
+    'Escolha quais gráficos cada provedor mostra na página de atividade e arraste para reordená-los.',
   'settings.export': 'Exportar',
   'settings.exportDesc':
     'Baixa um despejo JSON completo da sua conta: atividades (com payloads brutos dos provedores e proveniência), medições, sono, bem-estar diário e equipamentos. Tokens nunca são incluídos; as séries por amostra ficam fora do despejo (enormes), mas continuam disponíveis por atividade.',

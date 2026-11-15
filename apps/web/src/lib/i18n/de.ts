@@ -172,6 +172,7 @@ export const de: Record<MsgKey, string> = {
   'series.vertOscillation': 'Vertikale Oszillation',
   'series.groundContact': 'Bodenkontakt %',
   'series.vertRatio': 'Vertikales Verhältnis',
+  'series.temperature': 'Temperatur',
 
   'gear.heading': 'Ausrüstung',
   'gear.intro':
@@ -214,6 +215,9 @@ export const de: Record<MsgKey, string> = {
   'settings.dark': 'dunkel',
   'settings.light': 'hell',
   'settings.language': 'Sprache',
+  'settings.charts': 'Aktivitätsdiagramme',
+  'settings.chartsDesc':
+    'Wähle aus, welche Diagramme jeder Anbieter auf der Aktivitätsseite zeigt, und ziehe sie zum Umsortieren.',
   'settings.export': 'Export',
   'settings.exportDesc':
     'Lädt einen vollständigen JSON-Dump deines Kontos herunter: Aktivitäten (mit rohen Anbieter-Daten und Herkunft), Messungen, Schlaf, tägliches Wohlbefinden und Ausrüstung. Tokens sind nie enthalten; die Reihen pro Messpunkt sind nicht im Dump (riesig), bleiben aber pro Aktivität verfügbar.',

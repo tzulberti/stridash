@@ -183,6 +183,7 @@ export const en = {
   'series.vertOscillation': 'Vertical oscillation',
   'series.groundContact': 'Ground contact %',
   'series.vertRatio': 'Vertical ratio',
+  'series.temperature': 'Temperature',
 
   // ─── gear page ────────────────────────────────────────────────────────────
   'gear.heading': 'Gear',
@@ -227,6 +228,9 @@ export const en = {
   'settings.dark': 'dark',
   'settings.light': 'light',
   'settings.language': 'Language',
+  'settings.charts': 'Activity charts',
+  'settings.chartsDesc':
+    'Choose which charts each provider shows on the activity page, and drag to reorder them.',
   'settings.export': 'Export',
   'settings.exportDesc':
     'Downloads a full JSON dump of your account: activities (with provider raw payloads and provenance), measurements, sleep, daily wellness and gear. Tokens are never included; per-sample series are out of the dump (huge) but stay available per activity.',

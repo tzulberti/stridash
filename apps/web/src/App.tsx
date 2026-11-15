@@ -7,7 +7,14 @@
  */
 
 import { useEffect, useMemo, useState, useCallback, useRef, Fragment } from 'react';
-import type { Measurement, Activity, MeResponse, Device } from '@stridash/types';
+import type {
+  Measurement,
+  Activity,
+  MeResponse,
+  Device,
+  ChartChannelConfig,
+  ChartProvider,
+} from '@stridash/types';
 
 // ─── API client ──────────────────────────────────────────────────────────────
 
@@ -914,7 +921,8 @@ interface ActivitySeriesRow {
   };
 }
 
-/** labeled stream charts for the activity page, in display order */
+/** labeled stream charts for the activity page, in canonical display order
+ * (the user's per-provider Settings configuration overrides this order) */
 const SERIES_CHANNELS: Array<[string, MsgKey, string, string]> = [
   ['speedMs', 'series.speed', '#30a46c', ' m/s'],
   ['hrBpm', 'series.hr', '#e5484d', ' bpm'],
@@ -927,13 +935,33 @@ const SERIES_CHANNELS: Array<[string, MsgKey, string, string]> = [
   ['verticalOscillationM', 'series.vertOscillation', '#9c6ade', ' m'],
   ['stanceTimePct', 'series.groundContact', '#bf7f26', ' %'],
   ['verticalRatioPct', 'series.vertRatio', '#bf7f26', ' %'],
+  ['temperatureC', 'series.temperature', '#f2994a', ' °C'],
 ];
+
+/** SERIES_CHANNELS reordered + filtered by the provider's saved chart
+ * configuration: configured channels follow their saved order and drop out
+ * when hidden; channels the configuration doesn't know (catalog entries
+ * shipped later) append after, still visible, in canonical order. */
+function orderedChannels(
+  provider: string | undefined,
+  cfg: Partial<Record<string, Array<{ key: string; visible: boolean }>>> | undefined,
+): Array<[string, MsgKey, string, string]> {
+  const list = provider ? cfg?.[provider] : undefined;
+  if (!list?.length) return SERIES_CHANNELS;
+  const pos = new Map(list.map((c, i) => [c.key, i]));
+  const vis = new Map(list.map((c) => [c.key, c.visible]));
+  return SERIES_CHANNELS.map((ch, i) => ({ ch, i, p: pos.get(ch[0]) }))
+    .sort((a, b) => (a.p ?? SERIES_CHANNELS.length + a.i) - (b.p ?? SERIES_CHANNELS.length + b.i))
+    .filter((e) => vis.get(e.ch[0]) ?? true)
+    .map((e) => e.ch);
+}
 
 function ActivityDetail({
   id,
   token,
   preview,
   onBack,
+  chartChannels,
 }: {
   id: string;
   token: string;
@@ -941,6 +969,8 @@ function ActivityDetail({
    * deep-linked URL has none and just starts with the fetch */
   preview: Activity | null;
   onBack: () => void;
+  /** per-provider chart visibility/order from the user's Settings */
+  chartChannels: Partial<Record<ChartProvider, ChartChannelConfig[]>>;
 }) {
   /** detail row = list activity + the recording device (from /activities/:id) */
   const [act, setAct] = useState<(Activity & { device?: Device | null }) | null>(preview);
@@ -1201,14 +1231,14 @@ function ActivityDetail({
       pointsB: Point[];
       unit: string;
     }> = [];
-    for (const [key, titleKey, , unit] of SERIES_CHANNELS) {
+    for (const [key, titleKey, , unit] of orderedChannels(rows?.[0]?.provider, chartChannels)) {
       const va = (sa as Record<string, number[] | undefined>)[key];
       const vb = (sb as Record<string, number[] | undefined>)[key];
       if (!va || !vb || va.length < 2 || vb.length < 2) continue;
       charts.push({ key, titleKey, pointsA: pts(sa, va), pointsB: pts(sb, vb), unit });
     }
     return { xMode, charts };
-  }, [rows, compareAct]);
+  }, [rows, compareAct, chartChannels]);
 
   /** short identities for the compare tooltip lines; when both activities
    * share a headline (the same ride delivered by two providers) the name
@@ -1250,7 +1280,10 @@ function ActivityDetail({
       unit: string;
       zones: number[] | null;
     }> = [];
-    for (const [key, titleKey, color, unit] of SERIES_CHANNELS) {
+    for (const [key, titleKey, color, unit] of orderedChannels(
+      rows?.[0]?.provider,
+      chartChannels,
+    )) {
       const vals = (s as Record<string, number[] | undefined>)[key];
       if (!vals?.length) continue;
       out.push({
@@ -1266,7 +1299,7 @@ function ActivityDetail({
       });
     }
     return out;
-  }, [rows, act, xAxis]);
+  }, [rows, act, xAxis, chartChannels]);
 
   const hasDistance = (rows?.[0]?.series.distanceM?.length ?? 0) >= 2;
 
@@ -2121,6 +2154,116 @@ function GearSection(props: { token: string; onBack: () => void }) {
 
 // ─── Settings page (/settings — units, theme, export, delete) ────────────────
 
+/** The providers whose activity charts are configurable today (series-bearing
+ * syncs; STRAVA joins when its adapter ships). Names are proper nouns — not
+ * translated. */
+const CHART_CONFIG_PROVIDERS: Array<{ provider: ChartProvider; name: string }> = [
+  { provider: 'GARMIN', name: 'Garmin' },
+  { provider: 'ZWIFT', name: 'Zwift' },
+  { provider: 'IGPSPORT', name: 'iGPSPORT' },
+];
+
+/** One provider's chart list in the Settings tab: a checkbox per channel
+ * (checked = chart shown) plus HTML5 drag & drop ordering. Fully controlled
+ * — every toggle/move hands the whole list to onChange, which persists it
+ * and updates the app state the activity page renders from. */
+function ChartConfigList({
+  provider,
+  name,
+  config,
+  onChange,
+}: {
+  provider: ChartProvider;
+  name: string;
+  config: ChartChannelConfig[] | undefined;
+  onChange: (provider: ChartProvider, channels: ChartChannelConfig[]) => void;
+}) {
+  // working list = the saved configuration extended with catalog channels it
+  // predates (appended, visible, canonical order); stored keys that no longer
+  // exist in the catalog (renamed since) are dropped rather than crashing
+  const configured = new Set<string>((config ?? []).map((c) => c.key));
+  const items: ChartChannelConfig[] = [
+    ...(config ?? []).filter((c) => SERIES_CHANNELS.some(([key]) => key === c.key)),
+    ...SERIES_CHANNELS.filter(([key]) => !configured.has(key)).map(([key]) => ({
+      key: key as ChartChannelConfig['key'],
+      visible: true,
+    })),
+  ];
+
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [overKey, setOverKey] = useState<string | null>(null);
+
+  /** array-move: the dragged row lands at the target's index (before it when
+   * dragging upward, after it when dragging downward) */
+  function moveTo(drag: string, target: string): void {
+    const from = items.findIndex((i) => i.key === drag);
+    const to = items.findIndex((i) => i.key === target);
+    if (from < 0 || to < 0 || from === to) return;
+    const next = [...items];
+    const moved = next.splice(from, 1)[0];
+    if (!moved) return;
+    next.splice(to, 0, moved);
+    onChange(provider, next);
+  }
+
+  return (
+    <div className="chart-cfg">
+      <h4>{name}</h4>
+      <ul className="chart-cfg-list">
+        {items.map((item) => {
+          const meta = SERIES_CHANNELS.find(([key]) => key === item.key)!;
+          const dragging = dragKey === item.key;
+          const dropping = overKey === item.key;
+          return (
+            <li
+              key={item.key}
+              draggable
+              onDragStart={(e) => {
+                setDragKey(item.key);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', item.key);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault(); // required for the drop to fire
+                if (dragKey && dragKey !== item.key) setOverKey(item.key);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragKey) moveTo(dragKey, item.key);
+                setOverKey(null);
+                setDragKey(null);
+              }}
+              onDragEnd={() => {
+                setDragKey(null);
+                setOverKey(null);
+              }}
+              className={`chart-cfg-row${dragging ? ' dragging' : ''}${dropping ? ' drop-target' : ''}`}
+            >
+              <span className="chart-cfg-handle" aria-hidden="true">
+                ≡
+              </span>
+              <label className="chart-cfg-label">
+                <input
+                  type="checkbox"
+                  checked={item.visible}
+                  onChange={() =>
+                    onChange(
+                      provider,
+                      items.map((i) => (i.key === item.key ? { ...i, visible: !i.visible } : i)),
+                    )
+                  }
+                />
+                {t(meta[1])}
+                <span className="muted">{meta[3].trim()}</span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function SettingsSection(props: {
   token: string;
   unit: Unit;
@@ -2129,11 +2272,24 @@ function SettingsSection(props: {
   onThemeChange: (t: 'dark' | 'light') => void;
   lang: Lang;
   onLangChange: (l: Lang) => void;
+  chartChannels: Partial<Record<ChartProvider, ChartChannelConfig[]>>;
+  onChartChannelsChange: (provider: ChartProvider, channels: ChartChannelConfig[]) => void;
   onDeleted: () => void;
   onBack: () => void;
 }) {
-  const { token, unit, onUnitChange, theme, onThemeChange, lang, onLangChange, onDeleted, onBack } =
-    props;
+  const {
+    token,
+    unit,
+    onUnitChange,
+    theme,
+    onThemeChange,
+    lang,
+    onLangChange,
+    chartChannels,
+    onChartChannelsChange,
+    onDeleted,
+    onBack,
+  } = props;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -2174,6 +2330,16 @@ function SettingsSection(props: {
     onLangChange(l);
     api('/me', { method: 'PATCH', token, body: { language: l } }).catch((err) =>
       setError(String(err).replace(/^Error: /, '')),
+    );
+  }
+
+  /** optimistic toggle/reorder first (App state + localStorage), then persist
+   * the provider's whole list — the activity page renders from the
+   * optimistic copy */
+  function changeCharts(provider: ChartProvider, channels: ChartChannelConfig[]): void {
+    onChartChannelsChange(provider, channels);
+    api(`/preferences/charts/${provider}`, { method: 'PUT', token, body: { channels } }).catch(
+      (err) => setError(String(err).replace(/^Error: /, '')),
     );
   }
 
@@ -2301,6 +2467,22 @@ function SettingsSection(props: {
             </button>
           ))}
           <span className="muted">{t('settings.saved')}</span>
+        </div>
+      </article>
+
+      <article className="card settings-card">
+        <h3>{t('settings.charts')}</h3>
+        <p className="muted">{t('settings.chartsDesc')}</p>
+        <div className="chart-cfg-groups">
+          {CHART_CONFIG_PROVIDERS.map((p) => (
+            <ChartConfigList
+              key={p.provider}
+              provider={p.provider}
+              name={p.name}
+              config={chartChannels?.[p.provider]}
+              onChange={changeCharts}
+            />
+          ))}
         </div>
       </article>
 
@@ -2961,6 +3143,21 @@ export default function App() {
     setLocale(localeOf(boot));
     return boot;
   });
+  // per-provider chart configuration — same boot pattern: localStorage first,
+  // the account's stored copy wins once /me answers (empty = canonical order,
+  // every channel visible)
+  const [chartChannels, setChartChannelsState] = useState<
+    Partial<Record<ChartProvider, ChartChannelConfig[]>>
+  >(() => {
+    try {
+      const stored = localStorage.getItem('stridash.charts');
+      return stored
+        ? (JSON.parse(stored) as Partial<Record<ChartProvider, ChartChannelConfig[]>>)
+        : {};
+    } catch {
+      return {};
+    }
+  });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
@@ -2989,6 +3186,10 @@ export default function App() {
           setLocale(localeOf(l));
           localStorage.setItem('stridash.language', l);
           setLangState(l);
+        }
+        if (m.preferences?.chartChannels) {
+          localStorage.setItem('stridash.charts', JSON.stringify(m.preferences.chartChannels));
+          setChartChannelsState(m.preferences.chartChannels);
         }
       })
       .catch(() => undefined); // prefs are cosmetic — never block the dashboard
@@ -3402,6 +3603,7 @@ export default function App() {
           token={token ?? ''}
           preview={activities.find((a) => a.id === route.id) ?? null}
           onBack={goHome}
+          chartChannels={chartChannels}
         />
         {loading && <p>{t('common.loading')}</p>}
         {footer}
@@ -3444,6 +3646,12 @@ export default function App() {
             setLocale(localeOf(l));
             localStorage.setItem('stridash.language', l);
             setLangState(l);
+          }}
+          chartChannels={chartChannels}
+          onChartChannelsChange={(p, channels) => {
+            const next = { ...chartChannels, [p]: channels };
+            localStorage.setItem('stridash.charts', JSON.stringify(next));
+            setChartChannelsState(next); // activity-page charts read this state
           }}
           onDeleted={() => {
             clearTokens();

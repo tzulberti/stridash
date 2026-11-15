@@ -30,6 +30,8 @@ User ──< Connection ──< SyncLog
   ├──< Activity                      (runs, rides, Zwift sessions, …)
   ├──< Measurement                   (weight, body composition, BP, …)
   ├──< Gear                          (bikes, shoes — linked to activities)
+  ├──< UserPreferences               (units, theme, language)
+  ├──< ChartChannelPref              (per-provider activity chart list)
   └── AuthIdentity                   (local password / future OAuth login)
 ```
 
@@ -360,6 +362,33 @@ users.
 | `theme` | enum | `dark` (default) \| `light` |
 | `language` | enum | `en` (default) + `es` `pt` `fr` `de` `it` `nl` `ru` `ja` `ko` `zh` `hi` — web dashboard UI language (2026-11-13 migration; existing rows backfilled to `en`) |
 | `created_at` / `updated_at` | timestamptz | |
+
+### `chart_channel_prefs`
+
+Per-provider **activity chart configuration** (Settings → Activity charts):
+which stream charts the activity page shows for a provider's rows, and in
+which order. One row per (user, provider, channel); `position` is the display
+order (0-based, the order the app renders), `visible` is the checkbox. A
+(user, provider) pair with **no rows means "show every channel it records, in
+the app's canonical order"** — the table starts empty and only stores explicit
+choices, so a new provider/channel needs no backfill. Saved via
+`PUT /api/preferences/charts/:provider` (body `{channels: [{key, visible}]}` —
+the full ordered list, hidden channels included so re-showing them keeps
+their slot), read via `GET /api/me` as
+`preferences.chartChannels`. Channels validate against the shared catalog
+(`ChartChannelKey` in packages/types). FK cascades with account deletion.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` (v7) PK | |
+| `user_id` | `uuid` (v7) FK → users, cascade | |
+| `provider` | enum | series-bearing providers only (`GARMIN` `ZWIFT` `IGPSPORT` `STRAVA`; OMRON stores measurements, MANUAL rows carry no series) |
+| `channel` | text | series payload key (`speedMs`, `hrBpm`, …) |
+| `position` | int | display order within the provider |
+| `visible` | boolean | default `true` |
+| `created_at` / `updated_at` | timestamptz | |
+
+Unique: (`user_id`, `provider`, `channel`).
 
 ## Modeling decisions worth remembering
 

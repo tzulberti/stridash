@@ -172,6 +172,7 @@ export const es: Record<MsgKey, string> = {
   'series.vertOscillation': 'Oscilación vertical',
   'series.groundContact': 'Contacto con el suelo %',
   'series.vertRatio': 'Relación vertical',
+  'series.temperature': 'Temperatura',
 
   'gear.heading': 'Equipamiento',
   'gear.intro':
@@ -214,6 +215,9 @@ export const es: Record<MsgKey, string> = {
   'settings.dark': 'oscuro',
   'settings.light': 'claro',
   'settings.language': 'Idioma',
+  'settings.charts': 'Gráficas de actividades',
+  'settings.chartsDesc':
+    'Elige qué gráficas muestra cada proveedor en la página de actividad y arrástralas para reordenarlas.',
   'settings.export': 'Exportar',
   'settings.exportDesc':
     'Descarga un volcado JSON completo de tu cuenta: actividades (con los datos brutos y su procedencia), mediciones, sueño, bienestar diario y equipamiento. Los tokens nunca se incluyen; las series por muestra quedan fuera del volcado (enormes) pero siguen disponibles por actividad.',

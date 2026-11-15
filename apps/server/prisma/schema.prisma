@@ -46,6 +46,7 @@ model User {
   sleepSessions  SleepSession[]
   dailyWellness  DailyWellness[]
   preferences    UserPreferences?
+  chartPrefs     ChartChannelPref[]
   devices        Device[]
 
   @@map("users")
@@ -94,6 +95,26 @@ model UserPreferences {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_preferences")
+}
+
+/** Per-provider chart configuration for the activity page: which stream
+ * charts are shown and in which order (position = display order). A
+ * (user, provider) combination with no rows means "show every channel the
+ * provider records, in the app's canonical order". */
+model ChartChannelPref {
+  id       String   @id @default(uuid(7)) @db.Uuid
+  userId   String   @db.Uuid @map("user_id")
+  provider Provider
+  channel  String   @map("channel")
+  position Int
+  visible  Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, channel])
+  @@map("chart_channel_prefs")
 }
 
 enum IdentityKind {

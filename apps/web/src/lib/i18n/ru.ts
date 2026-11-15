@@ -172,6 +172,7 @@ export const ru: Record<MsgKey, string> = {
   'series.vertOscillation': 'Вертикальные колебания',
   'series.groundContact': 'Контакт с землёй %',
   'series.vertRatio': 'Вертикальное соотношение',
+  'series.temperature': 'Температура',
 
   'gear.heading': 'Инвентарь',
   'gear.intro':
@@ -214,6 +215,9 @@ export const ru: Record<MsgKey, string> = {
   'settings.dark': 'тёмная',
   'settings.light': 'светлая',
   'settings.language': 'Язык',
+  'settings.charts': 'Графики активностей',
+  'settings.chartsDesc':
+    'Выберите, какие графики каждый провайдер показывает на странице активности, и перетащите их для изменения порядка.',
   'settings.export': 'Экспорт',
   'settings.exportDesc':
     'Скачивает полный JSON-дамп вашего аккаунта: активности (с сырыми данными провайдеров и происхождением), измерения, сон, дневные показатели и инвентарь. Токены никогда не включаются; поразмерные ряды не входят в дамп (огромные), но остаются доступны по каждой активности.',

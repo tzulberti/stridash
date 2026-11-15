@@ -172,6 +172,7 @@ export const nl: Record<MsgKey, string> = {
   'series.vertOscillation': 'Verticale oscillatie',
   'series.groundContact': 'Grondcontact %',
   'series.vertRatio': 'Verticale verhouding',
+  'series.temperature': 'Temperatuur',
 
   'gear.heading': 'Uitrusting',
   'gear.intro':
@@ -214,6 +215,9 @@ export const nl: Record<MsgKey, string> = {
   'settings.dark': 'donker',
   'settings.light': 'licht',
   'settings.language': 'Taal',
+  'settings.charts': 'Activiteitengrafieken',
+  'settings.chartsDesc':
+    'Kies welke grafieken elke provider op de activiteitspagina toont en sleep ze om ze te herordenen.',
   'settings.export': 'Exporteren',
   'settings.exportDesc':
     'Downloadt een volledige JSON-dump van je account: activiteiten (met ruwe aanbieder-data en herkomst), metingen, slaap, dagelijks welzijn en uitrusting. Tokens worden nooit meegestuurd; reeksen per monster vallen buiten de dump (enorm) maar blijven per activiteit beschikbaar.',

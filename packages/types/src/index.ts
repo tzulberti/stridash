@@ -46,6 +46,42 @@ export interface UserPreferences {
   language: PrefLanguage;
 }
 
+/** Stream channels chartable on the activity page (keys of the series
+ * payload; latDeg/lngDeg feed the map, not charts). */
+export type ChartChannelKey =
+  | 'speedMs'
+  | 'hrBpm'
+  | 'powerW'
+  | 'cadenceRpm'
+  | 'altitudeM'
+  | 'temperatureC'
+  | 'respirationRate'
+  | 'staminaPct'
+  | 'stepLengthM'
+  | 'verticalOscillationM'
+  | 'stanceTimePct'
+  | 'verticalRatioPct';
+
+/** One configured chart slot: the channel plus whether its chart is shown.
+ * The array order IS the display order. */
+export interface ChartChannelConfig {
+  key: ChartChannelKey;
+  visible: boolean;
+}
+
+/** Providers whose activity charts are configurable (series-bearing; OMRON
+ * stores measurements, MANUAL rows carry no series). */
+export type ChartProvider = 'GARMIN' | 'ZWIFT' | 'IGPSPORT' | 'STRAVA';
+
+export interface UserPreferences {
+  units: PrefUnit;
+  theme: PrefTheme;
+  language: PrefLanguage;
+  /** per-provider chart list; a provider without an entry shows every
+   * channel it records, in the app's canonical order */
+  chartChannels: Partial<Record<ChartProvider, ChartChannelConfig[]>>;
+}
+
 /** GET /api/me response: account + the preference pair. */
 export interface MeResponse {
   email: string;
