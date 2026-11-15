@@ -29,7 +29,7 @@ re-authenticates transparently when the JWT nears expiry (see Security).
 | Path | Purpose |
 |---|---|
 | `GET /service/web-gateway/web-analyze/activity/queryMyActivity?pageNo=N&pageSize=M&reqType=0&sort=1` | discovery pages (id, title, start time, distance, avg speed, ascent) |
-| `GET …/activity/queryActivityDetail/{rideId}` | detail incl. `fitUrl` (intl) |
+| `GET …/activity/queryActivityDetail/{rideId}` | detail incl. `fitUrl` (intl). Verified live 2026-11-14: a **superset of the list row** — rideId/title/startTime/rideDistance/avgSpeed/maxSpeed/totalMovingTime/recordTime/totalAscent/totalDescent/exerciseType/min-max altitude all present, so the per-activity re-sync feeds it straight through the same `fitToActivity` path |
 | `GET …/activity/getDownloadUrl/{rideId}` | presigned OSS URL for the FIT |
 | (OSS direct GET) | the FIT binary (magic `.FIT` at byte 8 checked) |
 
@@ -62,6 +62,13 @@ fleet is bike computers; extend as devices report new types).
   transaction (activity + source + streams).
 - Per-ride failures degrade the sync log to `PARTIAL` (failed ride ids in
   `error_detail.failed`), not `ERROR`.
+- Per-activity force re-sync (`POST /api/activities/:id/resync`, the web
+  detail page's "Re-sync"): fetches `queryActivityDetail` (list-row superset)
+  + a fresh FIT and rebuilds scalars/series **in place** — `start_time` is
+  deliberately never touched (dedup key), the indoor flag can only be set,
+  never un-set (the detail row may not carry it), and the device slot is
+  filled only when empty. Falls back to the detail-row summary when the FIT
+  is gone.
 - `tests/igpsport-normalize.test.ts` covers JWT claims peeking, region
   gating, type mapping, and scalar/series derivation (19 tests total).
 

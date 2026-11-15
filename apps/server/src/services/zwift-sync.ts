@@ -200,14 +200,14 @@ async function upsertZwiftActivity(
   return 'created';
 }
 
-/** Re-ingest one provider-confirmed edit. The detail payload is already in
- * hand (the edit pass fetched it to read lastSaveDate): rebuild the scalars
- * it carries (rename, moving time, distance/speeds, HR/power/cadence,
- * calories, ascent), refresh detail_raw, re-fetch the series, and stamp
- * source_updated_at with the provider's own save time. Absent fields stay
- * `undefined` (= no change in Prisma) so a partial payload can never null
- * out a stored value; `raw` keeps the discovery-time list row (detail_raw is
- * the fresh authority). */
+/** Re-ingest one provider-confirmed edit (also the force re-sync path). The
+ * detail payload is already in hand: rebuild the scalars it carries (rename,
+ * moving time, distance/speeds, HR/power/cadence, calories, ascent), refresh
+ * detail_raw, re-fetch the series, and stamp source_updated_at with the
+ * provider's own save time. Absent fields stay `undefined` (= no change in
+ * Prisma) so a partial payload can never null out a stored value; `raw` keeps
+ * the discovery-time list row (detail_raw is the fresh authority). Returns
+ * false when the detail was unusable (stored row deliberately untouched). */
 async function reingestEditedZwiftActivity(
   client: ZwiftClient,
   connection: ConnectionLike,
@@ -215,9 +215,9 @@ async function reingestEditedZwiftActivity(
   externalId: string,
   detail: ZwiftActivity,
   lastSave: Date,
-): Promise<void> {
+): Promise<boolean> {
   const row = mapZwiftActivityRow(detail);
-  if (!row) return; // unusable detail — keep the stored row untouched
+  if (!row) return false; // unusable detail — keep the stored row untouched
 
   // the detail row names its ascent key differently from list rows and
   // carries fractional metres
@@ -262,6 +262,38 @@ async function reingestEditedZwiftActivity(
     where: { activityId_connectionId: { activityId, connectionId: connection.id } },
     data: { sourceUpdatedAt: lastSave },
   });
+  return true;
+}
+
+/**
+ * Force re-ingest of ONE activity from Zwift (the web detail page's
+ * "re-sync" action): fresh detail payload (scalars + detail_raw + series
+ * rebuild) and source_updated_at anchored to the provider's save time.
+ * Throws ZwiftError when tokens fail or the activity is gone from Zwift
+ * (deleted rows keep their local copy — nothing is removed).
+ */
+export async function resyncZwiftActivity(
+  env: Env,
+  connection: ConnectionLike,
+  activityId: string,
+  externalId: string,
+): Promise<void> {
+  const client = await ensureClient(env, connection);
+  const detail = await client.getActivityDetail(externalId);
+  const parsed = detail.lastSaveDate ? new Date(detail.lastSaveDate) : null;
+  // no usable save time → stamp "now" so the edit pass never re-ingests blind
+  const lastSave = parsed && !Number.isNaN(parsed.getTime()) ? parsed : new Date();
+  const ok = await reingestEditedZwiftActivity(
+    client,
+    connection,
+    activityId,
+    externalId,
+    detail,
+    lastSave,
+  );
+  if (!ok) {
+    throw new ZwiftError('CONNECTION', `Zwift activity ${externalId} has no usable detail payload`);
+  }
 }
 
 /** Pages the newest activities first; stops when nothing new for 2 pages. */

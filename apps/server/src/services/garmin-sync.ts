@@ -526,6 +526,45 @@ async function reingestActivity(
   }
 }
 
+/**
+ * Force re-ingest of ONE activity from Garmin (the web detail page's
+ * "re-sync" action): fresh detail + FIT download, scalars + series rebuilt,
+ * device refreshed, and source_updated_at anchored to the provider's edit
+ * timestamp so the next edit pass sees no change. Gear attribution is left
+ * untouched (the full sync's gear→activity map owns it; a single-activity
+ * pass can't know whether the gear list still links this activity).
+ * Throws GarminError when tokens fail or the activity is gone from Garmin
+ * (deleted rows keep their local copy — nothing is removed).
+ */
+export async function resyncGarminActivity(
+  env: Env,
+  connection: ConnectionLike,
+  activityId: string,
+  sourceActivityId: string,
+): Promise<void> {
+  const bearer = await ensureGarminTokens(env, connection);
+  const detail = await getActivityDetail(bearer, sourceActivityId);
+  if (!detail) {
+    throw new GarminError('CONNECTION', `Garmin activity ${sourceActivityId} not found`);
+  }
+  // scratch result — a force-sync surfaces failures by throwing, not by
+  // mutating a sync-log shape
+  const deviceNames = await syncDeviceNames(bearer, { status: 'OK', failedActivities: [] });
+  const lastUpdate = detail.lastUpdateDate
+    ? (parseGarminTimestamp(detail.lastUpdateDate) ?? new Date())
+    : new Date();
+  await reingestActivity(
+    bearer,
+    connection,
+    activityId,
+    sourceActivityId,
+    detail,
+    lastUpdate,
+    new Map(),
+    deviceNames,
+  );
+}
+
 async function upsertActivity(
   connection: ConnectionLike,
   garminId: string,

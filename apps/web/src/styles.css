@@ -508,6 +508,15 @@ footer {
   cursor: not-allowed;
 }
 
+/* inline outcome of the activity re-sync action */
+.resync-msg {
+  color: var(--muted, #667);
+  font-size: 0.85rem;
+}
+.resync-msg.error {
+  color: #e5484d;
+}
+
 /* wide per-km splits table scrolls horizontally on narrow screens */
 .table-scroll {
   overflow-x: auto;

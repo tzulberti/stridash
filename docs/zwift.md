@@ -104,6 +104,11 @@ precision, zero-offset). Same bounded poll-and-compare pattern as
 - Fresh ingest stamps `source_updated_at` with "now", so a just-synced
   activity no-ops (its `lastSaveDate` is already in the past) and the pass
   only fires on real later edits.
+- The same re-ingest path powers the per-activity force re-sync
+  (`POST /api/activities/:id/resync`, the web detail page's "Re-sync"): the
+  fresh detail is fetched on demand and, when `lastSaveDate` is missing or
+  unparseable, `source_updated_at` is stamped "now" so the edit pass never
+  re-ingests blind afterwards.
 
 ## Known gaps vs the other connectors
 

@@ -4,6 +4,9 @@ import { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../db.js';
 import { requireUserId } from '../auth.js';
 import type { Env } from '../env.js';
+import { resyncGarminActivity } from '../services/garmin-sync.js';
+import { resyncIgpSportActivity } from '../services/igpsport-sync.js';
+import { resyncZwiftActivity } from '../services/zwift-sync.js';
 
 const listQuerySchema = z.object({
   /** ISO date lower bound (activities.start_time / measurements.measured_at) */
@@ -324,7 +327,10 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     const id = c.req.param('id');
     const activity = await prisma.activity.findFirst({
       where: { id, userId: c.get('userId') },
-      include: { device: true },
+      include: {
+        device: true,
+        sources: { select: { connection: { select: { provider: true } } } },
+      },
     });
     if (!activity) return c.json({ error: 'Not found' }, 404);
     const points = await prisma.activityDataPoint.findMany({
@@ -332,16 +338,93 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
       select: { provider: true, sampleCount: true, series: true },
     });
     // device flattened to the display fields (+ raw as-received)
-    const { device, ...row } = activity;
+    const { device, sources, ...row } = activity;
     return c.json({
       items: [
         {
           ...serializeRow(row),
+          // which providers delivered this row (list rows carry the same
+          // field) — the detail page uses it for the re-sync action
+          providers: [...new Set(sources.map((s) => s.connection.provider))],
           device: device ? serializeRow(device) : null,
           series: points,
         },
       ],
     });
+  });
+
+  /**
+   * Force re-sync of ONE activity from the provider that owns it (the web
+   * detail page's "Re-sync" action). The owning provider is the one whose
+   * payload built this row (`raw.provider`) — provenance-only sources from
+   * other providers must never rewrite the owner's authoritative scalars.
+   * 404 for foreign/unknown rows, 409 when no ACTIVE connection provides it,
+   * 501 for providers without a sync path (STRAVA), 200 with per-provider
+   * outcomes otherwise (a provider failure is reported, not thrown).
+   */
+  routes.post('/activities/:id/resync', async (c) => {
+    const id = c.req.param('id');
+    const activity = await prisma.activity.findFirst({
+      where: { id, userId: c.get('userId') },
+      select: {
+        id: true,
+        raw: true,
+        sources: {
+          select: {
+            sourceActivityId: true,
+            connection: {
+              select: { id: true, userId: true, provider: true, status: true },
+            },
+          },
+        },
+      },
+    });
+    if (!activity) return c.json({ error: 'Not found' }, 404);
+
+    const owner = (activity.raw as Record<string, unknown> | null)?.provider;
+    const supportable = activity.sources.filter(
+      (s) => s.connection.status === 'ACTIVE' && String(owner ?? '') === s.connection.provider,
+    );
+    if (!supportable.length) {
+      return c.json(
+        {
+          error: owner
+            ? `No active ${owner} connection provides this activity`
+            : 'No active connection provides this activity',
+        },
+        409,
+      );
+    }
+    if (supportable.some((s) => !['GARMIN', 'ZWIFT', 'IGPSPORT'].includes(s.connection.provider))) {
+      return c.json({ error: 'Provider does not support sync yet' }, 501);
+    }
+
+    // full rows — the token-refreshing resyncers need the credential columns
+    const connections = await prisma.connection.findMany({
+      where: { id: { in: supportable.map((s) => s.connection.id) } },
+    });
+    const connById = new Map(connections.map((conn) => [conn.id, conn]));
+
+    const results: Array<{ provider: string; status: 'ok' | 'error'; error?: string }> = [];
+    for (const s of supportable) {
+      const conn = connById.get(s.connection.id);
+      if (!conn) continue; // connection vanished mid-request — next sync catches it
+      try {
+        if (s.connection.provider === 'GARMIN') {
+          await resyncGarminActivity(env, conn, activity.id, s.sourceActivityId);
+        } else if (s.connection.provider === 'ZWIFT') {
+          await resyncZwiftActivity(env, conn, activity.id, s.sourceActivityId);
+        } else {
+          await resyncIgpSportActivity(env, conn, activity.id, s.sourceActivityId);
+        }
+        results.push({ provider: s.connection.provider, status: 'ok' });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[resync] ${s.connection.provider} ${s.sourceActivityId} failed:`, err);
+        results.push({ provider: s.connection.provider, status: 'error', error: message });
+      }
+    }
+    return c.json({ results });
   });
 
   /** Candidate activities worth comparing the base one against: same type

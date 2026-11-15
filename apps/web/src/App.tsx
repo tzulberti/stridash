@@ -989,6 +989,56 @@ function ActivityDetail({
     };
   }, [id, token, preview]);
 
+  // ─── Force re-sync from the owning provider ────────────────────────────────
+
+  /** true when at least one delivering provider has a sync path (the server
+   * still re-checks ownership/active status) */
+  const canResync = (act?.providers ?? preview?.providers ?? []).some((p) =>
+    ['GARMIN', 'ZWIFT', 'IGPSPORT'].includes(p),
+  );
+  const [resyncing, setResyncing] = useState(false);
+  const [resyncMsg, setResyncMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const resyncActivity = useCallback(async (): Promise<void> => {
+    if (resyncing) return;
+    setResyncing(true);
+    setResyncMsg(null);
+    try {
+      const r = await api<{ results: Array<{ provider: string; status: string; error?: string }> }>(
+        `/activities/${id}/resync`,
+        { method: 'POST', token },
+      );
+      const failed = r.results.filter((x) => x.status !== 'ok');
+      if (failed.length) {
+        setResyncMsg({
+          ok: false,
+          text: `${t('detail.resyncFail')}: ${failed
+            .map((f) => `${f.provider}${f.error ? ` — ${f.error}` : ''}`)
+            .join('; ')}`,
+        });
+      } else {
+        setResyncMsg({
+          ok: true,
+          text: t('detail.resyncDone', { provider: r.results.map((x) => x.provider).join(', ') }),
+        });
+      }
+      // rebuild the view from the freshly written row (scalars + series may
+      // both have changed)
+      const fresh = await api<{
+        items: Array<Activity & { device?: Device | null; series: ActivitySeriesRow[] }>;
+      }>(`/activities/${id}`, { token });
+      const item = fresh.items[0];
+      if (item) {
+        setAct(item);
+        setRows(item.series);
+      }
+    } catch (e) {
+      setResyncMsg({ ok: false, text: String(e) });
+    } finally {
+      setResyncing(false);
+    }
+  }, [id, token, resyncing]);
+
   // ─── Compare with a similar activity ───────────────────────────────────────
 
   /** lean picker row from GET /activities/:id/similar */
@@ -1390,6 +1440,23 @@ function ActivityDetail({
       {act.workoutName && (
         <p className="conn-sub">{t('detail.workout', { name: act.workoutName })}</p>
       )}
+      {canResync ? (
+        <div className="cmp-pick-row">
+          <button
+            type="button"
+            className="btn ghost small"
+            disabled={resyncing}
+            onClick={() => void resyncActivity()}
+          >
+            {resyncing ? t('detail.resyncBusy') : t('detail.resync')}
+          </button>
+          {resyncMsg ? (
+            <span className={resyncMsg.ok ? 'resync-msg' : 'resync-msg error'}>
+              {resyncMsg.text}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {compareId === '' ? (
         <div className="metric-tabs">
           <button

@@ -142,6 +142,7 @@ garmin connect scraping but are not wired into the measurement pipeline yet.
 | `POST /api/connections` | body `{provider:"GARMIN", email, password}` — runs the SSO strategy chain; **202 PENDING_MFA** or 201 connection. The account password is verified, used once, **not stored**. |
 | `POST /api/connections/:id/mfa` | body `{code}` — completes a 202 pending second-factor login. |
 | `POST /api/connections/:id/sync` | pages + ingests activities (first sync pulls up to 200; rerun for older history as pages fill). |
+| `POST /api/activities/:id/resync` | force re-ingest ONE activity from its owning provider (the detail page's "Re-sync"): fresh detail + FIT, scalars + series rebuilt, device refreshed, `source_updated_at` anchored to `lastUpdateDate`. Gear attribution stays untouched. 404 foreign/unknown · 409 no ACTIVE owning connection · 501 unsupported provider. |
 | `DELETE /api/connections/:id` | revoke: wipes tokens, stops syncing (data rows stay). |
 
 ## Operational reality check

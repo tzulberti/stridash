@@ -327,10 +327,17 @@ async function ingestRide(
   // Fallback: row summary only (no FIT / parse failed). startTime is stored
   // as-is (string without offset) — dedup still works because the ride id is
   // registered in activity_sources first anyway.
+  await upsertActivity(connection, rideId, rowSummaryActivity(row), null, null);
+}
+
+/** List/detail-row-only activity input (no FIT). The detail payload of a
+ * single ride is a superset of the list row (verified live 2026-11-14), so
+ * the force re-sync path feeds it through here too. */
+function rowSummaryActivity(row: IgpSportActivityRow): ActivityInput {
   const startTime = row.startTime
     ? new Date(`${row.startTime.replace(' ', 'T')}Z`) // treat as UTC; corrected when FIT arrives
     : new Date(0);
-  const activity: ActivityInput = {
+  return {
     headline: row.title ?? row.name ?? 'iGPSPORT ride',
     workoutName: null,
     type: row.exerciseType === 0 ? 'RIDE' : 'OTHER',
@@ -354,7 +361,6 @@ async function ingestRide(
     indoor: false,
     raw: { provider: 'IGPSPORT', sourceRow: row, approximateStartTime: true },
   };
-  await upsertActivity(connection, rideId, activity, null, null);
 }
 
 interface StreamArray {
@@ -443,4 +449,151 @@ async function upsertActivity(
       });
     }
   });
+}
+
+/**
+ * In-place refresh of one stored ride (the force re-sync path): scalars +
+ * series rebuilt, device slot filled when empty, source_updated_at stamped
+ * "now" (list rows carry no edit timestamp to compare against). startTime is
+ * deliberately NOT touched — it is a dedup key component.
+ */
+async function updateIgpSportActivity(
+  connectionId: string,
+  activityId: string,
+  input: ActivityInput,
+  series: StreamArray | null,
+  deviceId: string | null,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.activity.update({
+      where: { id: activityId },
+      data: {
+        headline: input.headline,
+        workoutName: input.workoutName,
+        type: input.type,
+        durationS: input.durationS,
+        movingTimeS: input.movingTimeS,
+        distanceM: input.distanceM ?? null,
+        avgSpeedMs: input.avgSpeedMs ?? null,
+        maxSpeedMs: input.maxSpeedMs ?? null,
+        totalAscentM: input.totalAscentM ?? null,
+        totalDescentM: input.totalDescentM ?? null,
+        elevationHighM: input.elevationHighM ?? null,
+        elevationLowM: input.elevationLowM ?? null,
+        avgHr: input.avgHr,
+        maxHr: input.maxHr,
+        avgPowerW: input.avgPowerW,
+        maxPowerW: input.maxPowerW,
+        avgCadence: input.avgCadence,
+        maxCadence: input.maxCadence,
+        trainingLoad: null, // provider hasn't delivered a TSS-like number for FIT runs
+        sweatLossMl: input.sweatLossMl ?? null,
+        aerobicTe: input.aerobicTe ?? null,
+        anaerobicTe: input.anaerobicTe ?? null,
+        aerobicTeMessage: input.aerobicTeMessage ?? null,
+        anaerobicTeMessage: input.anaerobicTeMessage ?? null,
+        vo2max: input.vo2max ?? null,
+        recoveryMinutes: input.recoveryMinutes ?? null,
+        normalizedPowerW: input.normalizedPowerW ?? null,
+        caloriesKcal: input.caloriesKcal,
+        indoor: input.indoor,
+        raw: input.raw as unknown as Prisma.InputJsonValue,
+        ...(deviceId ? { deviceId } : {}),
+      },
+    });
+
+    await tx.activitySource.update({
+      where: { activityId_connectionId: { activityId, connectionId } },
+      data: { sourceUpdatedAt: new Date() },
+    });
+
+    if (series) {
+      await tx.activityDataPoint.upsert({
+        where: { activityId_provider: { activityId, provider: 'IGPSPORT' } },
+        create: {
+          activityId,
+          provider: 'IGPSPORT',
+          sampleCount: (series.timeMs as number[]).length,
+          series: series as unknown as Prisma.InputJsonValue,
+        },
+        update: {
+          sampleCount: (series.timeMs as number[]).length,
+          series: series as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
+  });
+}
+
+/**
+ * Force re-ingest of ONE ride from iGPSPORT (the web detail page's "re-sync"
+ * action): the ride-detail endpoint (verified live 2026-11-14 — a superset
+ * of the list row: title/times/distance/ascent/exerciseType) plus a fresh
+ * FIT download rebuild scalars + series in place. Throws IgpSportError when
+ * tokens fail or the ride is gone (deleted rows keep their local copy).
+ */
+export async function resyncIgpSportActivity(
+  env: Env,
+  connection: ConnectionLike,
+  activityId: string,
+  rideId: string,
+): Promise<void> {
+  const client = await ensureClient(env, connection);
+  const detailRow = (await client.getActivityDetail(rideId)) as unknown as IgpSportActivityRow;
+  if (detailRow == null || String(detailRow.rideId ?? '') !== rideId) {
+    throw new IgpSportError(`iGPSPORT ride ${rideId} not found`);
+  }
+
+  const stored = await prisma.activity.findUnique({
+    where: { id: activityId },
+    select: { indoor: true, deviceId: true },
+  });
+  if (!stored) throw new IgpSportError(`activity ${activityId} vanished during re-sync`);
+
+  let records: FitRecord[] = [];
+  let session: FitSession | null = null;
+  let deviceId: string | null = null;
+  try {
+    const fitBuf = await client.downloadFit(rideId);
+    const parsed = await parseFitFile(fitBuf);
+    records = parsed.records;
+    session = parsed.session;
+    if (parsed.device) {
+      try {
+        deviceId = await upsertDevice(connection.userId, {
+          provider: 'IGPSPORT',
+          sourceDeviceId: parsed.device.serialNumber,
+          manufacturer: parsed.device.manufacturer,
+          productCode: parsed.device.productCode,
+          softwareVersion: parsed.device.softwareVersion,
+          hardwareVersion: parsed.device.hardwareVersion,
+          raw: parsed.device.raw,
+        });
+      } catch (err) {
+        // device attribution is metadata — never fail the ride re-sync
+        console.error(`[igpsport] device upsert failed for ride ${rideId}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error(`[igpsport] FIT re-download failed for ride ${rideId} — using detail row`, err);
+  }
+
+  let input: ActivityInput;
+  let series: StreamArray | null = null;
+  if (records.length) {
+    const parsedAct = fitToActivity(detailRow, records, {
+      indoor: (detailRow as Record<string, unknown>).indoor === 1,
+      session,
+    });
+    if (!parsedAct) throw new IgpSportError(`iGPSPORT ride ${rideId} has no usable start time`);
+    input = parsedAct.activity;
+    series = parsedAct.series as unknown as StreamArray;
+  } else {
+    input = rowSummaryActivity(detailRow);
+  }
+  // the detail row may not carry the indoor flag — never un-flag a stored
+  // indoor ride during a re-sync
+  input.indoor = input.indoor || stored.indoor;
+  const deviceFill = deviceId && !stored.deviceId ? deviceId : null;
+  await updateIgpSportActivity(connection.id, activityId, input, series, deviceFill);
 }

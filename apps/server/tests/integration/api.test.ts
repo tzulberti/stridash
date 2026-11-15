@@ -3,12 +3,18 @@
  * database and docker-compose db are never touched.
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 
 // the sync service is the network boundary — mocked so the route/DB/persistence
 // contract is testable without provider credentials
-const { syncIgpSportConnection } = vi.hoisted(() => ({ syncIgpSportConnection: vi.fn() }));
-vi.mock('../../src/services/igpsport-sync.js', () => ({ syncIgpSportConnection }));
+const { syncIgpSportConnection, resyncIgpSportActivity } = vi.hoisted(() => ({
+  syncIgpSportConnection: vi.fn(),
+  resyncIgpSportActivity: vi.fn(),
+}));
+vi.mock('../../src/services/igpsport-sync.js', () => ({
+  syncIgpSportConnection,
+  resyncIgpSportActivity,
+}));
 
 import { createApp } from '../../src/index.js';
 import { prisma } from '../../src/db.js';
@@ -327,6 +333,204 @@ describe('activities list', () => {
     expect(a.vo2max).toBeCloseTo(49.36, 2);
     expect(a.recoveryMinutes).toBe(1584);
     expect(a.normalizedPowerW).toBe(400);
+  });
+});
+
+// ─── Activity re-sync (force one activity through its owning provider) ───────
+
+let igpsConnId = '';
+let igpsRideId = '';
+let revokedRideId = '';
+let orphanId = '';
+let stravaId = '';
+
+describe('activity re-sync', () => {
+  beforeEach(() => {
+    // each test asserts call counts independently of the others
+    resyncIgpSportActivity.mockClear();
+  });
+
+  beforeAll(async () => {
+    const aliceId = (
+      await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } })
+    ).id;
+
+    // happy-path fixture: IGPSPORT-owned ride on an ACTIVE connection (the
+    // provider service itself is mocked at the top of this file)
+    const igps = await prisma.connection.create({
+      data: {
+        userId: aliceId,
+        provider: 'IGPSPORT',
+        providerUserId: 'resync-igps-1',
+        status: 'ACTIVE',
+        accessTokenEnc: encryptToken('resync-igps-access', env.STRIDASH_ENC_KEY),
+        scopes: [],
+      },
+    });
+    igpsConnId = igps.id;
+    const ride = await prisma.activity.create({
+      data: {
+        userId: aliceId,
+        headline: 'Outdoor Cycling',
+        type: 'RIDE',
+        startTime: new Date('2026-11-06T08:00:00Z'),
+        durationS: 4_949,
+        distanceM: 36_502,
+        raw: { provider: 'IGPSPORT', sourceRow: {} },
+      },
+    });
+    igpsRideId = ride.id;
+    await prisma.activitySource.create({
+      data: {
+        activityId: ride.id,
+        connectionId: igps.id,
+        sourceActivityId: '93430537',
+        sourceUpdatedAt: new Date(),
+      },
+    });
+
+    // ride whose only source sits on a REVOKED connection
+    const revoked = await prisma.connection.create({
+      data: {
+        userId: aliceId,
+        provider: 'IGPSPORT',
+        providerUserId: 'resync-igps-2',
+        status: 'REVOKED',
+        accessTokenEnc: encryptToken('resync-igps-revoked', env.STRIDASH_ENC_KEY),
+        scopes: [],
+      },
+    });
+    const stale = await prisma.activity.create({
+      data: {
+        userId: aliceId,
+        headline: 'Old ride',
+        type: 'RIDE',
+        startTime: new Date('2026-11-07T08:00:00Z'),
+        durationS: 600,
+        distanceM: 10_000,
+        raw: { provider: 'IGPSPORT', sourceRow: {} },
+      },
+    });
+    revokedRideId = stale.id;
+    await prisma.activitySource.create({
+      data: {
+        activityId: stale.id,
+        connectionId: revoked.id,
+        sourceActivityId: '111',
+        sourceUpdatedAt: new Date(),
+      },
+    });
+
+    // owned by a provider but no provenance row survives → nothing to sync
+    const orphan = await prisma.activity.create({
+      data: {
+        userId: aliceId,
+        headline: 'Sourceless row',
+        type: 'RIDE',
+        startTime: new Date('2026-11-08T08:00:00Z'),
+        durationS: 600,
+        distanceM: 10_000,
+        raw: { provider: 'IGPSPORT', sourceRow: {} },
+      },
+    });
+    orphanId = orphan.id;
+
+    // STRAVA has no sync path yet (the connections route answers 501 too)
+    const strava = await prisma.connection.create({
+      data: {
+        userId: aliceId,
+        provider: 'STRAVA',
+        providerUserId: 'strava-1',
+        status: 'ACTIVE',
+        accessTokenEnc: encryptToken('strava-access', env.STRIDASH_ENC_KEY),
+        scopes: [],
+      },
+    });
+    const stravaRun = await prisma.activity.create({
+      data: {
+        userId: aliceId,
+        headline: 'Strava run',
+        type: 'RUN',
+        startTime: new Date('2026-11-09T08:00:00Z'),
+        durationS: 600,
+        distanceM: 10_000,
+        raw: { provider: 'STRAVA', sourceRow: {} },
+      },
+    });
+    stravaId = stravaRun.id;
+    await prisma.activitySource.create({
+      data: {
+        activityId: stravaRun.id,
+        connectionId: strava.id,
+        sourceActivityId: 'strava-ext-1',
+        sourceUpdatedAt: new Date(),
+      },
+    });
+  }, 30_000);
+
+  it('re-syncs through the owning provider and reports per-provider outcome', async () => {
+    resyncIgpSportActivity.mockResolvedValueOnce(undefined);
+    const res = await app.request(`/api/activities/${igpsRideId}/resync`, {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    expect(body.results).toEqual([{ provider: 'IGPSPORT', status: 'ok' }]);
+    expect(resyncIgpSportActivity).toHaveBeenCalledTimes(1);
+    const [envArg, connArg, activityArg, sourceArg] = resyncIgpSportActivity.mock.calls[0];
+    expect(envArg).toBe(env);
+    expect(connArg).toMatchObject({ id: igpsConnId, provider: 'IGPSPORT', status: 'ACTIVE' });
+    expect(activityArg).toBe(igpsRideId);
+    expect(sourceArg).toBe('93430537');
+  });
+
+  it('answers 404 for another user’s activity', async () => {
+    const res = await app.request(`/api/activities/${igpsRideId}/resync`, {
+      method: 'POST',
+      ...authed(bobToken, { method: 'POST' }),
+    });
+    expect(res.status).toBe(404);
+    expect(resyncIgpSportActivity).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 for an unknown activity', async () => {
+    const res = await app.request('/api/activities/00000000-0000-0000-0000-000000000000/resync', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('answers 409 when the only source connection is revoked', async () => {
+    const res = await app.request(`/api/activities/${revokedRideId}/resync`, {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+    });
+    expect(res.status).toBe(409);
+    expect((await json(res)).error).toContain('IGPSPORT');
+  });
+
+  it('answers 409 when no provenance row survives', async () => {
+    const res = await app.request(`/api/activities/${orphanId}/resync`, {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('answers 501 for providers without a sync path', async () => {
+    const res = await app.request(`/api/activities/${stravaId}/resync`, {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+    });
+    expect(res.status).toBe(501);
+  });
+
+  it('exposes delivering providers on the detail response', async () => {
+    const body = await json(await app.request(`/api/activities/${runId}`, authed(aliceToken)));
+    const a = (body.items as Json[])[0];
+    expect(a.providers).toEqual(['GARMIN']);
   });
 });
 
