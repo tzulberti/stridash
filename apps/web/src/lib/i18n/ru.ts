@@ -149,6 +149,7 @@ export const ru: Record<MsgKey, string> = {
   'detail.minShort': 'мин',
   'detail.notes': 'Заметки',
   'detail.noSeries': 'Для этой активности не сохранено временных рядов.',
+  'detail.noChannelData': 'Нет данных в этой активности: {channels}',
   'compare.title': 'Сравнение',
   'compare.pick': 'Сравнить с…',
   'compare.none':

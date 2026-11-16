@@ -160,6 +160,7 @@ export const en = {
   'detail.minShort': 'min',
   'detail.notes': 'Notes',
   'detail.noSeries': 'No time series stored for this activity.',
+  'detail.noChannelData': 'No data on this activity: {channels}',
   'compare.title': 'Compare',
   'compare.pick': 'Compare with…',
   'compare.none':

@@ -13,6 +13,7 @@ import type {
   MeResponse,
   Device,
   ChartChannelConfig,
+  ChartChannelKey,
   ChartProvider,
 } from '@stridash/types';
 
@@ -938,6 +939,30 @@ const SERIES_CHANNELS: Array<[string, MsgKey, string, string]> = [
   ['temperatureC', 'series.temperature', '#f2994a', ' °C'],
 ];
 
+/** channels each provider's series can actually carry — the Settings lists
+ * offer only these per provider and the activity page's no-data hint only
+ * mentions them (a provider missing here = the full catalog, e.g. a future
+ * Strava). Garmin carries per-record temperature only with a paired Tempe
+ * sensor, but the channel stays configurable for it. */
+const PROVIDER_CHANNELS: Partial<Record<ChartProvider, ChartChannelKey[]>> = {
+  GARMIN: [
+    'speedMs',
+    'hrBpm',
+    'powerW',
+    'cadenceRpm',
+    'altitudeM',
+    'respirationRate',
+    'staminaPct',
+    'stepLengthM',
+    'verticalOscillationM',
+    'stanceTimePct',
+    'verticalRatioPct',
+    'temperatureC',
+  ],
+  ZWIFT: ['speedMs', 'hrBpm', 'powerW', 'cadenceRpm', 'altitudeM'],
+  IGPSPORT: ['speedMs', 'hrBpm', 'powerW', 'cadenceRpm', 'altitudeM', 'temperatureC'],
+};
+
 /** SERIES_CHANNELS reordered + filtered by the provider's saved chart
  * configuration: configured channels follow their saved order and drop out
  * when hidden; channels the configuration doesn't know (catalog entries
@@ -1300,6 +1325,20 @@ function ActivityDetail({
     }
     return out;
   }, [rows, act, xAxis, chartChannels]);
+
+  // provider-recordable channels this activity's series never carries —
+  // surfaced under the charts so the missing sections explain themselves
+  const missingChannels = (() => {
+    if (compareId !== '' || rows === null) return [];
+    const row = rows[0];
+    if (!row) return [];
+    const s = row.series;
+    const capable = PROVIDER_CHANNELS[row.provider as ChartProvider];
+    if (!s || !capable) return [];
+    return capable
+      .filter((key) => !(s as Record<string, number[] | undefined>)[key]?.length)
+      .map((key) => SERIES_CHANNELS.find(([k]) => k === key)![1]);
+  })();
 
   const hasDistance = (rows?.[0]?.series.distanceM?.length ?? 0) >= 2;
 
@@ -1796,6 +1835,11 @@ function ActivityDetail({
       {compareId === '' && rows !== null && charts.length === 0 && !error ? (
         <p className="empty">{t('detail.noSeries')}</p>
       ) : null}
+      {compareId === '' && rows !== null && missingChannels.length > 0 ? (
+        <p className="muted">
+          {t('detail.noChannelData', { channels: missingChannels.join(', ') })}
+        </p>
+      ) : null}
 
       {act.hrZonesMin?.length ? (
         <section>
@@ -2180,11 +2224,18 @@ function ChartConfigList({
 }) {
   // working list = the saved configuration extended with catalog channels it
   // predates (appended, visible, canonical order); stored keys that no longer
-  // exist in the catalog (renamed since) are dropped rather than crashing
+  // exist in the catalog (renamed since) are dropped rather than crashing.
+  // Only channels the provider can actually record are offered — the full
+  // catalog for providers without a capability entry.
+  const capable = new Set<string>(
+    (PROVIDER_CHANNELS[provider] ?? SERIES_CHANNELS.map(([key]) => key)) as string[],
+  );
   const configured = new Set<string>((config ?? []).map((c) => c.key));
   const items: ChartChannelConfig[] = [
-    ...(config ?? []).filter((c) => SERIES_CHANNELS.some(([key]) => key === c.key)),
-    ...SERIES_CHANNELS.filter(([key]) => !configured.has(key)).map(([key]) => ({
+    ...(config ?? []).filter(
+      (c) => capable.has(c.key) && SERIES_CHANNELS.some(([key]) => key === c.key),
+    ),
+    ...SERIES_CHANNELS.filter(([key]) => capable.has(key) && !configured.has(key)).map(([key]) => ({
       key: key as ChartChannelConfig['key'],
       visible: true,
     })),

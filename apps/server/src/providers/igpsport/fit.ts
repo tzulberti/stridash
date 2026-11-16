@@ -28,6 +28,27 @@ export async function parseFitSeries(buf: Buffer): Promise<FitRecord[]> {
   return (await parseFitFile(buf)).records;
 }
 
+/** stance time as a percentage, accepting both FIT spellings: some firmware
+ * writes stance_time_percent (already a percentage), newer files write
+ * stance_time — raw ground-contact time in ms — which needs the record's
+ * cadence to become one. FIT cadence is per-foot steps/min, so the per-foot
+ * cycle lasts 60/cadence seconds and pct = ms × cadence / 600. Cross-checked
+ * against stance_time_percent files from the same watch: both land at
+ * ~33-38 % for the same runner. Cadence-less records carry no stance. */
+export function stanceTimePctFrom(m: {
+  stance_time_percent?: unknown;
+  stance_time?: unknown;
+  cadence?: unknown;
+  fractional_cadence?: unknown;
+}): number | undefined {
+  if (typeof m.stance_time_percent === 'number') return m.stance_time_percent;
+  if (typeof m.stance_time !== 'number' || typeof m.cadence !== 'number' || m.cadence <= 0) {
+    return undefined;
+  }
+  const cadence = m.cadence + (typeof m.fractional_cadence === 'number' ? m.fractional_cadence : 0);
+  return (m.stance_time * cadence) / 600;
+}
+
 /** Full parse: per-sample records + session summaries + HR-zone minutes. */
 export async function parseFitFile(
   buf: Buffer,
@@ -82,8 +103,7 @@ export async function parseFitFile(
           // Garmin running FITs; iGPSPORT head-unit files do not carry these)
           verticalOscillationM:
             typeof m.vertical_oscillation === 'number' ? m.vertical_oscillation / 1000 : undefined,
-          stanceTimePct:
-            typeof m.stance_time_percent === 'number' ? m.stance_time_percent : undefined,
+          stanceTimePct: stanceTimePctFrom(m),
           verticalRatioPct: typeof m.vertical_ratio === 'number' ? m.vertical_ratio : undefined,
           // parser leaves these in raw millimetres (scale fields aren't
           // rescaled by lengthUnit) — convert to metres for the series

@@ -149,6 +149,7 @@ export const ko: Record<MsgKey, string> = {
   'detail.minShort': '분',
   'detail.notes': '메모',
   'detail.noSeries': '이 활동에는 저장된 시계열 데이터가 없습니다.',
+  'detail.noChannelData': '이 활동에 데이터가 없습니다: {channels}',
   'compare.title': '비교',
   'compare.pick': '…와 비교',
   'compare.none':

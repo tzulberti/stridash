@@ -149,6 +149,7 @@ export const fr: Record<MsgKey, string> = {
   'detail.minShort': 'min',
   'detail.notes': 'Notes',
   'detail.noSeries': 'Aucune série temporelle enregistrée pour cette activité.',
+  'detail.noChannelData': 'Aucune donnée sur cette activité : {channels}',
   'compare.title': 'Comparer',
   'compare.pick': 'Comparer avec…',
   'compare.none':

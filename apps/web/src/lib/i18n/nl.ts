@@ -149,6 +149,7 @@ export const nl: Record<MsgKey, string> = {
   'detail.minShort': 'min',
   'detail.notes': 'Notities',
   'detail.noSeries': 'Er zijn geen tijdreeksen opgeslagen voor deze activiteit.',
+  'detail.noChannelData': 'Geen gegevens in deze activiteit: {channels}',
   'compare.title': 'Vergelijken',
   'compare.pick': 'Vergelijken met…',
   'compare.none':

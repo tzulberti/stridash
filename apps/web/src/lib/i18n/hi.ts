@@ -149,6 +149,7 @@ export const hi: Record<MsgKey, string> = {
   'detail.minShort': 'मिनट',
   'detail.notes': 'टिप्पणियाँ',
   'detail.noSeries': 'इस गतिविधि के लिए कोई समय श्रृंखला संग्रहीत नहीं है।',
+  'detail.noChannelData': 'इस गतिविधि में कोई डेटा नहीं: {channels}',
   'compare.title': 'तुलना',
   'compare.pick': 'इसके साथ तुलना करें…',
   'compare.none':

@@ -149,6 +149,7 @@ export const ja: Record<MsgKey, string> = {
   'detail.minShort': '分',
   'detail.notes': 'メモ',
   'detail.noSeries': 'このアクティビティの時系列データは保存されていません。',
+  'detail.noChannelData': 'このアクティビティにデータがありません: {channels}',
   'compare.title': '比較',
   'compare.pick': '…と比較',
   'compare.none':

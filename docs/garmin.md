@@ -192,6 +192,33 @@ VO2max, recovery time, aerobic/anaerobic training effect, normalized power,
 power, avg/max respiration, total calories. Source-reported HR-zone minutes
 (FIT `time_in_zone`) go to the `hr_zones_min` column, zone 1 first.
 
+### Which channels a run actually carries (probed live 2026-11-16)
+
+The record messages only carry a field when the watch had a source for it —
+absent fields are simply not in the FIT (0 records, not zeros), so the series
+omits those channels entirely and the activity page shows no chart for them:
+
+- **temperature** — never present (0/1403 records on a Forerunner 955 Solar
+  run). Garmin writes per-record temperature only when a **Tempe external
+  sensor** is paired; the internal sensor feeds sleep/wellness, not workout
+  records. Not a parser gap — `m.temperature` is mapped and would appear.
+- **stance time** — firmware drift: older files write `stance_time_percent`
+  (already a percentage, parser scale applied), newer ones write `stance_time`
+  (raw ground-contact time in **ms**; all 1403 records of a 2026-11 run).
+  `stanceTimePctFrom` in `providers/igpsport/fit.ts` accepts both — the ms
+  form converts via the record's cadence, which FIT files store **per-foot**
+  (steps/min of one foot; verified against `step_length`: speed/step ≈ 2× the
+  stored cadence), so the per-foot cycle is 60/cadence s and
+  `pct = ms × cadence / 600` (228 ms at 87 spm → 33.1 %). Cross-checked
+  against `stance_time_percent` files from the same watch: both land at
+  ~33–38 % for the same runner. Cadence-less records carry no stance.
+  Runs recorded before this fix keep their thinner series — force re-sync
+  rebuilds them.
+- **respiration** — present only when the run recorded it (HRM-strap or
+  watch support; 2 of the user's runs carry ~3.5–6 k samples, the rest none).
+- **stamina** — present on fresh ingests (2026-11 parser); rows ingested by
+  older parser versions lack it until re-synced.
+
 ## Physiology columns (verified live 2026-11-14)
 
 The Connect **list rows carry the Connect-computed physiology outright** (no

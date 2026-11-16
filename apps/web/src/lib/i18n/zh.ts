@@ -149,6 +149,7 @@ export const zh: Record<MsgKey, string> = {
   'detail.minShort': '分钟',
   'detail.notes': '备注',
   'detail.noSeries': '该活动没有存储时间序列数据。',
+  'detail.noChannelData': '此活动没有数据：{channels}',
   'compare.title': '对比',
   'compare.pick': '与…对比',
   'compare.none': '暂无相似活动 — 同类型、距离相近（±25%）的活动同步后会显示在这里。',

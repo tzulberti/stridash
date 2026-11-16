@@ -149,6 +149,7 @@ export const de: Record<MsgKey, string> = {
   'detail.minShort': 'min',
   'detail.notes': 'Notizen',
   'detail.noSeries': 'Für diese Aktivität sind keine Zeitreihen gespeichert.',
+  'detail.noChannelData': 'Keine Daten in dieser Aktivität: {channels}',
   'compare.title': 'Vergleichen',
   'compare.pick': 'Vergleichen mit…',
   'compare.none':
