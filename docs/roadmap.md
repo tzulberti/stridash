@@ -121,6 +121,10 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [x] Region config validated for the user's account country
 - [x] Unit tests for the value-code mapping (`apps/server/tests/`)
 - [ ] Real-account E2E verification (needs a live Omron account)
+- [ ] Reconnect the KRD-703T + clean up the ~88 duplicate weigh-ins the
+      broken connection produced (2026-11 finding): dedupe `measurements`
+      groups keeping the canonical row per (user, timestamp), show the
+      would-be-deleted report first, then re-link the account
 - [ ] Register for the OMRON Connect Partner API (official OAuth2 + consent
       flow via [omron-connect-create.readme.io](https://omron-connect-create.readme.io);
       app registration, production approval) and retire the
@@ -155,6 +159,11 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [ ] Connections screen with "sync now" buttons + `sync_logs` error surfacing
 - [ ] Manual entry UI
 - [ ] Mobile (Expo) app UI — dashboards phone-sized
+- [ ] General overview dashboard: one aggregated home view beyond today's
+      stat cards — training load, steps/sleep/body-battery/weight trends,
+      gear wear status, connection/sync health (2026-11 request)
+- [ ] UI redesign pass over the web app — layout, navigation, visual design,
+      responsive on small screens (2026-11 request; scope to be defined)
 - [x] Edit detection beyond Garmin: Zwift's detail payload carries
       `lastSaveDate` — same poll-and-compare pattern as Garmin's
       `lastUpdateDate` pass ([`zwift.md`](zwift.md) "Edit detection");
@@ -179,3 +188,20 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       the unofficial paths but have official alternatives, tracked above
       (M3 / M2.1 / M4). Practical exposure is account-flagging, not legal:
       own-account, read-only, self-hosted.
+
+## M7 — MCP server ☐
+
+*(Expose Stridash to LLM clients over the Model Context Protocol (2026-11
+request): an assistant connects with the user's own token and can answer
+"how far did I run this month?", "what's my resting-HR trend?", "when do my
+shoes retire?" from the synced data.)*
+
+- [ ] MCP server package (`apps/mcp`): stdio transport for local clients +
+      streamable HTTP for remote ones
+- [ ] Tool surface, read-only and single-user-scoped: activity search /
+      detail / compare, weigh-ins + blood pressure, sleep + daily wellness,
+      gear wear, connection & sync status
+- [ ] Auth: long-lived per-user API token (the browser JWT session doesn't
+      fit MCP clients) — `POST /api/tokens` + revocation
+- [ ] Reuse the server's service layer so MCP tools and the REST API can
+      never disagree
