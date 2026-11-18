@@ -28,7 +28,8 @@ maintainability. Check the box when the fix (and its test) has landed.
 > D2's ingest half landed with D1 — its one-time merge/backfill of already-stored
 > duplicates is still open. Note for S3: existing sessions holding the old JWT
 > refresh tokens must log in once — those tokens are intentionally no longer
-> accepted.
+> accepted. Test-only follow-ups from the post-landing review are tracked as
+> **T1–T16** at the end of this file.
 
 ---
 
@@ -271,7 +272,8 @@ identity also stops two of the same connection's activities from ever folding
 together. Integration tests cover null-distance duplicates, parallel ingests,
 the real 21 s/1.9 m Garmin/Zwift case, and the non-merge guards. Existing stored
 duplicates still need the D2 merge pass; a nullable-safe unique expression index
-on `activities` is deferred until that pass clears the old rows.
+on `activities` is deferred until that pass clears the old rows. Test-only
+follow-ups: **T1–T9** in “Test coverage gaps” below.
 
 ### [ ] D2. Cross-provider dedupe uses exact equality — **Medium**
 
@@ -474,6 +476,79 @@ and future MCP server both benefit from a generated client.
 7. **D3 + D4** (measurement key, connection identity) — migrations.
 8. **D6 + D7** (feed select, streaming export).
 9. **S8–S10, C1–C10** (hardening, lint, docs, deployment).
+
+## Test coverage gaps (post-D1/S1–S4 review)
+
+The acceptance tests pass, but branch inspection found the gaps below. None of
+them imply current production behavior is wrong — each is a regression trap the
+suite would not catch today. Check the box when the test lands.
+
+### Ingest / dedupe
+
+- [ ] **T1. Parallel race that only the advisory lock can prevent.** The
+      current parallel test uses the same start + distance, so the
+      `(user_id, start_time, type, distance_m)` unique constraint would also
+      stop a duplicate; a lost lock in the tolerance or NULL path would still
+      pass. Add two cases: (a) two connections with starts ±21 s and distances
+      ±1.9 m; (b) two connections, both `distance_m = NULL`, exact same start.
+      Both must produce one activity and two sources.
+      (`apps/server/tests/integration/api.test.ts`)
+- [ ] **T2. Tolerance boundaries.** Exactly 60 s and 100 m must match; 61 s
+      and 101 m must not. Pin both dimensions independently so the constants
+      cannot drift silently.
+- [ ] **T3. Type and user isolation.** Same start/distance but a different
+      `type`, and the same key under a different user, must stay separate.
+- [ ] **T4. NULL ↔ non-NULL exact start.** An existing NULL-distance row plus
+      a non-NULL provider at the exact start merges (and vice versa); NULL at
+      a non-exact start must not. Covers the enrichment `OR` branch.
+- [ ] **T5. Closest candidate wins.** With two matching candidates inside the
+      window, the closest start is chosen; equal starts fall through to the
+      closest distance. Covers the sort/tie-break branch.
+- [ ] **T6. `onMatch` gear/device fill.** Drive the shared service with an
+      `onMatch` handler (or a mocked Garmin/iGPSPORT sync) and assert it fills
+      only empty slots and never overwrites a value another provider or the
+      user already set. The Garmin/iGPSPORT callbacks moved in the refactor
+      and currently have no test.
+- [ ] **T7. Garmin/iGPSPORT create payload + series.** Mocked sync-service
+      tests asserting the created scalars and the `activity_data_points` row
+      after the refactor. Zwift has orchestration tests; Garmin/iGPSPORT do
+      not.
+- [ ] **T8. `activity_sources` unique constraint.** A direct duplicate insert
+      of `(connection_id, source_activity_id)` raises `P2002`.
+- [ ] **T9. Migration cleanup of duplicate provenance rows.** On a seeded DB
+      that already contains duplicate `(connection_id, source_activity_id)`
+      rows, apply the migrations up to `20261118120000`, then apply the new
+      migration and assert the oldest activity keeps the source and the unique
+      index exists. Needs a dedicated stepwise-migration harness — the normal
+      setup applies everything to an empty DB, so this branch never runs.
+
+### Auth
+
+- [ ] **T10. Per-email limiter bucket + proxy key.** Trip the per-email limit
+      (not just per-IP) and assert 429 + `Retry-After`. Also unit-test
+      `clientKey` with `STRIDASH_TRUST_PROXY` on/off
+      (`X-Forwarded-For` honored only when true).
+- [ ] **T11. Refresh expiry and concurrent rotation.** (a) Set `expiresAt` in
+      the past and assert 401 + no new token; (b) fire two refreshes with the
+      same token concurrently and assert exactly one succeeds, the loser gets
+      401, and the family is not spuriously revoked.
+- [ ] **T12. Refresh tokens are hashed at rest.** After login/refresh, the raw
+      `sdrt_…` value must not appear in `refresh_tokens` — only its SHA-256
+      hash.
+- [ ] **T13. Register response hash leak.** Repeat the S1 assertion on
+      `/api/auth/register`, not only `/api/auth/login`.
+- [ ] **T14. Logout idempotency.** Logout with an unknown or already-revoked
+      token returns 200 and does not create or revoke anything unexpected.
+- [ ] **T15. Body cap and field bounds on the wider surface.** A >1 MiB body
+      on a non-auth route returns 413; over-max email / password /
+      display-name / provider fields return 400.
+
+### Tooling
+
+- [ ] **T16. Coverage reporting.** Install `@vitest/coverage-v8`, add a
+      `test:coverage` script, and record a baseline. No coverage reporter is
+      installed today, so this gap list came from branch inspection rather
+      than a percentage report.
 
 ## Reproduction notes
 
