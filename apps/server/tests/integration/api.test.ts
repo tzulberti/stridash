@@ -28,6 +28,11 @@ const env: Env = {
   STRIDASH_ENC_KEY: 'integration-test-enc-key-0123456789abc',
   PORT: 0,
   STRIDASH_VERSION: 'test',
+  // the suite drives auth a lot; the dedicated limiter test builds its own app
+  STRIDASH_AUTH_RATE_LIMIT: 1000,
+  STRIDASH_AUTH_RATE_WINDOW_MS: 60_000,
+  STRIDASH_LOGIN_RATE_LIMIT: 1000,
+  STRIDASH_TRUST_PROXY: false,
 };
 const app = createApp(env);
 
@@ -140,6 +145,141 @@ describe('auth', () => {
       body: JSON.stringify({ refreshToken: 'garbage' }),
     });
     expect(bad.status).toBe(401);
+  });
+
+  it('never returns the password hash (S1)', async () => {
+    const login = await json(
+      await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'alice@test.stridash', password: 'integration-pass-1' }),
+      }),
+    );
+    // the password hash used to ride along in user.authIdentities[0].secretHash
+    expect(JSON.stringify(login)).not.toContain('secretHash');
+    expect(JSON.stringify(login)).not.toContain('authIdentities');
+    expect(login.user).toMatchObject({ email: 'alice@test.stridash' });
+  });
+
+  it('rotates refresh tokens and revokes the family on replay (S3)', async () => {
+    const login = await json(
+      await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'alice@test.stridash', password: 'integration-pass-1' }),
+      }),
+    );
+    const firstToken = login.refreshToken as string;
+
+    const rotatedRes = await app.request('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: firstToken }),
+    });
+    expect(rotatedRes.status).toBe(200);
+    const rotated = await json(rotatedRes);
+    expect(rotated.refreshToken).toBeTruthy();
+    expect(rotated.refreshToken).not.toBe(firstToken);
+
+    // replaying the consumed token is treated as theft…
+    const replay = await app.request('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: firstToken }),
+    });
+    expect(replay.status).toBe(401);
+
+    // …and kills the rotated token too (whole family).
+    const family = await app.request('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: rotated.refreshToken }),
+    });
+    expect(family.status).toBe(401);
+  });
+
+  it('logout revokes the refresh-token family (S3)', async () => {
+    const login = await json(
+      await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'bob@test.stridash', password: 'integration-pass-1' }),
+      }),
+    );
+
+    const logout = await app.request('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: login.refreshToken }),
+    });
+    expect(logout.status).toBe(200);
+
+    const refresh = await app.request('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: login.refreshToken }),
+    });
+    expect(refresh.status).toBe(401);
+  });
+
+  it('rejects refresh tokens of a deleted account (S3)', async () => {
+    const reg = await json(
+      await app.request('/api/auth/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'deleted@test.stridash',
+          password: 'deleted-pass-1',
+          displayName: 'Deleted',
+        }),
+      }),
+    );
+
+    const del = await app.request('/api/me', {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${reg.accessToken}` },
+    });
+    expect(del.status).toBe(200);
+
+    const refresh = await app.request('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: reg.refreshToken }),
+    });
+    expect(refresh.status).toBe(401);
+  });
+
+  it('rate-limits repeated auth attempts (S2)', async () => {
+    const limited = createApp({
+      ...env,
+      STRIDASH_AUTH_RATE_LIMIT: 2,
+      STRIDASH_LOGIN_RATE_LIMIT: 100,
+    });
+    const attempt = () =>
+      limited.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'nobody@test.stridash', password: 'wrong-pass-1' }),
+      });
+
+    expect((await attempt()).status).toBe(401);
+    expect((await attempt()).status).toBe(401);
+    const blocked = await attempt();
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('retry-after')).toBeTruthy();
+  });
+
+  it('rejects oversized request bodies (S4)', async () => {
+    const res = await app.request('/api/auth/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'huge@test.stridash',
+        password: 'x'.repeat(2 * 1024 * 1024),
+        displayName: 'Huge',
+      }),
+    });
+    expect(res.status).toBe(413);
   });
 
   it('guards the authenticated surface', async () => {

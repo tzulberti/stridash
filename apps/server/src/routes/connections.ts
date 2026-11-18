@@ -32,9 +32,9 @@ const omronConnectSchema = z.object({
   provider: z.literal('OMRON'),
   /** Omron Connect account identifier — email OR username (the API's login
    * field is literally `username`; accounts register either way). */
-  identifier: z.string().min(1),
+  identifier: z.string().min(1).max(320),
   /** Verified against Omron immediately, never stored. */
-  password: z.string().min(1),
+  password: z.string().min(1).max(1024),
   /** ISO 3166-1 alpha-2 country of the Omron Connect account. */
   country: z.string().length(2),
 });
@@ -42,10 +42,10 @@ const omronConnectSchema = z.object({
 const igpsportConnectSchema = z.object({
   provider: z.literal('IGPSPORT'),
   /** iGPSPORT account username (the web client login). */
-  username: z.string().min(1),
+  username: z.string().min(1).max(320),
   /** Account password — verified against iGPSPORT, then kept AES-256-GCM
    * encrypted server-side because the API has no refresh-token grant. */
-  password: z.string().min(1),
+  password: z.string().min(1).max(1024),
   /** Deployment: "intl" (default) or "cn" (unsupported — rejected). */
   region: z.enum(['intl', 'cn']).default('intl'),
 });
@@ -53,20 +53,20 @@ const igpsportConnectSchema = z.object({
 const zwiftConnectSchema = z.object({
   provider: z.literal('ZWIFT'),
   /** Zwift account identifier — the rider's email. */
-  username: z.string().min(1),
+  username: z.string().min(1).max(320),
   /** Account password — verified once via the password grant, never stored.
    * Sessions live on via the ROTATING refresh-token grant ("Zwift Game
    * Client" client_id must match the token audience). */
-  password: z.string().min(1),
+  password: z.string().min(1).max(1024),
 });
 
 const garminConnectSchema = z.object({
   provider: z.literal('GARMIN'),
   /** Garmin account email (the SSO `username` field). */
-  email: z.string().min(1),
+  email: z.string().min(1).max(254),
   /** Garmin account password — used once for the SSO login; only the session
    * tokens (DI access + refresh) are stored, both AES-256-GCM encrypted. */
-  password: z.string().min(1),
+  password: z.string().min(1).max(1024),
 });
 
 const garminMfaSchema = z.object({

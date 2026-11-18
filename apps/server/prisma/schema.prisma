@@ -43,6 +43,7 @@ model User {
   gear           Gear[]
   gearComponents GearComponent[]
   authIdentities AuthIdentity[]
+  refreshTokens  RefreshToken[]
   sleepSessions  SleepSession[]
   dailyWellness  DailyWellness[]
   preferences    UserPreferences?
@@ -133,6 +134,29 @@ model AuthIdentity {
 
   @@index([userId])
   @@map("auth_identities")
+}
+
+/// App refresh tokens: opaque random strings, rotated on every use. Only the
+/// SHA-256 hash is stored. `familyId` stays stable across rotations so a
+/// replayed (already-rotated) token can revoke the whole session family.
+model RefreshToken {
+  id           String    @id @db.Uuid @default(uuid(7))
+  userId       String    @db.Uuid @map("user_id")
+  familyId     String    @db.Uuid @map("family_id")
+  /// sha256(raw token) — the raw value never reaches the database
+  tokenHash    String    @unique @map("token_hash")
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(6)
+  /// Set on rotation: the token that replaced this one
+  replacedBy   String?   @db.Uuid @map("replaced_by")
+  lastUsedAt   DateTime? @map("last_used_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
 }
 
 // ─── Connections (external providers) ────────────────────────────────────────

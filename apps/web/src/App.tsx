@@ -70,8 +70,13 @@ async function tryRefresh(): Promise<boolean> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: rt }),
       });
-      if (!res.ok) {
+      if (res.status === 401) {
+        // the refresh token is genuinely dead (expired, revoked, replayed)
         clearTokens();
+        return false;
+      }
+      if (!res.ok) {
+        // transient (429 rate limit, 5xx) — keep the tokens and try later
         return false;
       }
       const j = (await res.json()) as { accessToken: string; refreshToken: string };
@@ -3574,6 +3579,18 @@ export default function App() {
   }
 
   const signOut = () => {
+    // Revoke the refresh-token family server-side; the 15-minute access token
+    // dies with the local copy. keepalive lets the request finish even if the
+    // user navigates away immediately.
+    const refreshToken = sessionStorage.getItem(REFRESH_KEY) ?? localStorage.getItem(REFRESH_KEY);
+    if (refreshToken) {
+      void fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+        keepalive: true,
+      }).catch(() => undefined);
+    }
     clearTokens();
     setToken(null);
     setMenuOpen(false);
