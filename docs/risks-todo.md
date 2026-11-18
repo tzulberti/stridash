@@ -24,9 +24,11 @@ maintainability. Check the box when the fix (and its test) has landed.
 | P1       | S5, S6, S7, D2–D6     |
 | P2       | S8–S10, D7–D9, C1–C10 |
 
-> **Status 2026-11-18:** S1–S4 landed (with tests); **D1 is the only P0 left**.
-> Note for S3: existing sessions holding the old JWT refresh tokens must log in
-> once — those tokens are intentionally no longer accepted.
+> **Status 2026-11-18:** S1–S4 and D1 landed (with tests); **no P0 items remain**.
+> D2's ingest half landed with D1 — its one-time merge/backfill of already-stored
+> duplicates is still open. Note for S3: existing sessions holding the old JWT
+> refresh tokens must log in once — those tokens are intentionally no longer
+> accepted.
 
 ---
 
@@ -234,7 +236,7 @@ wholesale, and the real exposure is S4. Expo pulls high-severity transitives.
 
 ## P1 — data correctness
 
-### [ ] D1. NULL-distance dedupe hole — **High**
+### [x] D1. NULL-distance dedupe hole — **High**
 
 **Where:** `apps/server/prisma/schema.prisma:388`
 (`@@unique([userId, startTime, type, distanceM])`);
@@ -259,6 +261,18 @@ which overlaps this item — close both together).
 **Acceptance:** tests for (a) null distance twice, (b) two syncs in parallel,
 (c) the roadmap's 21 s/1.9 m cross-provider case.
 
+**Landed 2026-11-18:** `services/activity-ingest.ts` now owns the decision for
+all three sync services: (1) provider identity via the new unique
+`activity_sources (connection_id, source_activity_id)`, (2) a per-user
+transaction-scoped Postgres advisory lock so find-then-create is race-free
+across concurrent syncs and processes, and (3) tolerance matching (same type,
+start ±60 s, distance ±100 m; null distance requires the exact start). Provider
+identity also stops two of the same connection's activities from ever folding
+together. Integration tests cover null-distance duplicates, parallel ingests,
+the real 21 s/1.9 m Garmin/Zwift case, and the non-merge guards. Existing stored
+duplicates still need the D2 merge pass; a nullable-safe unique expression index
+on `activities` is deferred until that pass clears the old rows.
+
 ### [ ] D2. Cross-provider dedupe uses exact equality — **Medium**
 
 **Where:** the three `upsertActivity` implementations listed in D1.
@@ -270,6 +284,10 @@ normalization.
 **Fix:** tolerance window (same type + same day, start ±60 s, distance ±100 m),
 plus a merge step for existing duplicates (keep one `activity`, move
 `activity_sources`).
+
+**Partially landed 2026-11-18:** the ingest-time tolerance matching shipped with
+D1 (shared `services/activity-ingest.ts`). Only the one-time merge/backfill of
+duplicates already stored before this change remains open.
 
 ### [ ] D3. Measurement dedupe includes `connectionId` — **Medium**
 
@@ -450,8 +468,8 @@ and future MCP server both benefit from a generated client.
 2. **S2 + S4** (async scrypt, limiter, body limit) — one small middleware PR.
 3. **S3** (refresh-token table, rotation, logout) — needs a migration.
 4. **D5** (UUID validation + error semantics) — mechanical, testable.
-5. **D1 + D2** (dedupe model, merge duplicates) — the riskiest; do it after
-   C2 extraction so the change lands once.
+5. ~~**D1 + D2 ingest matching**~~ — landed 2026-11-18; only the merge/backfill
+   of pre-existing duplicates (D2) remains.
 6. **S6 + S7 + C7** (key management, sync lock/queue, scheduler).
 7. **D3 + D4** (measurement key, connection identity) — migrations.
 8. **D6 + D7** (feed select, streaming export).
@@ -461,9 +479,9 @@ and future MCP server both benefit from a generated client.
 
 ```bash
 npm run typecheck                       # all workspaces
-npx vitest run --project unit           # apps/server, 79 tests
+npx vitest run --project unit           # apps/server, 91 tests
 npm test -w @stridash/web               # 42 tests
-npx vitest run --project integration    # apps/server, 50 tests (needs Docker)
+npx vitest run --project integration    # apps/server, 62 tests (needs Docker)
 npm audit --omit=dev                    # zod high + expo transitives
 ```
 

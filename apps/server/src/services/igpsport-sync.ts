@@ -1,8 +1,9 @@
 /**
  * iGPSPORT sync service: paginated discovery via queryMyActivity, then a
- * FIT download per new ride, upserting `activities` (+ `activity_sources`,
- * + `activity_data_points` series) keyed on the exact dedup rules in the
- * data model. Every run writes a sync_logs row.
+ * FIT download per new ride, ingesting `activities` (+ `activity_sources`,
+ * + `activity_data_points` series) through the shared activity-ingest service
+ * (provider identity + cross-provider tolerance matching). Every run writes a
+ * sync_logs row.
  */
 
 import { prisma } from '../db.js';
@@ -23,6 +24,7 @@ import {
 } from '../providers/igpsport/normalize.js';
 import { parseFitFile } from '../providers/igpsport/fit.js';
 import { upsertDevice } from './devices.js';
+import { ingestActivity } from './activity-ingest.js';
 import type { Env } from '../env.js';
 
 interface ConnectionLike {
@@ -369,11 +371,10 @@ interface StreamArray {
 }
 
 /**
- * Upsert one activity row (+ series + source registration).
+ * Ingest one activity row (+ series + source registration).
  *
- * Dedup: the user-level heuristic key (userId, startTime, type, distance)
- * catches the same ride arriving from another provider; per-source identity
- * lives in activity_sources (unique per connection).
+ * Dedup lives in the shared `ingestActivity` service: provider-source identity
+ * first, then a tolerance match (same type, start ±60 s, distance ±100 m).
  */
 async function upsertActivity(
   connection: ConnectionLike,
@@ -382,73 +383,49 @@ async function upsertActivity(
   series: StreamArray | null,
   deviceId: string | null = null,
 ): Promise<void> {
-  const dup = await prisma.activity.findFirst({
-    where: {
+  await ingestActivity(
+    {
       userId: connection.userId,
-      startTime: activity.startTime,
+      connectionId: connection.id,
+      sourceActivityId: rideId,
       type: activity.type,
-      distanceM: activity.distanceM ?? undefined,
+      startTime: activity.startTime,
+      distanceM: activity.distanceM,
     },
-    select: { id: true, deviceId: true },
-  });
+    {
+      create: async (tx) => {
+        const created = await tx.activity.create({
+          data: { ...toActivityCreate(connection.userId, connection.id, activity), deviceId },
+          select: { id: true },
+        });
 
-  if (dup) {
-    // another provider already stored this ride — register provenance and
-    // fill the recording-device slot if nobody else claimed it
-    if (deviceId && !dup.deviceId) {
-      await prisma.activity.update({ where: { id: dup.id }, data: { deviceId } });
-    }
-    await prisma.activitySource.upsert({
-      where: {
-        activityId_connectionId: { activityId: dup.id, connectionId: connection.id },
+        if (series) {
+          await tx.activityDataPoint.upsert({
+            where: {
+              activityId_provider: { activityId: created.id, provider: 'IGPSPORT' },
+            },
+            create: {
+              activityId: created.id,
+              provider: 'IGPSPORT',
+              sampleCount: (series.timeMs as number[]).length,
+              series: series as unknown as Prisma.InputJsonValue,
+            },
+            update: {
+              sampleCount: (series.timeMs as number[]).length,
+              series: series as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
+        return created;
       },
-      create: {
-        activityId: dup.id,
-        connectionId: connection.id,
-        sourceActivityId: rideId,
-        sourceUpdatedAt: new Date(),
+      // register the recording device if nobody else claimed it
+      onMatch: async (tx, existing) => {
+        if (deviceId && !existing.deviceId) {
+          await tx.activity.update({ where: { id: existing.id }, data: { deviceId } });
+        }
       },
-      update: { sourceActivityId: rideId, sourceUpdatedAt: new Date() },
-    });
-    return;
-  }
-
-  await prisma.$transaction(async (tx) => {
-    const created = await tx.activity.create({
-      data: { ...toActivityCreate(connection.userId, connection.id, activity), deviceId },
-    });
-
-    await tx.activitySource.upsert({
-      where: {
-        activityId_connectionId: { activityId: created.id, connectionId: connection.id },
-      },
-      create: {
-        activityId: created.id,
-        connectionId: connection.id,
-        sourceActivityId: rideId,
-        sourceUpdatedAt: new Date(),
-      },
-      update: { sourceActivityId: rideId },
-    });
-
-    if (series) {
-      await tx.activityDataPoint.upsert({
-        where: {
-          activityId_provider: { activityId: created.id, provider: 'IGPSPORT' },
-        },
-        create: {
-          activityId: created.id,
-          provider: 'IGPSPORT',
-          sampleCount: (series.timeMs as number[]).length,
-          series: series as unknown as Prisma.InputJsonValue,
-        },
-        update: {
-          sampleCount: (series.timeMs as number[]).length,
-          series: series as unknown as Prisma.InputJsonValue,
-        },
-      });
-    }
-  });
+    },
+  );
 }
 
 /**

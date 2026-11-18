@@ -448,6 +448,8 @@ model ActivitySource {
   connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   @@id([activityId, connectionId])
+  /// Provider-side identity: one local activity per provider activity id.
+  @@unique([connectionId, sourceActivityId])
   @@map("activity_sources")
 }
 

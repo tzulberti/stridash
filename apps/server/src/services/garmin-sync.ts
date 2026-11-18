@@ -1,8 +1,9 @@
 /**
  * Garmin sync service: page the activity list, ingest each new activity via
- * its FIT download (scalars + series), deduped user-level on
- * (userId, startTime, type, distance) with per-connection provenance in
- * activity_sources. Every run writes a sync_logs row.
+ * its FIT download (scalars + series). Dedup goes through the shared
+ * `activity-ingest` service: provider identity first, then a user-level
+ * tolerance match (same type, start ±60 s, distance ±100 m). Every run writes
+ * a sync_logs row.
  */
 
 import { prisma } from '../db.js';
@@ -31,6 +32,7 @@ import {
 import { extractFitFromDownload } from '../providers/garmin/fitzip.js';
 import { parseFitFile } from '../providers/igpsport/fit.js';
 import { upsertDevice } from './devices.js';
+import { ingestActivity as ingestActivityRow } from './activity-ingest.js';
 import type { FitRecord, FitSession } from '../providers/igpsport/normalize.js';
 import type { ActivityInput } from '../providers/garmin/normalize.js';
 import {
@@ -573,70 +575,51 @@ async function upsertActivity(
   gearId: string | null,
   deviceId: string | null = null,
 ): Promise<void> {
-  const dup = await prisma.activity.findFirst({
-    where: {
+  await ingestActivityRow(
+    {
       userId: connection.userId,
-      startTime: activity.startTime,
+      connectionId: connection.id,
+      sourceActivityId: garminId,
       type: activity.type,
-      distanceM: activity.distanceM ?? undefined,
+      startTime: activity.startTime,
+      distanceM: activity.distanceM,
     },
-    select: { id: true, gearId: true, deviceId: true },
-  });
+    {
+      create: async (tx) => {
+        const created = await tx.activity.create({
+          data: { ...toActivityCreate(connection.userId, activity, deviceId), gearId },
+          select: { id: true },
+        });
 
-  if (dup) {
-    // provider-sourced fills fill empty slots — never override a value
-    // another provider (or the user) already set
-    const fill: { gearId?: string; deviceId?: string } = {};
-    if (gearId && !dup.gearId) fill.gearId = gearId;
-    if (deviceId && !dup.deviceId) fill.deviceId = deviceId;
-    if (Object.keys(fill).length > 0) {
-      await prisma.activity.update({ where: { id: dup.id }, data: fill });
-    }
-    await prisma.activitySource.upsert({
-      where: { activityId_connectionId: { activityId: dup.id, connectionId: connection.id } },
-      create: {
-        activityId: dup.id,
-        connectionId: connection.id,
-        sourceActivityId: garminId,
-        sourceUpdatedAt: new Date(),
+        if (series) {
+          await tx.activityDataPoint.upsert({
+            where: { activityId_provider: { activityId: created.id, provider: 'GARMIN' } },
+            create: {
+              activityId: created.id,
+              provider: 'GARMIN',
+              sampleCount: series.timeMs.length,
+              series: series as unknown as Prisma.InputJsonValue,
+            },
+            update: {
+              sampleCount: series.timeMs.length,
+              series: series as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
+        return created;
       },
-      update: { sourceActivityId: garminId, sourceUpdatedAt: new Date() },
-    });
-    return;
-  }
-
-  await prisma.$transaction(async (tx) => {
-    const created = await tx.activity.create({
-      data: { ...toActivityCreate(connection.userId, activity, deviceId), gearId },
-    });
-
-    await tx.activitySource.upsert({
-      where: { activityId_connectionId: { activityId: created.id, connectionId: connection.id } },
-      create: {
-        activityId: created.id,
-        connectionId: connection.id,
-        sourceActivityId: garminId,
-        sourceUpdatedAt: new Date(),
+      // provider-sourced fills fill empty slots — never override a value
+      // another provider (or the user) already set
+      onMatch: async (tx, existing) => {
+        const fill: { gearId?: string; deviceId?: string } = {};
+        if (gearId && !existing.gearId) fill.gearId = gearId;
+        if (deviceId && !existing.deviceId) fill.deviceId = deviceId;
+        if (Object.keys(fill).length > 0) {
+          await tx.activity.update({ where: { id: existing.id }, data: fill });
+        }
       },
-      update: { sourceActivityId: garminId },
-    });
-
-    if (series) {
-      await tx.activityDataPoint.upsert({
-        where: { activityId_provider: { activityId: created.id, provider: 'GARMIN' } },
-        create: {
-          activityId: created.id,
-          provider: 'GARMIN',
-          sampleCount: series.timeMs.length,
-          series: series as unknown as Prisma.InputJsonValue,
-        },
-        update: {
-          sampleCount: series.timeMs.length,
-          series: series as unknown as Prisma.InputJsonValue,
-        },
-      });
-    }
-  });
+    },
+  );
 }
 
 function toActivityCreate(userId: string, input: ActivityInput, deviceId: string | null = null) {

@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
 
 // the sync service is the network boundary — mocked so the route/DB/persistence
 // contract is testable without provider credentials
@@ -19,7 +20,9 @@ vi.mock('../../src/services/igpsport-sync.js', () => ({
 import { createApp } from '../../src/index.js';
 import { prisma } from '../../src/db.js';
 import { encryptToken } from '../../src/crypto.js';
+import { ingestActivity } from '../../src/services/activity-ingest.js';
 import { IgpSportError } from '../../src/providers/igpsport/client.js';
+import type { ActivityType } from '../../src/generated/prisma/client.js';
 import type { Env } from '../../src/env.js';
 
 const env: Env = {
@@ -1374,5 +1377,166 @@ describe('similar activities (compare picker)', () => {
   it('never leaks another user’s activities', async () => {
     const res = await app.request(`/api/activities/${runId}/similar`, authed(bobToken));
     expect(res.status).toBe(404);
+  });
+});
+
+// ─── Activity ingest dedupe (D1) ─────────────────────────────────────────────
+
+describe('activity ingest dedupe', () => {
+  let userId = '';
+
+  beforeAll(async () => {
+    const user = await prisma.user.create({
+      data: { email: 'dedupe@test.stridash', displayName: 'Dedupe' },
+      select: { id: true },
+    });
+    userId = user.id;
+  });
+
+  type Conn = { id: string; userId: string };
+
+  async function connection(provider: 'GARMIN' | 'ZWIFT' | 'IGPSPORT'): Promise<Conn> {
+    return prisma.connection.create({
+      data: {
+        userId,
+        provider,
+        providerUserId: `${provider}:${randomUUID()}`,
+        status: 'ACTIVE',
+      },
+      select: { id: true, userId: true },
+    });
+  }
+
+  function ingest(
+    conn: Conn,
+    sourceActivityId: string,
+    opts: { type?: ActivityType; startTime?: Date; distanceM?: number | null } = {},
+  ) {
+    const type = opts.type ?? 'RIDE';
+    const startTime = opts.startTime ?? new Date('2026-11-18T10:00:00.000Z');
+    const distanceM = opts.distanceM === undefined ? 10_000 : opts.distanceM;
+
+    return ingestActivity(
+      {
+        userId: conn.userId,
+        connectionId: conn.id,
+        sourceActivityId,
+        type,
+        startTime,
+        distanceM,
+      },
+      {
+        create: (tx) =>
+          tx.activity.create({
+            data: {
+              userId: conn.userId,
+              headline: `Dedupe ${sourceActivityId}`,
+              type,
+              startTime,
+              durationS: 3600,
+              distanceM,
+              indoor: type === 'VIRTUAL_RIDE',
+            },
+            select: { id: true },
+          }),
+      },
+    );
+  }
+
+  async function rowsFor(...connections: Conn[]) {
+    return prisma.activity.findMany({
+      where: {
+        userId,
+        sources: { some: { connectionId: { in: connections.map((c) => c.id) } } },
+      },
+      select: {
+        id: true,
+        sources: { select: { connectionId: true, sourceActivityId: true } },
+      },
+    });
+  }
+
+  it('stores one activity when the same null-distance workout arrives twice', async () => {
+    const garmin = await connection('GARMIN');
+    const zwift = await connection('ZWIFT');
+    const startTime = new Date('2026-11-18T09:00:00.000Z');
+
+    await ingest(garmin, 'g-null', { type: 'WORKOUT', startTime, distanceM: null });
+    await ingest(zwift, 'z-null', { type: 'WORKOUT', startTime, distanceM: null });
+    // re-ingesting the same provider source is idempotent too
+    await ingest(garmin, 'g-null', { type: 'WORKOUT', startTime, distanceM: null });
+
+    const rows = await rowsFor(garmin, zwift);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.sources).toHaveLength(2);
+  });
+
+  it('collapses the real 21 s / 1.9 m Garmin-vs-Zwift clock drift', async () => {
+    const garmin = await connection('GARMIN');
+    const zwift = await connection('ZWIFT');
+    const zwiftStart = new Date('2026-11-13T10:40:30.082Z');
+
+    await ingest(garmin, 'g-drift', {
+      startTime: new Date(zwiftStart.getTime() + 21_000),
+      distanceM: 11_537.84,
+    });
+    await ingest(zwift, 'z-drift', {
+      startTime: zwiftStart,
+      distanceM: 11_539.7,
+    });
+
+    const rows = await rowsFor(garmin, zwift);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.sources.map((s) => s.sourceActivityId).sort()).toEqual(['g-drift', 'z-drift']);
+  });
+
+  it('serializes parallel ingests so only one row is created', async () => {
+    const garmin = await connection('GARMIN');
+    const igpsport = await connection('IGPSPORT');
+    const startTime = new Date('2026-11-18T11:00:00.000Z');
+
+    const results = await Promise.all([
+      ingest(garmin, 'parallel-g', { startTime }),
+      ingest(igpsport, 'parallel-i', { startTime }),
+    ]);
+
+    expect(results.filter((r) => r.created)).toHaveLength(1);
+    expect(await rowsFor(garmin, igpsport)).toHaveLength(1);
+  });
+
+  it('does not merge two distinct activities from the same connection', async () => {
+    const conn = await connection('GARMIN');
+    const startTime = new Date('2026-11-18T12:00:00.000Z');
+
+    await ingest(conn, 'lap-1', { startTime });
+    await ingest(conn, 'lap-2', { startTime: new Date(startTime.getTime() + 10_000) });
+
+    expect(await rowsFor(conn)).toHaveLength(2);
+  });
+
+  it('does not merge distances more than 100 m apart', async () => {
+    const garmin = await connection('GARMIN');
+    const zwift = await connection('ZWIFT');
+    const startTime = new Date('2026-11-18T13:00:00.000Z');
+
+    await ingest(garmin, 'far-a', { startTime, distanceM: 10_000 });
+    await ingest(zwift, 'far-b', { startTime, distanceM: 10_250 });
+
+    expect(await rowsFor(garmin, zwift)).toHaveLength(2);
+  });
+
+  it('lets provider identity win over a shifted start time', async () => {
+    const conn = await connection('GARMIN');
+    const startTime = new Date('2026-11-18T14:00:00.000Z');
+
+    await ingest(conn, 'same-source', { startTime });
+    await ingest(conn, 'same-source', {
+      startTime: new Date(startTime.getTime() + 30_000),
+      distanceM: 10_050,
+    });
+
+    const rows = await rowsFor(conn);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.sources).toHaveLength(1);
   });
 });

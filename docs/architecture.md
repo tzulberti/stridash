@@ -32,7 +32,8 @@ logical parts:
    - `listNew(since: Date)` — incremental pull, keyed on the connection's
      `last_synced_at` watermark
    - `normalize(raw)` → domain `Activity` / `Measurement`
-   - `dedupeKey(item)` → canonical identity for upsert
+   - shared `services/activity-ingest.ts` owns identity: provider source id
+     first, then a tolerance match (same type, start ±60 s, distance ±100 m)
    - `refreshToken()` where the provider uses OAuth (Strava)
    or handles session-scrape auth (Garmin, Omron — unofficial APIs).
 3. **Scheduler.** Interval/cron jobs: sync all active connections on a

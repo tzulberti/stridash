@@ -13,8 +13,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // vi.mock factories are hoisted above module code — everything they touch
 // must come from vi.hoisted so the references exist by factory time.
 const { prisma, listActivities, getActivityDetail, getFitnessData, zwiftRefresh } = vi.hoisted(
-  () => ({
-    prisma: {
+  () => {
+    const prisma = {
+      $queryRaw: vi.fn(async () => []),
+      $executeRaw: vi.fn(async () => 0),
+      $transaction: vi.fn(),
       syncLog: {
         create: vi.fn(async () => ({ id: 'log-1' })),
         update: vi.fn(async () => ({})),
@@ -22,26 +25,39 @@ const { prisma, listActivities, getActivityDetail, getFitnessData, zwiftRefresh 
       connection: { update: vi.fn(async () => ({})) },
       activity: {
         findFirst: vi.fn(async () => null),
+        findMany: vi.fn(async () => [] as Array<Record<string, unknown>>),
         create: vi.fn(async () => ({ id: 'act-created' })),
         update: vi.fn(async () => ({})),
       },
       activitySource: {
         findMany: vi.fn(async () => [] as Array<Record<string, unknown>>),
+        findUnique: vi.fn(async () => null as Record<string, unknown> | null),
+        create: vi.fn(async () => ({})),
         upsert: vi.fn(async () => ({})),
         update: vi.fn(async () => ({})),
       },
       activityDataPoint: { upsert: vi.fn(async () => ({})) },
-    },
-    listActivities: vi.fn<(...a: unknown[]) => Promise<unknown[]>>(),
-    getActivityDetail: vi.fn<(...a: unknown[]) => Promise<unknown>>(),
-    getFitnessData: vi.fn<(...a: unknown[]) => Promise<unknown>>(),
-    zwiftRefresh:
-      vi.fn<
-        (
-          ...a: unknown[]
-        ) => Promise<{ accessToken: string; refreshToken: string; expiresIn: number }>
-      >(),
-  }),
+    };
+
+    // the ingest service runs inside a transaction; the stub hands it the same
+    // mock object so the existing assertions keep working
+    prisma.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => Promise<unknown>) =>
+      fn(prisma),
+    );
+
+    return {
+      prisma,
+      listActivities: vi.fn<(...a: unknown[]) => Promise<unknown[]>>(),
+      getActivityDetail: vi.fn<(...a: unknown[]) => Promise<unknown>>(),
+      getFitnessData: vi.fn<(...a: unknown[]) => Promise<unknown>>(),
+      zwiftRefresh:
+        vi.fn<
+          (
+            ...a: unknown[]
+          ) => Promise<{ accessToken: string; refreshToken: string; expiresIn: number }>
+        >(),
+    };
+  },
 );
 
 vi.mock('../src/db.js', () => ({ prisma }));

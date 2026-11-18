@@ -30,6 +30,7 @@ import {
   type ZwiftSeries,
 } from '../providers/zwift/normalize.js';
 import { redactProviderDetail } from '../redact.js';
+import { ingestActivity } from './activity-ingest.js';
 import type { ActivityInput } from '../providers/igpsport/normalize.js';
 import type { Env } from '../env.js';
 
@@ -99,9 +100,15 @@ async function zwiftRefreshWithPersist(env: Env, connection: ConnectionLike, ref
   return tokens;
 }
 
-/** Persist (or replace) an activity's ZWIFT series row. */
-async function storeSeries(activityId: string, series: ZwiftSeries): Promise<void> {
-  await prisma.activityDataPoint.upsert({
+/** Persist (or replace) an activity's ZWIFT series row. `db` lets callers use
+ * the surrounding ingest transaction (a separate client would deadlock on the
+ * uncommitted activity FK). */
+async function storeSeries(
+  activityId: string,
+  series: ZwiftSeries,
+  db: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<void> {
+  await db.activityDataPoint.upsert({
     where: { activityId_provider: { activityId, provider: 'ZWIFT' } },
     create: {
       activityId,
@@ -116,9 +123,9 @@ async function storeSeries(activityId: string, series: ZwiftSeries): Promise<voi
   });
 }
 
-/** Upsert one activity row (+ series + source registration). Dedup mirrors
- * iGPSPORT: the user-level heuristic key catches the same ride from other
- * providers; per-source identity lives in activity_sources. */
+/** Ingest one activity row (+ series + source registration). Dedup lives in
+ * the shared activity-ingest service: provider-source identity first, then a
+ * cross-provider tolerance match. */
 async function upsertZwiftActivity(
   connection: ConnectionLike,
   externalId: string,
@@ -126,78 +133,56 @@ async function upsertZwiftActivity(
   series: ZwiftSeries | null,
   detail: ZwiftActivity | null,
 ): Promise<'created' | 'updated'> {
-  const dup = await prisma.activity.findFirst({
-    where: {
+  const result = await ingestActivity(
+    {
       userId: connection.userId,
-      startTime: activity.startTime,
-      type: activity.type,
-      distanceM: activity.distanceM ?? undefined,
-    },
-    select: { id: true },
-  });
-
-  if (dup) {
-    // another provider stored this activity — register provenance only
-    await prisma.activitySource.upsert({
-      where: { activityId_connectionId: { activityId: dup.id, connectionId: connection.id } },
-      create: {
-        activityId: dup.id,
-        connectionId: connection.id,
-        sourceActivityId: externalId,
-        sourceUpdatedAt: new Date(),
-      },
-      update: { sourceUpdatedAt: new Date() },
-    });
-    return 'updated';
-  }
-
-  const created = await prisma.activity.create({
-    data: {
-      userId: connection.userId,
-      headline: activity.headline,
-      workoutName: activity.workoutName,
-      type: activity.type,
-      startTime: activity.startTime,
-      durationS: activity.durationS,
-      movingTimeS: activity.movingTimeS,
-      distanceM: activity.distanceM ?? null,
-      avgSpeedMs: activity.avgSpeedMs ?? null,
-      maxSpeedMs: activity.maxSpeedMs ?? null,
-      totalAscentM: activity.totalAscentM ?? null,
-      totalDescentM: activity.totalDescentM ?? null,
-      elevationHighM: activity.elevationHighM ?? null,
-      elevationLowM: activity.elevationLowM ?? null,
-      avgHr: activity.avgHr,
-      maxHr: activity.maxHr,
-      avgPowerW: activity.avgPowerW,
-      maxPowerW: activity.maxPowerW,
-      avgCadence: activity.avgCadence,
-      maxCadence: activity.maxCadence,
-      trainingLoad: null, // Zwift does not report a TSS-like number
-      caloriesKcal: activity.caloriesKcal,
-      indoor: activity.indoor,
-      raw: activity.raw as unknown as Prisma.InputJsonValue,
-      // full detail-endpoint payload, as-received (see detail_raw column)
-      detailRaw: detail ? (detail as unknown as Prisma.InputJsonValue) : undefined,
-    },
-    select: { id: true },
-  });
-
-  await prisma.activitySource.upsert({
-    where: { activityId_connectionId: { activityId: created.id, connectionId: connection.id } },
-    create: {
-      activityId: created.id,
       connectionId: connection.id,
       sourceActivityId: externalId,
-      sourceUpdatedAt: new Date(),
+      type: activity.type,
+      startTime: activity.startTime,
+      distanceM: activity.distanceM,
     },
-    update: { sourceUpdatedAt: new Date() },
-  });
+    {
+      create: async (tx) => {
+        const created = await tx.activity.create({
+          data: {
+            userId: connection.userId,
+            headline: activity.headline,
+            workoutName: activity.workoutName,
+            type: activity.type,
+            startTime: activity.startTime,
+            durationS: activity.durationS,
+            movingTimeS: activity.movingTimeS,
+            distanceM: activity.distanceM ?? null,
+            avgSpeedMs: activity.avgSpeedMs ?? null,
+            maxSpeedMs: activity.maxSpeedMs ?? null,
+            totalAscentM: activity.totalAscentM ?? null,
+            totalDescentM: activity.totalDescentM ?? null,
+            elevationHighM: activity.elevationHighM ?? null,
+            elevationLowM: activity.elevationLowM ?? null,
+            avgHr: activity.avgHr,
+            maxHr: activity.maxHr,
+            avgPowerW: activity.avgPowerW,
+            maxPowerW: activity.maxPowerW,
+            avgCadence: activity.avgCadence,
+            maxCadence: activity.maxCadence,
+            trainingLoad: null, // Zwift does not report a TSS-like number
+            caloriesKcal: activity.caloriesKcal,
+            indoor: activity.indoor,
+            raw: activity.raw as unknown as Prisma.InputJsonValue,
+            // full detail-endpoint payload, as-received (see detail_raw column)
+            detailRaw: detail ? (detail as unknown as Prisma.InputJsonValue) : undefined,
+          },
+          select: { id: true },
+        });
 
-  if (series) {
-    await storeSeries(created.id, series);
-  }
-  return 'created';
+        if (series) await storeSeries(created.id, series, tx);
+        return created;
+      },
+    },
+  );
+
+  return result.created ? 'created' : 'updated';
 }
 
 /** Re-ingest one provider-confirmed edit (also the force re-sync path). The
