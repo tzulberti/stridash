@@ -29,7 +29,7 @@ maintainability. Check the box when the fix (and its test) has landed.
 > duplicates is still open. Note for S3: existing sessions holding the old JWT
 > refresh tokens must log in once — those tokens are intentionally no longer
 > accepted. Test-only follow-ups from the post-landing review are tracked as
-> **T1–T16** at the end of this file.
+> **T1–T22** at the end of this file.
 
 ---
 
@@ -477,13 +477,14 @@ and future MCP server both benefit from a generated client.
 8. **D6 + D7** (feed select, streaming export).
 9. **S8–S10, C1–C10** (hardening, lint, docs, deployment).
 
-## Test coverage gaps (post-D1/S1–S4 review)
+## Test coverage gaps
 
-The acceptance tests pass, but branch inspection found the gaps below. None of
-them imply current production behavior is wrong — each is a regression trap the
-suite would not catch today. Check the box when the test lands.
+The acceptance tests pass, but branch inspection and a coverage run found the
+gaps below. None imply current production behavior is wrong — each is a
+regression trap the suite would not catch today. Check the box when the test
+lands.
 
-### Ingest / dedupe
+### Recent changes — ingest / dedupe
 
 - [ ] **T1. Parallel race that only the advisory lock can prevent.** The
       current parallel test uses the same start + distance, so the
@@ -522,7 +523,7 @@ suite would not catch today. Check the box when the test lands.
       index exists. Needs a dedicated stepwise-migration harness — the normal
       setup applies everything to an empty DB, so this branch never runs.
 
-### Auth
+### Recent changes — auth
 
 - [ ] **T10. Per-email limiter bucket + proxy key.** Trip the per-email limit
       (not just per-IP) and assert 429 + `Retry-After`. Also unit-test
@@ -545,10 +546,49 @@ suite would not catch today. Check the box when the test lands.
 
 ### Tooling
 
-- [ ] **T16. Coverage reporting.** Install `@vitest/coverage-v8`, add a
-      `test:coverage` script, and record a baseline. No coverage reporter is
-      installed today, so this gap list came from branch inspection rather
-      than a percentage report.
+- [ ] **T16. Coverage reporting and gate.** Add `@vitest/coverage-v8` plus a
+      `test:coverage` script for server and web, exclude generated Prisma and
+      i18n data from the reported totals, record a baseline, and add a CI gate
+      that fails on regression (not a fixed high threshold). No reporter or
+      gate exists today.
+
+### Whole-codebase (measured 2026-11-18)
+
+Measured with `vitest run --coverage` over the server unit + integration suites
+and the web suite. Hand-written server `src/` is 42.1% lines / 41.1% functions;
+branch percentages are inflated by files whose functions never execute, and the
+raw totals include generated Prisma and i18n data — treat the numbers as
+directional.
+
+- [ ] **T17. Sync-service orchestration (Garmin, iGPSPORT, Omron, wellness).**
+      Mock provider HTTP clients and assert the full loop: list/pagination and
+      watermark, known-source skip, FIT/detail fetch failure → `PARTIAL`,
+      series persistence, gear/device fill, and `SyncLog` counts/status.
+      Current: `igpsport-sync.ts` 0%, `garmin-sync.ts` 2.1%,
+      `garmin-wellness.ts` 1.7%, `omron-sync.ts` 10.5%,
+      `garmin-tokens.ts` 10.5%.
+- [ ] **T18. Connection/sync routes.** Cover `routes/connections.ts` (26.1%):
+      auth/ownership, connect/disconnect, each provider's sync trigger,
+      provider error → `PARTIAL` vs `ERROR`, duplicate/concurrent sync handling
+      (S7), unknown ids, and response shapes.
+- [ ] **T19. Provider client error paths.** Garmin SSO (9.3%), cookie jar
+      (18.4%), Garmin API (26.2%), Zwift (24.7%), iGPSPORT (29.5%), Omron
+      (34.6%): token refresh/rotation, 401/429/5xx, timeouts, malformed
+      payloads, cookie persistence, and region fallback. This is the network
+      boundary and the least-covered executable code.
+- [ ] **T20. Web UI/component tests.** `App.tsx` is 3,206 lines at 0%;
+      `main.tsx` is also 0%. Add a DOM test harness (React Testing Library +
+      jsdom/happy-dom), extract testable components/hooks from the monolith
+      (see C1), and cover auth, activity list/detail, settings, and
+      loading/error/empty states. The 51.5% web total is almost all i18n
+      dictionaries.
+- [ ] **T21. Mobile tests.** The mobile app has no test runner or test files.
+      Add vitest (or jest) for pure helpers first — theme, formatting, API
+      client — then React Native Testing Library for the key screens.
+- [ ] **T22. Redaction/privacy tests.** `redact.ts` is 40.7%. Cover
+      case-insensitive token keys, nested objects/arrays, the depth limit,
+      short vs long values, non-string values, and assert tokens never reach a
+      sync log or client error response.
 
 ## Reproduction notes
 
