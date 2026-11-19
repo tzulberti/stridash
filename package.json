@@ -16,6 +16,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:ci": "STRIDASH_TEST_REUSE=1 npm test",
+    "audit:ci": "node scripts/audit-gate.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev:server": "npm run dev -w @stridash/server",

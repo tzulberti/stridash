@@ -1,0 +1,4 @@
+{
+  "GHSA-3g3m-2fjr-6pw4": "Expo CLI build chain (glob). Currently moderate; kept explicit here so a severity bump is reviewed alongside the mobile Expo upgrade rather than silently failing/passing CI.",
+  "GHSA-g3hv-75wg-m249": "Expo CLI build chain (minimatch). Currently moderate; same review trigger as the glob entry."
+}

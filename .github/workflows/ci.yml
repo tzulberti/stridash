@@ -22,6 +22,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Production-dependency gate: fails on high/critical advisories unless
+      # scripts/audit-allowlist.json records a reviewed, unreachable build-chain
+      # finding (currently the Expo CLI glob/minimatch chain).
+      - name: Dependency audit
+        run: npm run audit:ci
       - name: Prettier
         run: npm run format:check
       - name: ESLint

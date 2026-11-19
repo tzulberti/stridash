@@ -32,9 +32,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > **T1–T22** at the end of this file.
 >
 > **Status 2026-11-19:** S5 timing, S6 key management, S7 (except the queue),
-> S9 and the storage/logout half of S10 landed with tests. Still open: S5
-> registration enumeration (product decision), the S7 queue/worker, S8 (audit
-> gate + zod 4) and the S10 CSP/static-host headers.
+> S8 (audit gate + zod 4), S9 and the storage/logout half of S10 landed with
+> tests. Still open: S5 registration enumeration (product decision), the S7
+> queue/worker and the S10 CSP/static-host headers.
 
 ---
 
@@ -223,7 +223,7 @@ limited per user (`STRIDASH_CONNECTION_RATE_LIMIT`, default 10/15 min).
 Integration tests cover REVOKED → 409, two parallel calls → one 200 + one 409,
 lock release, and the create-route 429. The queue/worker remains the next step.
 
-### [ ] S8. Dependency CVEs + no audit gate — **Medium** (limited reachability)
+### [x] S8. Dependency CVEs + no audit gate — **Medium** (limited reachability)
 
 **Where:** `apps/server/package.json` (`zod@^3.24.1`, resolves 3.25.76),
 `apps/mobile` (expo transitives), CI workflow.
@@ -235,11 +235,21 @@ wholesale, and the real exposure is S4. Expo pulls high-severity transitives.
 
 **Tasks:**
 
-- [ ] Add `npm audit --omit=dev --audit-level=high` to CI (allow-list known
+- [x] Add `npm audit --omit=dev --audit-level=high` to CI (allow-list known
       Expo dev-chain noise explicitly).
-- [ ] Plan the zod 4 migration (`valibot`/`standard-schema` alternative is fine,
+- [x] Plan the zod 4 migration (`valibot`/`standard-schema` alternative is fine,
       but keep one validation lib).
-- [ ] Revisit mobile Expo major upgrade separately.
+- [x] Revisit mobile Expo major upgrade separately — deferred until Expo ships
+      patched `glob`/`minimatch`; the audit allow-list covers those entries.
+
+**Landed 2026-11-19:** `zod` is now 4.6.7 (one validation library; env,
+auth, data and connection schemas unchanged and all tests pass).
+`npm run audit:ci` runs `npm audit --omit=dev --json` and fails on
+high/critical advisories unless `scripts/audit-allowlist.json` has a justified
+entry; the known Expo CLI `glob`/`minimatch` findings are explicitly listed.
+CI runs the gate before the static checks. `--omit=dev` now reports no
+high/critical findings (six moderate Expo/hono entries remain below the gate).
+The mobile Expo major upgrade stays a separate follow-up.
 
 ### [x] S9. Small hardening items — **Low**
 
