@@ -4,6 +4,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../db.js';
 import { requireUserId } from '../auth.js';
 import type { Env } from '../env.js';
+import { safeErrorForLog } from '../redact.js';
 import { resyncGarminActivity } from '../services/garmin-sync.js';
 import { resyncIgpSportActivity } from '../services/igpsport-sync.js';
 import { resyncZwiftActivity } from '../services/zwift-sync.js';
@@ -496,7 +497,10 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
         results.push({ provider: s.connection.provider, status: 'ok' });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error(`[resync] ${s.connection.provider} ${s.sourceActivityId} failed:`, err);
+        console.error(
+          `[resync] ${s.connection.provider} ${s.sourceActivityId} failed:`,
+          safeErrorForLog(err),
+        );
         results.push({ provider: s.connection.provider, status: 'error', error: message });
       }
     }

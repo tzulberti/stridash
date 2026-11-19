@@ -27,6 +27,14 @@ const envSchema = z.object({
     .default(15 * 60 * 1000),
   /** Login attempts per email within one window (default 10/15 min). */
   STRIDASH_LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),
+  /** Connection attempts per user within one window (default 10/15 min). */
+  STRIDASH_CONNECTION_RATE_LIMIT: z.coerce.number().int().positive().default(10),
+  /** Window for the per-user connection-create limiter (default 15 min). */
+  STRIDASH_CONNECTION_RATE_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
   /**
    * Trust `X-Forwarded-For` for the client IP. Only enable when the server
    * sits behind a reverse proxy that overwrites the header — otherwise a

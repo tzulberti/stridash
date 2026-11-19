@@ -29,7 +29,7 @@ import {
   toZwiftSeries,
   type ZwiftSeries,
 } from '../providers/zwift/normalize.js';
-import { redactProviderDetail } from '../redact.js';
+import { safeErrorForLog } from '../redact.js';
 import { ingestActivity } from './activity-ingest.js';
 import type { ActivityInput } from '../providers/igpsport/normalize.js';
 import type { Env } from '../env.js';
@@ -492,15 +492,16 @@ export async function syncZwiftConnection(
       }
     }
   } catch (err) {
-    const detail =
+    const detail = safeErrorForLog(
       err instanceof ZwiftError
         ? {
             error: err.message,
             kind: err.kind,
             status: err.status,
-            providerDetail: redactProviderDetail(err.detail),
+            providerDetail: err.detail,
           }
-        : { error: err instanceof Error ? err.message : String(err) };
+        : { error: err instanceof Error ? err.message : String(err) },
+    );
     await prisma.syncLog.update({
       where: { id: result.syncLogId },
       data: { status: 'ERROR', errorDetail: detail as never, finishedAt: new Date() },

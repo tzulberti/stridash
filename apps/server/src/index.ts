@@ -4,6 +4,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { pathToFileURL } from 'node:url';
 import { loadEnv, type Env } from './env.js';
 import { UnauthorizedError } from './auth.js';
+import { safeErrorForLog } from './redact.js';
 import { authRoutes } from './routes/auth.js';
 import { connectionRoutes } from './routes/connections.js';
 import { dataRoutes } from './routes/data.js';
@@ -66,7 +67,7 @@ export function createApp(env: Env): TypedHono {
 
   app.onError((err, c) => {
     if (err instanceof UnauthorizedError) return c.json({ error: 'Unauthorized' }, 401);
-    console.error('[error]', err);
+    console.error('[error]', safeErrorForLog(err));
     return c.json({ error: 'Internal server error' }, 500);
   });
 

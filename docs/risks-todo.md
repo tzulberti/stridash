@@ -30,6 +30,11 @@ maintainability. Check the box when the fix (and its test) has landed.
 > refresh tokens must log in once — those tokens are intentionally no longer
 > accepted. Test-only follow-ups from the post-landing review are tracked as
 > **T1–T22** at the end of this file.
+>
+> **Status 2026-11-19:** S5 timing, S7 (except the queue), S9 and the
+> storage/logout half of S10 landed with tests. Still open: S5 registration
+> enumeration (product decision), S6 key management, the S7 queue/worker, S8
+> (audit gate + zod 4) and the S10 CSP/static-host headers.
 
 ---
 
@@ -149,6 +154,14 @@ product decision).
 
 **Acceptance:** unknown/wrong-password timings are statistically similar.
 
+**Landed 2026-11-19 (timing only):** login always runs one `verifyPassword`
+against a warmed dummy scrypt hash when the email is unknown, so the two
+failure paths do the same work. An integration test measures the medians and
+guards against a missing scrypt (ratio stays far from 1 ms vs 40 ms). Register
+still returns `409 Email already registered` — closing that requires the
+product decision above (generic `2xx` + verification email, or a deliberate
+acceptance of the enumeration).
+
 ---
 
 ## P1 — remaining security
@@ -178,19 +191,27 @@ product decision).
 
 **Problems / tasks:**
 
-- [ ] Reject non-`ACTIVE` connections with 409 (currently a REVOKED/PENDING row
+- [x] Reject non-`ACTIVE` connections with 409 (currently a REVOKED/PENDING row
       starts a sync and fails with 502 after logging a sync row).
-- [ ] Per-connection lock (`sync_started_at` / advisory lock) → concurrent
+- [x] Per-connection lock (`sync_started_at` / advisory lock) → concurrent
       syncs currently race token rotation (Garmin/Zwift refresh tokens rotate)
       and can create duplicate rows.
 - [ ] Move sync out of the request path: a queue/worker with progress polling.
       Garmin can run for minutes (2–20 s WAF delays × pages) and Node's default
       `requestTimeout` is 300 s.
-- [ ] Throttle `POST /connections` retries — repeated bad provider logins can
+- [x] Throttle `POST /connections` retries — repeated bad provider logins can
       lock the user's Garmin/Zwift account.
-- [ ] `GET /:id/syncs` is fine, but expose a "sync in progress" status.
+- [x] `GET /:id/syncs` is fine, but expose a "sync in progress" status.
 
 **Acceptance:** two parallel sync calls → one 202/409, one run; REVOKED → 409.
+
+**Landed 2026-11-19 (except queue):** `connections.sync_started_at` is claimed
+atomically before dispatch (15-minute stale takeover) and released in
+`finally`; non-`ACTIVE` rows answer 409 before any provider call. `GET
+/:id/syncs` returns `inProgress` + `syncStartedAt`. Connection creation is
+limited per user (`STRIDASH_CONNECTION_RATE_LIMIT`, default 10/15 min).
+Integration tests cover REVOKED → 409, two parallel calls → one 200 + one 409,
+lock release, and the create-route 429. The queue/worker remains the next step.
 
 ### [ ] S8. Dependency CVEs + no audit gate — **Medium** (limited reachability)
 
@@ -210,28 +231,42 @@ wholesale, and the real exposure is S4. Expo pulls high-severity transitives.
       but keep one validation lib).
 - [ ] Revisit mobile Expo major upgrade separately.
 
-### [ ] S9. Small hardening items — **Low**
+### [x] S9. Small hardening items — **Low**
 
-- [ ] `verifyToken` returns true for 429/5xx (`providers/garmin/api.ts:50`) —
+- [x] `verifyToken` returns true for 429/5xx (`providers/garmin/api.ts:50`) —
       a token that cannot sync gets stored. Treat only 2xx as valid.
-- [ ] Omron `gunzipSync` has no output cap
+- [x] Omron `gunzipSync` has no output cap
       (`providers/omron/client.ts:200`) — pass `maxOutputLength`.
-- [ ] Cookie jar (`providers/garmin/cookie-jar.ts`) does no public-suffix
+- [x] Cookie jar (`providers/garmin/cookie-jar.ts`) does no public-suffix
       check; a `Domain=.com` cookie would match any `*.com` host. Restrict to
       the known Garmin hosts.
-- [ ] `redact.ts` redacts by key name only; also scrub `Bearer …`/JWT-shaped
+- [x] `redact.ts` redacts by key name only; also scrub `Bearer …`/JWT-shaped
       substrings from free-text error messages.
-- [ ] `onError` logs full error objects; ensure no request bodies/credentials
+- [x] `onError` logs full error objects; ensure no request bodies/credentials
       can end up in them (add a logging test or a structured logger).
+
+**Landed 2026-11-19:** `verifyToken` accepts only 2xx; Omron decompression is
+capped at 20 MiB; the cookie jar accepts only `garmin.com`/`*.garmin.com`
+domains (and filters restored lists); `redactText`/`safeErrorForLog` scrub
+Bearer/JWT values from messages, stacks and nested details (used by
+`onError`, resync, wellness and the four sync-failure writers); `verifyToken`,
+cookie-jar, redaction and gzip-bomb unit tests added.
 
 ### [ ] S10. Web hardening — **Low/Medium**
 
 - [ ] CSP + `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`
       (either in the static host or a small server that serves the build).
-- [ ] `apps/web/src/App.tsx:27` touches `localStorage` at module scope — move
+- [x] `apps/web/src/App.tsx:27` touches `localStorage` at module scope — move
       behind a guard so tests/SSR don't depend on `window`.
-- [ ] Add an explicit "log out" action that calls the new logout endpoint and
+- [x] Add an explicit "log out" action that calls the new logout endpoint and
       clears both stores.
+
+**Landed 2026-11-19 (storage + logout):** token helpers moved to
+`apps/web/src/lib/token-storage.ts` with guarded `window`/storage access and
+unit tests (no-window, throwing storage, remember-me, store switching,
+clearing). The logout action already revoked the refresh family and cleared
+both stores; it now uses the shared helper too. CSP/static-host headers remain
+deferred with the deployment artifact work.
 
 ---
 

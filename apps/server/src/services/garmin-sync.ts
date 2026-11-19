@@ -31,6 +31,7 @@ import {
 } from '../providers/garmin/normalize.js';
 import { extractFitFromDownload } from '../providers/garmin/fitzip.js';
 import { parseFitFile } from '../providers/igpsport/fit.js';
+import { safeErrorForLog } from '../redact.js';
 import { upsertDevice } from './devices.js';
 import { ingestActivity as ingestActivityRow } from './activity-ingest.js';
 import type { FitRecord, FitSession } from '../providers/igpsport/normalize.js';
@@ -222,10 +223,11 @@ export async function syncGarminConnection(
       }
     }
   } catch (err) {
-    const detail =
+    const detail = safeErrorForLog(
       err instanceof GarminError
         ? { error: err.message, providerDetail: err.detail }
-        : { error: String(err) };
+        : { error: String(err) },
+    );
     await prisma.syncLog.update({
       where: { id: result.syncLogId },
       data: { status: 'ERROR', errorDetail: detail as never, finishedAt: new Date() },

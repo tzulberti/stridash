@@ -5,6 +5,10 @@
  * cookies set while walking the sign-in pages (SESSION, __cf_bm, JWT_WEB, …).
  * Garmin only ever needs *garmin.com* suffix matching plus host-only cookies,
  * so a simple name/domain bag is enough — no full RFC 6265 parser.
+ *
+ * The jar is deliberately restricted to garmin.com: a provider (or a
+ * compromised redirect) must not be able to plant a `Domain=.com` cookie that
+ * would then be sent to every host, nor can a non-Garmin origin seed cookies.
  */
 
 export interface StoredCookie {
@@ -16,11 +20,28 @@ export interface StoredCookie {
   host: string;
 }
 
+const GARMIN_DOMAIN = 'garmin.com';
+
+export function isGarminHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h === GARMIN_DOMAIN || h.endsWith(`.${GARMIN_DOMAIN}`);
+}
+
+/** A Domain attribute is acceptable only if it is garmin.com and domain-matches the origin. */
+function isAllowedDomain(domain: string, originHost: string): boolean {
+  const d = domain.toLowerCase();
+  const h = originHost.toLowerCase();
+  return isGarminHost(d) && (h === d || h.endsWith(`.${d}`));
+}
+
 export class CookieJar {
   private cookies = new Map<string, StoredCookie>();
 
   /** Merge every Set-Cookie of a response under the URL's host. */
   capture(url: URL, response: Response): void {
+    const host = url.hostname.toLowerCase();
+    if (!isGarminHost(host)) return;
+
     const headers =
       typeof (response.headers as { getSetCookie?: () => string[] }).getSetCookie === 'function'
         ? (response.headers as { getSetCookie: () => string[] }).getSetCookie()
@@ -35,19 +56,21 @@ export class CookieJar {
       const value = line.slice(eq + 1).trim();
       const domainMatch = /(?:^|;\s*)domain=([^;]+)/i.exec(raw);
       const domain = domainMatch?.[1]?.replace(/^\./, '').toLowerCase() ?? '';
+      if (domain && !isAllowedDomain(domain, host)) continue;
       // key: replacing a cookie never keyed on path (Garmin uses "/")
-      this.cookies.set(`${name}@${domain || url.hostname}`, {
+      this.cookies.set(`${name}@${domain || host}`, {
         name,
         value,
         domain,
-        host: url.hostname,
+        host,
       });
     }
   }
 
   /** Cookie header for the URL (browser-style suffix matching). */
   headerFor(url: URL): string | undefined {
-    const host = url.hostname;
+    const host = url.hostname.toLowerCase();
+    if (!isGarminHost(host)) return undefined;
     const parts: string[] = [];
     for (const { name, value, domain, host: cHost } of this.cookies.values()) {
       const owner = domain || cHost;
@@ -67,7 +90,11 @@ export class CookieJar {
 
   static fromList(list: StoredCookie[]): CookieJar {
     const jar = new CookieJar();
-    for (const c of list) jar.cookies.set(`${c.name}@${c.domain || c.host}`, c);
+    for (const c of list) {
+      if (!isGarminHost(c.host)) continue;
+      if (c.domain && !isAllowedDomain(c.domain, c.host)) continue;
+      jar.cookies.set(`${c.name}@${c.domain || c.host}`, c);
+    }
     return jar;
   }
 

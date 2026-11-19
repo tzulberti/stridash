@@ -35,6 +35,8 @@ const env: Env = {
   STRIDASH_AUTH_RATE_LIMIT: 1000,
   STRIDASH_AUTH_RATE_WINDOW_MS: 60_000,
   STRIDASH_LOGIN_RATE_LIMIT: 1000,
+  STRIDASH_CONNECTION_RATE_LIMIT: 1000,
+  STRIDASH_CONNECTION_RATE_WINDOW_MS: 60_000,
   STRIDASH_TRUST_PROXY: false,
 };
 const app = createApp(env);
@@ -122,6 +124,39 @@ describe('auth', () => {
     expect(unknown.status).toBe(401);
     expect(wrong.status).toBe(401);
     expect(await unknown.text()).toBe(await wrong.text()); // no user enumeration
+  });
+
+  it('does comparable scrypt work for unknown emails and wrong passwords (S5)', async () => {
+    const login = (email: string, password: string) =>
+      app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+    const time = async (email: string, password: string): Promise<number> => {
+      const start = performance.now();
+      const res = await login(email, password);
+      expect(res.status).toBe(401);
+      return performance.now() - start;
+    };
+
+    // warm the dummy hash + per-email limiter before measuring
+    await time('nobody@test.stridash', 'integration-pass-1');
+    await time('alice@test.stridash', 'wrong-password-1');
+
+    const unknown: number[] = [];
+    const wrong: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      unknown.push(await time('nobody@test.stridash', 'integration-pass-1'));
+      wrong.push(await time('alice@test.stridash', 'wrong-password-1'));
+    }
+    const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
+    const ratio = median(unknown) / median(wrong);
+
+    // a missing scrypt on the unknown-email path would be ~1 ms vs ~40 ms
+    expect(median(unknown)).toBeGreaterThan(10);
+    expect(ratio).toBeGreaterThan(0.2);
+    expect(ratio).toBeLessThan(5);
   });
 
   it('logs in and refreshes', async () => {
@@ -815,6 +850,113 @@ describe('connections', () => {
       ...authed(aliceToken, { method: 'POST' }),
     });
     expect(res.status).toBe(404);
+  });
+
+  it('rejects sync on a non-ACTIVE connection with 409 before calling the provider', async () => {
+    const aliceId = (
+      await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } })
+    ).id;
+    const revoked = await prisma.connection.create({
+      data: {
+        userId: aliceId,
+        provider: 'IGPSPORT',
+        providerUserId: 'revoked-sync-1',
+        status: 'REVOKED',
+        accessTokenEnc: encryptToken('revoked-access', env.STRIDASH_ENC_KEY),
+        scopes: [],
+      },
+    });
+
+    syncIgpSportConnection.mockClear();
+    const res = await app.request(`/api/connections/${revoked.id}/sync`, {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+    });
+    expect(res.status).toBe(409);
+    expect(String((await json(res)).error)).toContain('not active');
+    expect(syncIgpSportConnection).not.toHaveBeenCalled();
+  });
+
+  it('allows only one concurrent sync per connection and clears the lock', async () => {
+    const aliceId = (
+      await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } })
+    ).id;
+    const igps = await prisma.connection.create({
+      data: {
+        userId: aliceId,
+        provider: 'IGPSPORT',
+        providerUserId: 'parallel-sync-1',
+        status: 'ACTIVE',
+        accessTokenEnc: encryptToken('parallel-access', env.STRIDASH_ENC_KEY),
+        scopes: [],
+      },
+    });
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    syncIgpSportConnection.mockImplementationOnce(async () => {
+      await gate;
+      return { status: 'OK', itemsPulled: 0 };
+    });
+
+    const first = app.request(`/api/connections/${igps.id}/sync`, {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+    });
+
+    // wait for the first request to claim the lock
+    for (let i = 0; i < 100; i++) {
+      const row = await prisma.connection.findUniqueOrThrow({ where: { id: igps.id } });
+      if (row.syncStartedAt) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    const second = await app.request(`/api/connections/${igps.id}/sync`, {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+    });
+    expect(second.status).toBe(409);
+    const secondBody = await json(second);
+    expect(String(secondBody.error)).toContain('already in progress');
+
+    const status = await json(
+      await app.request(`/api/connections/${igps.id}/syncs`, authed(aliceToken)),
+    );
+    expect(status.inProgress).toBe(true);
+
+    release();
+    expect((await first).status).toBe(200);
+
+    const row = await prisma.connection.findUniqueOrThrow({ where: { id: igps.id } });
+    expect(row.syncStartedAt).toBeNull();
+    const after = await json(
+      await app.request(`/api/connections/${igps.id}/syncs`, authed(aliceToken)),
+    );
+    expect(after.inProgress).toBe(false);
+  });
+
+  it('throttles connection-create attempts per user', async () => {
+    const limitedApp = createApp({
+      ...env,
+      STRIDASH_CONNECTION_RATE_LIMIT: 1,
+      STRIDASH_CONNECTION_RATE_WINDOW_MS: 60_000,
+    });
+    const first = await limitedApp.request('/api/connections', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify({}), // invalid body also consumes the attempt
+    });
+    expect(first.status).toBe(400);
+
+    const second = await limitedApp.request('/api/connections', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify({}),
+    });
+    expect(second.status).toBe(429);
+    expect(second.headers.get('retry-after')).toBeTruthy();
   });
 
   it('a credential rejection answers 502 + reconnect message and marks ERROR', async () => {

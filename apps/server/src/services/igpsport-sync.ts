@@ -23,6 +23,7 @@ import {
   fitToActivity,
 } from '../providers/igpsport/normalize.js';
 import { parseFitFile } from '../providers/igpsport/fit.js';
+import { safeErrorForLog } from '../redact.js';
 import { upsertDevice } from './devices.js';
 import { ingestActivity } from './activity-ingest.js';
 import type { Env } from '../env.js';
@@ -240,10 +241,11 @@ export async function syncIgpSportConnection(
       }
     }
   } catch (err) {
-    const detail =
+    const detail = safeErrorForLog(
       err instanceof IgpSportError
         ? { error: err.message, providerDetail: err.detail }
-        : { error: String(err) };
+        : { error: String(err) },
+    );
     await prisma.syncLog.update({
       where: { id: result.syncLogId },
       data: { status: 'ERROR', errorDetail: detail as never, finishedAt: new Date() },

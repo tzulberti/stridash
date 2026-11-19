@@ -51,8 +51,23 @@ function tooManyRequests(c: Context, retryAfterS: number): Response {
   return c.json({ error: 'Too many requests — try again later' }, 429);
 }
 
+/**
+ * A real scrypt hash for a throwaway password. Login verifies against this
+ * when the email is unknown, so an attacker cannot distinguish "no such
+ * account" from "wrong password" by timing the response (registration still
+ * reveals existence via 409 — that is a deliberate product trade-off).
+ */
+let dummyPasswordHash: Promise<string> | null = null;
+function getDummyPasswordHash(): Promise<string> {
+  dummyPasswordHash ??= hashPassword('stridash-dummy-password-not-a-real-credential');
+  return dummyPasswordHash;
+}
+
 export function authRoutes(env: Env): Hono {
   const routes = new Hono();
+
+  // Pay the one-off scrypt cost at boot, not on the first unknown-email login.
+  void getDummyPasswordHash().catch(() => undefined);
 
   // Per-IP bucket for the whole auth surface (register/login/refresh/logout),
   // plus a narrower per-email bucket for password guessing. In-process state
@@ -123,7 +138,13 @@ export function authRoutes(env: Env): Hono {
     });
 
     const identity = user?.authIdentities[0];
-    if (!user || !identity || !(await verifyPassword(body.data.password, identity.secretHash))) {
+    // Always run one scrypt comparison, even for an unknown email, so the
+    // response time does not reveal whether the account exists.
+    const passwordOk = await verifyPassword(
+      body.data.password,
+      identity?.secretHash ?? (await getDummyPasswordHash()),
+    );
+    if (!user || !identity || !passwordOk) {
       // Same response for unknown email and wrong password — no user enumeration.
       return c.json({ error: 'Invalid email or password' }, 401);
     }

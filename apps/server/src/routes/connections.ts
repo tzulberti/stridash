@@ -21,12 +21,16 @@ import { verifyToken, getProfile } from '../providers/garmin/api.js';
 import { syncGarminConnection } from '../services/garmin-sync.js';
 import { syncGarminWellness } from '../services/garmin-wellness.js';
 import { decryptToken } from '../crypto.js';
-import { redactProviderDetail } from '../redact.js';
+import { redactProviderDetail, safeErrorForLog } from '../redact.js';
 import { syncIgpSportConnection } from '../services/igpsport-sync.js';
 import { syncOmronConnection } from '../services/omron-sync.js';
 import { syncZwiftConnection } from '../services/zwift-sync.js';
 import { ZwiftClient, ZwiftError, zwiftSignIn } from '../providers/zwift/client.js';
+import { FixedWindowLimiter } from '../rate-limit.js';
 import type { Env } from '../env.js';
+
+/** A manual sync older than this is assumed crashed and may be taken over. */
+const SYNC_STALE_MS = 15 * 60 * 1000;
 
 const omronConnectSchema = z.object({
   provider: z.literal('OMRON'),
@@ -137,6 +141,22 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     await next();
   });
 
+  // Repeated provider logins can lock the user's Garmin/Zwift account, so cap
+  // connection attempts per authenticated user. Only the create route counts.
+  const createLimiter = new FixedWindowLimiter(
+    env.STRIDASH_CONNECTION_RATE_LIMIT,
+    env.STRIDASH_CONNECTION_RATE_WINDOW_MS,
+  );
+  routes.use('/', async (c, next) => {
+    if (c.req.method !== 'POST') return next();
+    const result = createLimiter.consume(`connection:create:${c.get('userId')}`);
+    if (!result.allowed) {
+      c.header('Retry-After', String(result.retryAfterS));
+      return c.json({ error: 'Too many connection attempts — try again later' }, 429);
+    }
+    await next();
+  });
+
   // ── List ───────────────────────────────────────────────────────────────────
 
   routes.get('/', async (c) => {
@@ -151,6 +171,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         scopes: true,
         config: true,
         lastSyncedAt: true,
+        syncStartedAt: true,
         createdAt: true,
         updatedAt: true,
         // tokens deliberately excluded — never leave the server
@@ -238,6 +259,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         scopes: true,
         config: true,
         lastSyncedAt: true,
+        syncStartedAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -318,6 +340,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         scopes: true,
         config: true,
         lastSyncedAt: true,
+        syncStartedAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -404,6 +427,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         scopes: true,
         config: true,
         lastSyncedAt: true,
+        syncStartedAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -562,6 +586,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         scopes: true,
         config: true,
         lastSyncedAt: true,
+        syncStartedAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -655,6 +680,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         scopes: true,
         config: true,
         lastSyncedAt: true,
+        syncStartedAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -699,6 +725,49 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     ) {
       return c.json({ error: 'Provider does not support sync yet' }, 501);
     }
+    if (connection.status !== 'ACTIVE') {
+      return c.json(
+        { error: 'Connection is not active — reconnect the account', status: connection.status },
+        409,
+      );
+    }
+
+    // Atomic per-connection claim: concurrent syncs would race token rotation
+    // (Garmin/Zwift refresh tokens rotate) and can create duplicate rows.
+    // A stale claim (crashed process) is taken over after SYNC_STALE_MS.
+    const claimedAt = new Date();
+    const claim = await prisma.connection.updateMany({
+      where: {
+        id,
+        userId: c.get('userId'),
+        status: 'ACTIVE',
+        OR: [
+          { syncStartedAt: null },
+          { syncStartedAt: { lt: new Date(claimedAt.getTime() - SYNC_STALE_MS) } },
+        ],
+      },
+      data: { syncStartedAt: claimedAt },
+    });
+    if (claim.count === 0) {
+      const current = await prisma.connection.findFirst({
+        where: { id, userId: c.get('userId') },
+        select: { status: true, syncStartedAt: true },
+      });
+      if (!current) return c.json({ error: 'Not found' }, 404);
+      if (current.status !== 'ACTIVE') {
+        return c.json(
+          { error: 'Connection is not active — reconnect the account', status: current.status },
+          409,
+        );
+      }
+      return c.json(
+        {
+          error: 'Sync already in progress',
+          startedAt: current.syncStartedAt?.toISOString() ?? null,
+        },
+        409,
+      );
+    }
 
     try {
       if (connection.provider === 'ZWIFT') {
@@ -717,14 +786,21 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         try {
           wellness = await syncGarminWellness(env, connection);
         } catch (err) {
-          console.error('[garmin] wellness sync failed:', err);
+          console.error('[garmin] wellness sync failed:', safeErrorForLog(err));
         }
         return c.json({ result, wellness });
       }
       const result = await syncOmronConnection(env, connection);
       return c.json({ result });
     } catch (err) {
-      return syncFailure(c, err, id, connection.provider);
+      // await so a rethrown unknown error is handled before finally releases
+      return await syncFailure(c, err, id, connection.provider);
+    } finally {
+      // Release only the claim this request owns; a stale-takeover winner has
+      // a newer syncStartedAt and must not be unlocked by the old run.
+      await prisma.connection
+        .updateMany({ where: { id, syncStartedAt: claimedAt }, data: { syncStartedAt: null } })
+        .catch((err) => console.error('[sync] lock release failed:', safeErrorForLog(err)));
     }
   });
 
@@ -734,7 +810,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     const id = c.req.param('id');
     const connection = await prisma.connection.findFirst({
       where: { id, userId: c.get('userId') },
-      select: { id: true },
+      select: { id: true, syncStartedAt: true },
     });
     if (!connection) return c.json({ error: 'Not found' }, 404);
 
@@ -743,7 +819,15 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       orderBy: { startedAt: 'desc' },
       take: 50,
     });
-    return c.json({ items: logs, nextCursor: null });
+    const inProgress =
+      connection.syncStartedAt !== null &&
+      Date.now() - connection.syncStartedAt.getTime() < SYNC_STALE_MS;
+    return c.json({
+      items: logs,
+      nextCursor: null,
+      inProgress,
+      syncStartedAt: connection.syncStartedAt,
+    });
   });
 
   return routes;

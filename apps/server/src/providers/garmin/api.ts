@@ -47,7 +47,9 @@ export interface GarminProfile {
 /** One-liner check that the API tier accepts the token (garth `_verify_token`). */
 export async function verifyToken(bearer: string): Promise<boolean> {
   const { status } = await connectapiGet(VERIFY_PATH, bearer);
-  return status !== 401 && status !== 403;
+  // Only a 2xx proves the token works. 429/5xx mean "unknown", not "valid":
+  // storing such a token would leave a connection that cannot sync.
+  return status >= 200 && status < 300;
 }
 
 export async function getProfile(bearer: string): Promise<GarminProfile> {

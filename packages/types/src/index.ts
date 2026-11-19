@@ -108,6 +108,8 @@ export interface Connection {
   /** provider-specific non-secret config (e.g. { omron: { country } }) */
   config: Record<string, unknown> | null;
   lastSyncedAt: string | null;
+  /** manual-sync claim timestamp; non-null while a sync is running */
+  syncStartedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

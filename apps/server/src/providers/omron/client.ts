@@ -20,6 +20,13 @@ import { gunzipSync } from 'node:zlib';
 
 import type { OmronRegion } from './regions.js';
 
+/** Upper bound for a decompressed Omron response (a gzip bomb must not allocate GBs). */
+export const OMRON_MAX_RESPONSE_BYTES = 20 * 1024 * 1024;
+
+export function gunzipCapped(buf: Buffer, maxOutputLength = OMRON_MAX_RESPONSE_BYTES): Buffer {
+  return gunzipSync(buf, { maxOutputLength });
+}
+
 // ─── Protocol constants ──────────────────────────────────────────────────────
 
 export const OMRON_APP_VERSION = '011.004.00000'; // iOS OmronConnect build
@@ -197,7 +204,7 @@ export class OmronConnectV1 {
     const buf = Buffer.from(await res.arrayBuffer());
     let text: string;
     if (buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b) {
-      text = gunzipSync(buf).toString('utf8');
+      text = gunzipCapped(buf).toString('utf8');
     } else {
       text = buf.toString('utf8');
     }

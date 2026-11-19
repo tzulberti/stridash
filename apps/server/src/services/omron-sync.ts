@@ -13,7 +13,7 @@ import { decryptToken, encryptToken } from '../crypto.js';
 import { OmronConnectError, OmronConnectV1, type OmronDevice } from '../providers/omron/client.js';
 import { type OmronRegion, regionForCountry } from '../providers/omron/regions.js';
 import { normalizeSample } from '../providers/omron/normalize.js';
-import { redactProviderDetail } from '../redact.js';
+import { safeErrorForLog } from '../redact.js';
 import type { Env } from '../env.js';
 
 interface ConnectionLike {
@@ -171,14 +171,15 @@ export async function syncOmronConnection(
       }
     }
   } catch (err) {
-    const detail =
+    const detail = safeErrorForLog(
       err instanceof OmronConnectError
         ? {
             error: err.message,
             status: err.status,
-            providerDetail: redactProviderDetail(err.detail),
+            providerDetail: err.detail,
           }
-        : { error: err instanceof Error ? err.message : String(err) };
+        : { error: err instanceof Error ? err.message : String(err) },
+    );
     await prisma.syncLog.update({
       where: { id: result.syncLogId },
       data: {

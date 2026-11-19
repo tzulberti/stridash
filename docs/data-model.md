@@ -65,6 +65,7 @@ One row per (user, external account). Provider-agnostic by design.
 | `token_expires_at` | timestamptz | |
 | `scopes` | text[] | granted scopes, for audit |
 | `last_synced_at` | timestamptz | incremental-sync watermark |
+| `sync_started_at` | timestamptz | manual-sync claim; stale after 15 min |
 | `created_at` / `updated_at` | timestamptz | |
 
 Unique on (`user_id`, `provider`, `provider_user_id`).

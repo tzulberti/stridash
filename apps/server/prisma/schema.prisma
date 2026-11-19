@@ -192,6 +192,9 @@ model Connection {
   /// registration metadata). Contains no secrets — tokens live encrypted above.
   config          Json?
   lastSyncedAt    DateTime?        @map("last_synced_at") @db.Timestamptz(6)
+  /// Set while a manual sync is running. Atomic claim/release guards against
+  /// concurrent syncs (token rotation races); a stale value is taken over.
+  syncStartedAt   DateTime?        @map("sync_started_at") @db.Timestamptz(6)
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
 

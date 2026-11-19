@@ -16,53 +16,25 @@ import type {
   ChartChannelKey,
   ChartProvider,
 } from '@stridash/types';
+import {
+  clearTokens,
+  readToken,
+  remembering,
+  saveTokens,
+  storedRefreshToken,
+} from './lib/token-storage';
 
 // ─── API client ──────────────────────────────────────────────────────────────
-
-const TOKEN_KEY = 'stridash.accessToken';
-const REFRESH_KEY = 'stridash.refreshToken';
-
-/** "Remember me" puts both tokens in localStorage (survives the browser);
- * unchecked keeps them in sessionStorage (dies with the tab). */
-const TOKEN_STORES = [localStorage, sessionStorage] as const;
-
-function readToken(): string | null {
-  for (const s of TOKEN_STORES) {
-    const v = s.getItem(TOKEN_KEY);
-    if (v) return v;
-  }
-  return null;
-}
-
-function saveTokens(accessToken: string, refreshToken: string, remember: boolean): void {
-  for (const s of TOKEN_STORES) {
-    s.removeItem(TOKEN_KEY);
-    s.removeItem(REFRESH_KEY);
-  }
-  const store = remember ? localStorage : sessionStorage;
-  store.setItem(TOKEN_KEY, accessToken);
-  store.setItem(REFRESH_KEY, refreshToken);
-}
-
-function clearTokens(): void {
-  for (const s of TOKEN_STORES) {
-    s.removeItem(TOKEN_KEY);
-    s.removeItem(REFRESH_KEY);
-  }
-}
 
 /** Login decides the store; a refresh rotates in place in whichever store was
  * selected, so "remember" = tokens live in localStorage. */
 let onTokenChanged: (t: string) => void = () => {};
-function remembering(): boolean {
-  return !!(localStorage.getItem(REFRESH_KEY) || localStorage.getItem(TOKEN_KEY));
-}
 
 /** Try to mint a fresh pair from the stored refresh token (false once dead). */
 let refreshInflight: Promise<boolean> | null = null;
 async function tryRefresh(): Promise<boolean> {
   refreshInflight ??= (async () => {
-    const rt = sessionStorage.getItem(REFRESH_KEY) ?? localStorage.getItem(REFRESH_KEY);
+    const rt = storedRefreshToken();
     if (!rt) return false;
     try {
       const res = await fetch('/api/auth/refresh', {
@@ -3582,7 +3554,7 @@ export default function App() {
     // Revoke the refresh-token family server-side; the 15-minute access token
     // dies with the local copy. keepalive lets the request finish even if the
     // user navigates away immediately.
-    const refreshToken = sessionStorage.getItem(REFRESH_KEY) ?? localStorage.getItem(REFRESH_KEY);
+    const refreshToken = storedRefreshToken();
     if (refreshToken) {
       void fetch('/api/auth/logout', {
         method: 'POST',
