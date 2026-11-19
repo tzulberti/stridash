@@ -226,8 +226,8 @@ async function ensureSession(
       await prisma.connection.update({
         where: { id: connection.id },
         data: {
-          accessTokenEnc: encryptToken(tokens.accessToken, env.STRIDASH_ENC_KEY),
-          refreshTokenEnc: encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY),
+          accessTokenEnc: encryptToken(tokens.accessToken, env),
+          refreshTokenEnc: encryptToken(tokens.refreshToken, env),
           tokenExpiresAt: null, // protocol does not advertise expiry; refresh on every sync
           status: 'ACTIVE',
         },
@@ -236,13 +236,13 @@ async function ensureSession(
   });
 
   if (connection.accessTokenEnc) {
-    client.withAccessToken(decryptToken(connection.accessTokenEnc, env.STRIDASH_ENC_KEY));
+    client.withAccessToken(decryptToken(connection.accessTokenEnc, env));
     // Cheap validity probe: a token refresh would 400 with an invalid grant.
     // Kii tokens are long-lived; still, prefer refreshing when we have no idea.
     if (!connection.refreshTokenEnc) return client;
   }
   if (connection.refreshTokenEnc) {
-    const refreshToken = decryptToken(connection.refreshTokenEnc, env.STRIDASH_ENC_KEY);
+    const refreshToken = decryptToken(connection.refreshTokenEnc, env);
     await client.refresh(refreshToken);
   }
   return client;

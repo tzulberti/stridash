@@ -107,8 +107,10 @@ GitHub Actions and for repeated local runs:
 
 Server configuration lives in `apps/server/.env` (copy from
 `.env.example`; secrets can be regenerated with `openssl rand -hex 32`).
-The Expo app targets the API via `EXPO_PUBLIC_API_URL` — set it to your
-machine's LAN IP to test from a phone.
+**Production must sit behind a TLS-terminating reverse proxy** — see
+[`docs/deployment.md`](docs/deployment.md) for the proxy example and key
+rotation procedure. The Expo app targets the API via `EXPO_PUBLIC_API_URL` —
+set it to your machine's LAN IP to test from a phone.
 
 ## License notes
 

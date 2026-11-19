@@ -112,7 +112,7 @@ async function ensureClient(env: Env, connection: ConnectionLike): Promise<IgpSp
   const expMs = connection.tokenExpiresAt?.getTime() ?? 0;
   const tokenFresh = connection.accessTokenEnc && Date.now() < expMs - 60_000;
   if (tokenFresh) {
-    client.withAccessToken(decryptToken(connection.accessTokenEnc!, env.STRIDASH_ENC_KEY));
+    client.withAccessToken(decryptToken(connection.accessTokenEnc!, env));
     return client;
   }
 
@@ -121,7 +121,7 @@ async function ensureClient(env: Env, connection: ConnectionLike): Promise<IgpSp
   if (!connection.refreshTokenEnc) {
     throw new IgpSportError('No stored iGPSPORT credentials — reconnect the account');
   }
-  const password = decryptToken(connection.refreshTokenEnc, env.STRIDASH_ENC_KEY);
+  const password = decryptToken(connection.refreshTokenEnc, env);
   const login = await client.login(username, password);
   const claims = peekJwtClaims(login.access_token);
   const expiresAt = claims.exp
@@ -131,7 +131,7 @@ async function ensureClient(env: Env, connection: ConnectionLike): Promise<IgpSp
   await prisma.connection.update({
     where: { id: connection.id },
     data: {
-      accessTokenEnc: encryptToken(login.access_token, env.STRIDASH_ENC_KEY),
+      accessTokenEnc: encryptToken(login.access_token, env),
       // keep the password blob as-is (refreshTokenEnc)
       tokenExpiresAt: expiresAt,
       status: 'ACTIVE',

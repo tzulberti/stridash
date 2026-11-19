@@ -183,7 +183,7 @@ model Connection {
   provider        Provider
   providerUserId  String           @map("provider_user_id")
   status          ConnectionStatus @default(PENDING)
-  /// AES-256-GCM (key from STRIDASH_ENC_KEY env). Never leaves the server.
+  /// AES-256-GCM (v2 key id/salt; provider key preferred). Never leaves the server.
   accessTokenEnc  String?          @map("access_token_enc")
   refreshTokenEnc String?          @map("refresh_token_enc")
   tokenExpiresAt  DateTime?        @map("token_expires_at") @db.Timestamptz(6)

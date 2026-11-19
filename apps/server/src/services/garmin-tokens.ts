@@ -31,9 +31,9 @@ export async function ensureGarminTokens(
   if (!connection.accessTokenEnc) {
     throw new GarminError('CONNECTION', 'No Garmin credentials stored — reconnect the account');
   }
-  const diToken = decryptToken(connection.accessTokenEnc, env.STRIDASH_ENC_KEY);
+  const diToken = decryptToken(connection.accessTokenEnc, env);
   const diRefreshToken = connection.refreshTokenEnc
-    ? decryptToken(connection.refreshTokenEnc, env.STRIDASH_ENC_KEY)
+    ? decryptToken(connection.refreshTokenEnc, env)
     : undefined;
   const cfg = connection.config as { garmin?: { diClientId?: string } } | null;
   const diClientId = cfg?.garmin?.diClientId ?? 'GARMIN_CONNECT_MOBILE_ANDROID_DI';
@@ -44,10 +44,8 @@ export async function ensureGarminTokens(
     await prisma.connection.update({
       where: { id: connection.id },
       data: {
-        accessTokenEnc: encryptToken(next.diToken, env.STRIDASH_ENC_KEY),
-        refreshTokenEnc: next.diRefreshToken
-          ? encryptToken(next.diRefreshToken, env.STRIDASH_ENC_KEY)
-          : null,
+        accessTokenEnc: encryptToken(next.diToken, env),
+        refreshTokenEnc: next.diRefreshToken ? encryptToken(next.diRefreshToken, env) : null,
         tokenExpiresAt: null, // refreshed below right after — claims re-checked cheaply
         status: 'ACTIVE',
       },

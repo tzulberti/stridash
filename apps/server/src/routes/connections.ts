@@ -240,15 +240,15 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         provider: 'OMRON',
         providerUserId,
         status: 'ACTIVE',
-        accessTokenEnc: encryptToken(tokens.accessToken, env.STRIDASH_ENC_KEY),
-        refreshTokenEnc: encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY),
+        accessTokenEnc: encryptToken(tokens.accessToken, env),
+        refreshTokenEnc: encryptToken(tokens.refreshToken, env),
         scopes: ['WEIGHT', 'BPM'],
         config: { omron: { country: country.toUpperCase() } } as never,
       },
       update: {
         status: 'ACTIVE',
-        accessTokenEnc: encryptToken(tokens.accessToken, env.STRIDASH_ENC_KEY),
-        refreshTokenEnc: encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY),
+        accessTokenEnc: encryptToken(tokens.accessToken, env),
+        refreshTokenEnc: encryptToken(tokens.refreshToken, env),
         config: { omron: { country: country.toUpperCase() } } as never,
       },
       select: {
@@ -317,18 +317,18 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         provider: 'IGPSPORT',
         providerUserId,
         status: 'ACTIVE',
-        accessTokenEnc: encryptToken(token, env.STRIDASH_ENC_KEY),
+        accessTokenEnc: encryptToken(token, env),
         // NOTE: the iGPSPORT API has no usable refresh-token grant; the
         // account password (AES-256-GCM encrypted) re-authenticates on expiry.
-        refreshTokenEnc: encryptToken(password, env.STRIDASH_ENC_KEY),
+        refreshTokenEnc: encryptToken(password, env),
         tokenExpiresAt: expiresAt,
         scopes: ['activities'],
         config: { igpsport: { region, username } } as never,
       },
       update: {
         status: 'ACTIVE',
-        accessTokenEnc: encryptToken(token, env.STRIDASH_ENC_KEY),
-        refreshTokenEnc: encryptToken(password, env.STRIDASH_ENC_KEY),
+        accessTokenEnc: encryptToken(token, env),
+        refreshTokenEnc: encryptToken(password, env),
         tokenExpiresAt: expiresAt,
         config: { igpsport: { region, username } } as never,
       },
@@ -402,20 +402,16 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         provider: 'ZWIFT',
         providerUserId,
         status: 'ACTIVE',
-        accessTokenEnc: encryptToken(tokens.accessToken, env.STRIDASH_ENC_KEY),
-        refreshTokenEnc: tokens.refreshToken
-          ? encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY)
-          : null,
+        accessTokenEnc: encryptToken(tokens.accessToken, env),
+        refreshTokenEnc: tokens.refreshToken ? encryptToken(tokens.refreshToken, env) : null,
         tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
         scopes: ['activities'],
         config: { zwift: { username } } as never,
       },
       update: {
         status: 'ACTIVE',
-        accessTokenEnc: encryptToken(tokens.accessToken, env.STRIDASH_ENC_KEY),
-        refreshTokenEnc: tokens.refreshToken
-          ? encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY)
-          : null,
+        accessTokenEnc: encryptToken(tokens.accessToken, env),
+        refreshTokenEnc: tokens.refreshToken ? encryptToken(tokens.refreshToken, env) : null,
         tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
         config: { zwift: { username } } as never,
       },
@@ -485,12 +481,12 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
           provider: 'GARMIN',
           providerUserId: email,
           status: 'PENDING',
-          refreshTokenEnc: encryptToken(JSON.stringify(outcome), env.STRIDASH_ENC_KEY),
+          refreshTokenEnc: encryptToken(JSON.stringify(outcome), env),
           config: { garmin: { email, pendingMfaMethod: outcome.method } } as never,
         },
         update: {
           status: 'PENDING',
-          refreshTokenEnc: encryptToken(JSON.stringify(outcome), env.STRIDASH_ENC_KEY),
+          refreshTokenEnc: encryptToken(JSON.stringify(outcome), env),
           accessTokenEnc: null,
           tokenExpiresAt: null,
           config: { garmin: { email, pendingMfaMethod: outcome.method } } as never,
@@ -561,20 +557,16 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         provider: 'GARMIN',
         providerUserId,
         status: 'ACTIVE',
-        accessTokenEnc: encryptToken(di.diToken, env.STRIDASH_ENC_KEY),
-        refreshTokenEnc: di.diRefreshToken
-          ? encryptToken(di.diRefreshToken, env.STRIDASH_ENC_KEY)
-          : null,
+        accessTokenEnc: encryptToken(di.diToken, env),
+        refreshTokenEnc: di.diRefreshToken ? encryptToken(di.diRefreshToken, env) : null,
         tokenExpiresAt: peekJwtExpMs(di.diToken) ? new Date(peekJwtExpMs(di.diToken)!) : null,
         scopes: ['activities'],
         config: { garmin: { email, diClientId: di.diClientId } } as never,
       },
       update: {
         status: 'ACTIVE',
-        accessTokenEnc: encryptToken(di.diToken, env.STRIDASH_ENC_KEY),
-        refreshTokenEnc: di.diRefreshToken
-          ? encryptToken(di.diRefreshToken, env.STRIDASH_ENC_KEY)
-          : null,
+        accessTokenEnc: encryptToken(di.diToken, env),
+        refreshTokenEnc: di.diRefreshToken ? encryptToken(di.diRefreshToken, env) : null,
         tokenExpiresAt: peekJwtExpMs(di.diToken) ? new Date(peekJwtExpMs(di.diToken)!) : null,
         config: { garmin: { email, diClientId: di.diClientId } } as never,
       },
@@ -611,9 +603,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
 
     let ctx: MfaContext;
     try {
-      ctx = JSON.parse(
-        decryptToken(connection.refreshTokenEnc, env.STRIDASH_ENC_KEY),
-      ) as MfaContext;
+      ctx = JSON.parse(decryptToken(connection.refreshTokenEnc, env)) as MfaContext;
     } catch {
       return c.json({ error: 'Stored MFA state is invalid — reconnect the account' }, 409);
     }
@@ -660,10 +650,8 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       data: {
         status: 'ACTIVE',
         providerUserId,
-        accessTokenEnc: encryptToken(di.diToken, env.STRIDASH_ENC_KEY),
-        refreshTokenEnc: di.diRefreshToken
-          ? encryptToken(di.diRefreshToken, env.STRIDASH_ENC_KEY)
-          : null,
+        accessTokenEnc: encryptToken(di.diToken, env),
+        refreshTokenEnc: di.diRefreshToken ? encryptToken(di.diRefreshToken, env) : null,
         tokenExpiresAt: exp ? new Date(exp) : null,
         config: {
           garmin: {

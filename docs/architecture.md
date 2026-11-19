@@ -42,7 +42,11 @@ logical parts:
 
 Auth for the *app* itself: email+password issuing short-lived JWT access
 tokens + rotating refresh tokens. Provider tokens are stored encrypted
-(AES-256-GCM; key in `STRIDASH_ENC_KEY` env var — documented secret hygiene).
+(AES-256-GCM). `STRIDASH_ENC_KEY` is required and decrypts legacy `v1` rows;
+new rows use the optional dedicated `STRIDASH_PROVIDER_ENC_KEY` with a
+versioned `v2:<keyId>:<salt>:…` format so keys can be rotated and re-encrypted.
+See [`docs/deployment.md`](deployment.md) for the rotation procedure and TLS
+requirements.
 
 ### `apps/mobile` / `apps/web` — Expo app
 

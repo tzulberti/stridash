@@ -12,6 +12,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
+    "crypto:reencrypt": "tsx --env-file=.env src/scripts/reencrypt-tokens.ts",
     "start": "tsx --env-file=.env src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

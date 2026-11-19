@@ -31,10 +31,10 @@ maintainability. Check the box when the fix (and its test) has landed.
 > accepted. Test-only follow-ups from the post-landing review are tracked as
 > **T1–T22** at the end of this file.
 >
-> **Status 2026-11-19:** S5 timing, S7 (except the queue), S9 and the
-> storage/logout half of S10 landed with tests. Still open: S5 registration
-> enumeration (product decision), S6 key management, the S7 queue/worker, S8
-> (audit gate + zod 4) and the S10 CSP/static-host headers.
+> **Status 2026-11-19:** S5 timing, S6 key management, S7 (except the queue),
+> S9 and the storage/logout half of S10 landed with tests. Still open: S5
+> registration enumeration (product decision), the S7 queue/worker, S8 (audit
+> gate + zod 4) and the S10 CSP/static-host headers.
 
 ---
 
@@ -166,7 +166,7 @@ acceptance of the enumeration).
 
 ## P1 — remaining security
 
-### [ ] S6. Provider credentials & key management — **Medium**
+### [x] S6. Provider credentials & key management — **Medium**
 
 **Where:** `apps/server/src/providers/igpsport/client.ts` (password stored as
 `refreshTokenEnc`), `crypto.ts:47-48,52-60` (fixed KDF salt, `v1` ciphertext),
@@ -174,15 +174,25 @@ acceptance of the enumeration).
 
 **Problems / tasks:**
 
-- [ ] iGPSPORT account passwords are stored reversibly (required by the API);
+- [x] iGPSPORT account passwords are stored reversibly (required by the API);
       document the blast radius and prefer a separate encryption key for
       provider credentials.
-- [ ] Ciphertext has no key id → rotation needs a `v2:<keyId>:…` scheme and a
+- [x] Ciphertext has no key id → rotation needs a `v2:<keyId>:…` scheme and a
       re-encrypt migration.
-- [ ] Derive the key once at startup (see S2), with a random per-deployment
+- [x] Derive the key once at startup (see S2), with a random per-deployment
       salt instead of the fixed `'stridash-connections'`.
-- [ ] Document "TLS-terminating reverse proxy required"; add HSTS at the proxy.
+- [x] Document "TLS-terminating reverse proxy required"; add HSTS at the proxy.
       Mobile defaults to `http://localhost:3000` — warn in dev docs.
+
+**Landed 2026-11-19:** `v2:<keyId>:<salt>:<iv>:<tag>:<ct>` ciphertext embeds
+the key id and KDF salt; `v1` rows still decrypt with `STRIDASH_ENC_KEY` and
+the legacy salt. New writes prefer `STRIDASH_PROVIDER_ENC_KEY` (so once rows
+are re-encrypted a leaked app key no longer exposes iGPSPORT passwords);
+`STRIDASH_ENC_OLD_KEYS` supports rotation, and
+`npm run crypto:reencrypt -w @stridash/server` re-writes rows
+(with `--dry-run`). `docs/deployment.md` documents TLS, HSTS and the rotation
+sequence. Crypto tests cover v1→v2 compatibility, provider/app key separation,
+salt changes, retirement keys and tamper rejection.
 
 ### [ ] S7. Sync endpoints can be abused / race — **Medium**
 

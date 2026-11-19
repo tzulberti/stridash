@@ -1,7 +1,7 @@
 /** Live protocol probe: refresh the stored Zwift token pair, fetch one
  * activity's detail, print its SHAPE (keys only, no secrets). */
 import { prisma } from '../src/db.js';
-import { decryptToken } from '../src/crypto.js';
+import { decryptToken, encryptToken } from '../src/crypto.js';
 import { ZwiftClient, zwiftRefresh } from '../src/providers/zwift/client.js';
 import { loadEnv } from '../src/env.js';
 
@@ -23,16 +23,16 @@ if (!conn) {
   process.exit(1);
 }
 
-let access = decryptToken(conn.accessTokenEnc!, env.STRIDASH_ENC_KEY);
+let access = decryptToken(conn.accessTokenEnc!, env);
 const expMs = conn.tokenExpiresAt ? new Date(conn.tokenExpiresAt).getTime() : 0;
 if (!access || Date.now() > expMs - 60_000) {
-  const refresh = decryptToken(conn.refreshTokenEnc!, env.STRIDASH_ENC_KEY);
+  const refresh = decryptToken(conn.refreshTokenEnc!, env);
   const tokens = await zwiftRefresh(refresh);
   await prisma.connection.update({
     where: { id: conn.id },
     data: {
-      accessTokenEnc: tokens.accessToken,
-      refreshTokenEnc: tokens.refreshToken,
+      accessTokenEnc: encryptToken(tokens.accessToken, env),
+      refreshTokenEnc: tokens.refreshToken ? encryptToken(tokens.refreshToken, env) : undefined,
       tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
     },
   });

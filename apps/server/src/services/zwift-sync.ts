@@ -66,7 +66,7 @@ async function ensureClient(env: Env, connection: ConnectionLike): Promise<Zwift
   const client = new ZwiftClient(connection.providerUserId);
 
   const storedAccess = connection.accessTokenEnc
-    ? decryptToken(connection.accessTokenEnc, env.STRIDASH_ENC_KEY)
+    ? decryptToken(connection.accessTokenEnc, env)
     : '';
   if (storedAccess && Date.now() < expMs - 60_000) {
     return client.withAccessToken(storedAccess); // fast path: still valid
@@ -74,7 +74,7 @@ async function ensureClient(env: Env, connection: ConnectionLike): Promise<Zwift
 
   // rotate: the refresh grant must use client_id "Zwift Game Client" (baked in)
   const refreshToken = connection.refreshTokenEnc
-    ? decryptToken(connection.refreshTokenEnc, env.STRIDASH_ENC_KEY)
+    ? decryptToken(connection.refreshTokenEnc, env)
     : '';
   if (!refreshToken) {
     throw new ZwiftError('CONNECTION', 'No stored Zwift credentials — reconnect the account');
@@ -89,10 +89,8 @@ async function zwiftRefreshWithPersist(env: Env, connection: ConnectionLike, ref
   await prisma.connection.update({
     where: { id: connection.id },
     data: {
-      accessTokenEnc: encryptToken(tokens.accessToken, env.STRIDASH_ENC_KEY),
-      refreshTokenEnc: tokens.refreshToken
-        ? encryptToken(tokens.refreshToken, env.STRIDASH_ENC_KEY)
-        : undefined,
+      accessTokenEnc: encryptToken(tokens.accessToken, env),
+      refreshTokenEnc: tokens.refreshToken ? encryptToken(tokens.refreshToken, env) : undefined,
       tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
       status: 'ACTIVE',
     },
