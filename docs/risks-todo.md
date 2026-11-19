@@ -32,9 +32,8 @@ maintainability. Check the box when the fix (and its test) has landed.
 > **T1–T22** at the end of this file.
 >
 > **Status 2026-11-19:** S5 timing, S6 key management, S7 (except the queue),
-> S8 (audit gate + zod 4), S9 and the storage/logout half of S10 landed with
-> tests. Still open: S5 registration enumeration (product decision), the S7
-> queue/worker and the S10 CSP/static-host headers.
+> S8 (audit gate + zod 4), S9 and S10 landed with tests. Still open: S5
+> registration enumeration (product decision) and the S7 queue/worker.
 
 ---
 
@@ -272,9 +271,9 @@ Bearer/JWT values from messages, stacks and nested details (used by
 `onError`, resync, wellness and the four sync-failure writers); `verifyToken`,
 cookie-jar, redaction and gzip-bomb unit tests added.
 
-### [ ] S10. Web hardening — **Low/Medium**
+### [x] S10. Web hardening — **Low/Medium**
 
-- [ ] CSP + `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`
+- [x] CSP + `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`
       (either in the static host or a small server that serves the build).
 - [x] `apps/web/src/App.tsx:27` touches `localStorage` at module scope — move
       behind a guard so tests/SSR don't depend on `window`.
@@ -285,8 +284,15 @@ cookie-jar, redaction and gzip-bomb unit tests added.
 `apps/web/src/lib/token-storage.ts` with guarded `window`/storage access and
 unit tests (no-window, throwing storage, remember-me, store switching,
 clearing). The logout action already revoked the refresh family and cleared
-both stores; it now uses the shared helper too. CSP/static-host headers remain
-deferred with the deployment artifact work.
+both stores; it now uses the shared helper too.
+
+**Landed 2026-11-19 (headers):** `security-headers.ts` defines the production
+CSP (`script-src 'self'`, no `unsafe-eval`, `frame-ancestors`/`object-src`
+none, same-origin `connect-src`) plus `X-Content-Type-Options`,
+`X-Frame-Options`, `Referrer-Policy` and `Permissions-Policy`. The Vite build
+emits them as `dist/_headers` for Netlify/Cloudflare Pages, with unit tests;
+`docs/deployment.md` includes the equivalent nginx config. `style-src` keeps
+`'unsafe-inline'` only for React's inline chart-colour attributes.
 
 ---
 

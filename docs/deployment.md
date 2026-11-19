@@ -50,9 +50,36 @@ server {
 - The mobile app's `http://localhost:3000` default is for local development
   only. Point `EXPO_PUBLIC_API_URL` at the HTTPS host before testing from a
   phone.
-- Add `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options` and a CSP
-  at the static host/proxy when the web build is deployed (S10 still tracks the
-  concrete CSP).
+## Web dashboard headers
+
+`npm run build -w @stridash/web` emits `dist/_headers` with the CSP and
+hardening headers. Netlify and Cloudflare Pages read that file automatically;
+for nginx, serve `dist` and repeat the same headers:
+
+```nginx
+root /srv/stridash/apps/web/dist;
+
+location / {
+  try_files $uri /index.html;
+  add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "DENY" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+  add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+}
+
+location /api/ {
+  proxy_pass http://127.0.0.1:3000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto https;
+}
+```
+
+The CSP assumes the API is on the same origin (`connect-src 'self'`); add the
+API origin explicitly if the dashboard is hosted separately. `style-src` must
+keep `'unsafe-inline'` because the dashboard writes inline style attributes for
+chart colours — scripts stay locked to `'self'` with no `'unsafe-eval'`.
 
 ## Encryption keys
 
