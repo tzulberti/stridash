@@ -81,6 +81,20 @@ API origin explicitly if the dashboard is hosted separately. `style-src` must
 keep `'unsafe-inline'` because the dashboard writes inline style attributes for
 chart colours — scripts stay locked to `'self'` with no `'unsafe-eval'`.
 
+## Sync worker
+
+Manual syncs run in an in-process queue, not in the HTTP request path:
+`POST /api/connections/:id/sync` claims the per-connection DB lock, queues the
+job and returns `202`. The dashboard polls `GET /api/connections/:id/syncs`
+until `inProgress` is false.
+
+The queue is deliberately single-node. On startup the server clears locks (and
+marks unfinished logs) older than 15 minutes, and `SIGINT`/`SIGTERM` drain
+in-flight jobs for up to 30 seconds before exiting. Run **one server process**
+against a database; multiple replicas would not corrupt data thanks to the DB
+claim, but one replica's startup recovery could mark another replica's
+long-running sync as interrupted.
+
 ## Encryption keys
 
 | Variable | Purpose |

@@ -285,6 +285,8 @@ export const en = {
   'conn.trustedDevice': 'your trusted device',
   'conn.connected': '{provider} connected — data flows in on the next sync',
   'conn.anotherSync': 'another sync is already running',
+  'conn.syncTimeout': 'the sync is taking too long — check the connection and try again',
+  'conn.syncFailedCheck': 'sync failed — check the connection and try again',
 
   // ─── sync result summary (one line per forced sync) ───────────────────────
   'sync.summary': 'synced — {items}',

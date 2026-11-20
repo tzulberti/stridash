@@ -270,6 +270,8 @@ export const ru: Record<MsgKey, string> = {
   'conn.trustedDevice': 'ваше доверенное устройство',
   'conn.connected': '{provider} подключён — данные поступят при следующей синхронизации',
   'conn.anotherSync': 'другая синхронизация уже идёт',
+  'conn.syncTimeout': 'синхронизация идёт слишком долго — проверь подключение и попробуй снова',
+  'conn.syncFailedCheck': 'синхронизация не удалась — проверь подключение и попробуй снова',
 
   'sync.summary': 'синхронизировано — {items}',
   'sync.nothingNew': 'синхронизировано — ничего нового',

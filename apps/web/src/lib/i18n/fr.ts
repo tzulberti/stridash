@@ -272,6 +272,8 @@ export const fr: Record<MsgKey, string> = {
   'conn.trustedDevice': 'votre appareil de confiance',
   'conn.connected': '{provider} connecté — les données arriveront à la prochaine synchronisation',
   'conn.anotherSync': 'une autre synchronisation est déjà en cours',
+  'conn.syncTimeout': 'la synchronisation prend trop de temps — vérifie la connexion et réessaie',
+  'conn.syncFailedCheck': 'la synchronisation a échoué — vérifie la connexion et réessaie',
 
   'sync.summary': 'synchronisé — {items}',
   'sync.nothingNew': 'synchronisé — rien de nouveau',

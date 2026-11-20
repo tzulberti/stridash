@@ -271,6 +271,8 @@ export const ko: Record<MsgKey, string> = {
   'conn.trustedDevice': '신뢰하는 기기',
   'conn.connected': '{provider} 연결됨 — 다음 동기화에서 데이터가 들어옵니다',
   'conn.anotherSync': '다른 동기화가 이미 진행 중입니다',
+  'conn.syncTimeout': '동기화가 너무 오래 걸립니다 — 연결을 확인하고 다시 시도하세요',
+  'conn.syncFailedCheck': '동기화에 실패했습니다 — 연결을 확인하고 다시 시도하세요',
 
   'sync.summary': '동기화 완료 — {items}',
   'sync.nothingNew': '동기화 완료 — 새 항목 없음',

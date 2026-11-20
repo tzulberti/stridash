@@ -23,6 +23,7 @@ import {
   saveTokens,
   storedRefreshToken,
 } from './lib/token-storage';
+import { summarizeSyncStatus, type SyncStatusJson } from './lib/sync-summary';
 
 // ─── API client ──────────────────────────────────────────────────────────────
 
@@ -101,25 +102,6 @@ async function api<T>(
     throw new Error(`${json?.error ?? res.statusText}${detail}`);
   }
   return json;
-}
-
-// ─── Force-sync result → one readable line ───────────────────────────────────
-
-type SyncResponseJson = {
-  result?: { itemsCreated?: number; itemsUpdated?: number };
-  wellness?: { sleepUpserted?: number; daysUpserted?: number };
-};
-
-/** one line per connection sync: what was pulled/changed (Garmin adds the
- * wellness pass; empty responses read as "nothing new") */
-function summarizeSync(res: SyncResponseJson): string {
-  const r = res.result;
-  const parts: string[] = [];
-  if (r?.itemsCreated) parts.push(t('sync.new', { n: r.itemsCreated }));
-  if (r?.itemsUpdated) parts.push(t('sync.updated', { n: r.itemsUpdated }));
-  if (res.wellness?.sleepUpserted) parts.push(t('sync.sleep', { n: res.wellness.sleepUpserted }));
-  if (res.wellness?.daysUpserted) parts.push(t('sync.daily', { n: res.wellness.daysUpserted }));
-  return parts.length ? t('sync.summary', { items: parts.join(' · ') }) : t('sync.nothingNew');
 }
 
 // ─── Small SVG chart (no chart deps — keeps bundle light and honest) ─────────
@@ -3413,16 +3395,34 @@ export default function App() {
   }
 
   /** force-sync one connection; one at a time so a slow Garmin history scan
-   * doesn't hammer providers in parallel. Returns what happened so the
-   * connections page can show it on the card that was tapped. */
+   * doesn't hammer providers in parallel. The server queues the job and
+   * returns 202, so poll the sync history until the lock clears. */
   async function syncConnection(id: string): Promise<{ ok: boolean; text: string }> {
     if (!token || syncingId) return { ok: false, text: t('conn.anotherSync') };
     setSyncingId(id);
+    const requestedAt = Date.now();
     try {
-      const res = await api<SyncResponseJson>(`/connections/${id}/sync`, { method: 'POST', token });
+      const accepted = await api<{ syncStartedAt?: string | null }>(`/connections/${id}/sync`, {
+        method: 'POST',
+        token,
+      });
+      const serverStartedAt = accepted.syncStartedAt ? Date.parse(accepted.syncStartedAt) : NaN;
+      const logBaseline = Number.isFinite(serverStartedAt) ? serverStartedAt : requestedAt;
+
+      let status: SyncStatusJson | null = null;
+      while (Date.now() - requestedAt < 15 * 60 * 1000) {
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        status = await api<SyncStatusJson>(`/connections/${id}/syncs`, { token });
+        if (!status.inProgress) break;
+      }
+      if (!status || status.inProgress) {
+        await load(token).catch(() => undefined);
+        return { ok: false, text: t('conn.syncTimeout') };
+      }
+
       // pull the fresh rows + lastSyncedAt into the dashboard
       await load(token);
-      return { ok: true, text: summarizeSync(res) };
+      return summarizeSyncStatus(status, logBaseline);
     } catch (err) {
       // rejected credentials flip the connection to ERROR server-side —
       // reload so the card/pill shows red instead of a stale ACTIVE state

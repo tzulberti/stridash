@@ -34,6 +34,9 @@ Key design principles:
 - **Sync logic lives server-side**, never in the app. Third-party cloud APIs
   (Garmin, Omron) are unofficial and need token refresh jobs and credentials —
   those must not ship inside a mobile app.
+- **Manual syncs are queued**, not request-bound: `POST /connections/:id/sync`
+  returns `202` and clients poll `GET /connections/:id/syncs`; Garmin history
+  scans can take minutes.
 - **The app is stateless** relative integrations; it talks only to the Stridash
   API. That keeps web/Android/iOS at feature parity except for device-level
   things (e.g. Bluetooth scale pairing, mobile-only).

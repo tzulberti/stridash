@@ -31,9 +31,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > accepted. Test-only follow-ups from the post-landing review are tracked as
 > **T1–T22** at the end of this file.
 >
-> **Status 2026-11-19:** S5 timing, S6 key management, S7 (except the queue),
-> S8 (audit gate + zod 4), S9 and S10 landed with tests. Still open: S5
-> registration enumeration (product decision) and the S7 queue/worker.
+> **Status 2026-11-19:** S5 timing, S6 key management, S7 (queue/worker), S8
+> (audit gate + zod 4), S9 and S10 landed with tests. Still open: S5
+> registration enumeration (product decision).
 
 ---
 
@@ -193,7 +193,7 @@ are re-encrypted a leaked app key no longer exposes iGPSPORT passwords);
 sequence. Crypto tests cover v1→v2 compatibility, provider/app key separation,
 salt changes, retirement keys and tamper rejection.
 
-### [ ] S7. Sync endpoints can be abused / race — **Medium**
+### [x] S7. Sync endpoints can be abused / race — **Medium**
 
 **Where:** `apps/server/src/routes/connections.ts:688` (`POST /:id/sync`),
 `services/*-sync.ts` (`ensureClient`/`ensureGarminTokens`).
@@ -205,7 +205,7 @@ salt changes, retirement keys and tamper rejection.
 - [x] Per-connection lock (`sync_started_at` / advisory lock) → concurrent
       syncs currently race token rotation (Garmin/Zwift refresh tokens rotate)
       and can create duplicate rows.
-- [ ] Move sync out of the request path: a queue/worker with progress polling.
+- [x] Move sync out of the request path: a queue/worker with progress polling.
       Garmin can run for minutes (2–20 s WAF delays × pages) and Node's default
       `requestTimeout` is 300 s.
 - [x] Throttle `POST /connections` retries — repeated bad provider logins can
@@ -214,13 +214,24 @@ salt changes, retirement keys and tamper rejection.
 
 **Acceptance:** two parallel sync calls → one 202/409, one run; REVOKED → 409.
 
-**Landed 2026-11-19 (except queue):** `connections.sync_started_at` is claimed
-atomically before dispatch (15-minute stale takeover) and released in
-`finally`; non-`ACTIVE` rows answer 409 before any provider call. `GET
-/:id/syncs` returns `inProgress` + `syncStartedAt`. Connection creation is
+**Landed 2026-11-19 (queue):** `POST /:id/sync` still claims
+`connections.sync_started_at` atomically (15-minute stale takeover), then
+enqueues an in-process worker and answers **202** `{ status: 'queued',
+inProgress: true, syncStartedAt }`. The worker re-checks `ACTIVE`, dispatches
+the provider sync (Garmin activities + non-fatal wellness), marks rejected
+credentials `ERROR`, and releases only the claim it owns. `GET /:id/syncs`
+remains the polling endpoint and now also returns `connectionStatus`; the web
+dashboard polls it until `inProgress` clears and derives the summary from the
+new `sync_logs` rows. Startup clears stale locks and marks interrupted logs
+`ERROR`; SIGINT/SIGTERM drain in-flight jobs for up to 30 s. Integration tests
+cover 202 + eventual completion, one 202 + one 409 for parallel calls, lock
+release, credential rejection, unknown failures, and stale-lock recovery.
+
+**Earlier landing:** `connections.sync_started_at` is claimed atomically before
+dispatch and non-`ACTIVE` rows answer 409 before any provider call.
+`GET /:id/syncs` returns `inProgress` + `syncStartedAt`. Connection creation is
 limited per user (`STRIDASH_CONNECTION_RATE_LIMIT`, default 10/15 min).
-Integration tests cover REVOKED → 409, two parallel calls → one 200 + one 409,
-lock release, and the create-route 429. The queue/worker remains the next step.
+Integration tests cover REVOKED → 409 and the create-route 429.
 
 ### [x] S8. Dependency CVEs + no audit gate — **Medium** (limited reachability)
 
@@ -249,6 +260,13 @@ entry; the known Expo CLI `glob`/`minimatch` findings are explicitly listed.
 CI runs the gate before the static checks. `--omit=dev` now reports no
 high/critical findings (six moderate Expo/hono entries remain below the gate).
 The mobile Expo major upgrade stays a separate follow-up.
+
+**2026-11-20:** the registry later flagged Prisma’s CLI chain
+(`effect` ← `@prisma/config` ← `prisma`) as **high** (Effect ReDoS). Prisma
+7.10.1 pins `effect@3.20.0` and offers no compatible 7.x fix, and the running
+API never imports that CLI/config path — so the three findings are explicitly
+allow-listed until the Prisma 8 upgrade. `npm run audit:ci` still fails on any
+new high/critical advisory outside the allow-list.
 
 ### [x] S9. Small hardening items — **Low**
 

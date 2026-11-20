@@ -18,19 +18,12 @@ import {
   type ServiceTicket,
 } from '../providers/garmin/sso.js';
 import { verifyToken, getProfile } from '../providers/garmin/api.js';
-import { syncGarminConnection } from '../services/garmin-sync.js';
-import { syncGarminWellness } from '../services/garmin-wellness.js';
 import { decryptToken } from '../crypto.js';
-import { redactProviderDetail, safeErrorForLog } from '../redact.js';
-import { syncIgpSportConnection } from '../services/igpsport-sync.js';
-import { syncOmronConnection } from '../services/omron-sync.js';
-import { syncZwiftConnection } from '../services/zwift-sync.js';
+import { redactProviderDetail } from '../redact.js';
 import { ZwiftClient, ZwiftError, zwiftSignIn } from '../providers/zwift/client.js';
 import { FixedWindowLimiter } from '../rate-limit.js';
+import { enqueueConnectionSync, releaseSyncLock, SYNC_STALE_MS } from '../services/sync-queue.js';
 import type { Env } from '../env.js';
-
-/** A manual sync older than this is assumed crashed and may be taken over. */
-const SYNC_STALE_MS = 15 * 60 * 1000;
 
 const omronConnectSchema = z.object({
   provider: z.literal('OMRON'),
@@ -77,61 +70,6 @@ const garminMfaSchema = z.object({
   /** Verification code from the second-factor channel (email/SMS/TOTP). */
   code: z.string().min(1).max(12),
 });
-
-/** Turn a provider sync throw into an actionable response: rejected credentials
- * (401/403) mark the connection ERROR and ask for a reconnect, while other known
- * provider failures answer with the provider's own message. Unknown throws
- * rethrow into the global 500 handler so real bugs keep their stack trace. */
-async function syncFailure(
-  c: Context,
-  err: unknown,
-  connectionId: string,
-  provider: string,
-): Promise<Response> {
-  const name = provider.toLowerCase();
-  const detail =
-    err instanceof OmronConnectError || err instanceof IgpSportError || err instanceof ZwiftError
-      ? err.detail
-      : err instanceof GarminError
-        ? err.detail
-        : undefined;
-  if (
-    err instanceof OmronConnectError ||
-    err instanceof IgpSportError ||
-    err instanceof ZwiftError ||
-    err instanceof GarminError
-  ) {
-    const httpStatus = err instanceof GarminError ? undefined : err.status;
-    const credentialsRejected =
-      (err instanceof GarminError && err.kind === 'CREDENTIALS') ||
-      (err instanceof ZwiftError && err.kind === 'CREDENTIALS');
-    // providers sometimes echo the credentials they just rejected — redact
-    // them before the detail reaches the client or the sync-log writer
-    const safeDetail = redactProviderDetail(detail);
-    if (httpStatus === 401 || httpStatus === 403 || credentialsRejected) {
-      await prisma.connection
-        .update({ where: { id: connectionId }, data: { status: 'ERROR' } })
-        .catch(() => undefined); // the response below still tells the user
-      return c.json(
-        {
-          error: `${name} rejected the stored token — reconnect the account (POST /connections) and delete this connection`,
-          provider: name,
-          providerDetail: safeDetail,
-        },
-        502,
-      );
-    }
-    return c.json(
-      {
-        error: `${name} sync failed — ${err.message}`,
-        provider: name,
-        providerDetail: safeDetail,
-      },
-      502,
-    );
-  }
-  throw err;
-}
 
 export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   const routes = new Hono<{ Variables: { userId: string } }>();
@@ -757,39 +695,25 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       );
     }
 
-    try {
-      if (connection.provider === 'ZWIFT') {
-        const result = await syncZwiftConnection(env, connection);
-        return c.json({ result });
-      }
-      if (connection.provider === 'IGPSPORT') {
-        const result = await syncIgpSportConnection(env, connection);
-        return c.json({ result });
-      }
-      if (connection.provider === 'GARMIN') {
-        const result = await syncGarminConnection(env, connection);
-        // sleep/daily-metrics pass runs below the activities so one tap syncs
-        // both; a wellness failure doesn't invalidate the activities result
-        let wellness: Awaited<ReturnType<typeof syncGarminWellness>> | undefined;
-        try {
-          wellness = await syncGarminWellness(env, connection);
-        } catch (err) {
-          console.error('[garmin] wellness sync failed:', safeErrorForLog(err));
-        }
-        return c.json({ result, wellness });
-      }
-      const result = await syncOmronConnection(env, connection);
-      return c.json({ result });
-    } catch (err) {
-      // await so a rethrown unknown error is handled before finally releases
-      return await syncFailure(c, err, id, connection.provider);
-    } finally {
-      // Release only the claim this request owns; a stale-takeover winner has
-      // a newer syncStartedAt and must not be unlocked by the old run.
-      await prisma.connection
-        .updateMany({ where: { id, syncStartedAt: claimedAt }, data: { syncStartedAt: null } })
-        .catch((err) => console.error('[sync] lock release failed:', safeErrorForLog(err)));
+    // Queue the work after the claim so slow provider calls (Garmin pages can
+    // take minutes) never sit in the HTTP request path. The DB lock remains
+    // the cross-process mutex; the in-process queue dedupes workers.
+    const queued = enqueueConnectionSync(env, { connectionId: id, claimedAt });
+    if (!queued) {
+      // A stale-takeover claim can race a worker that is still alive in this
+      // process. Release the new claim and let the caller retry later.
+      await releaseSyncLock(id, claimedAt);
+      return c.json({ error: 'Sync already in progress' }, 409);
     }
+
+    return c.json(
+      {
+        status: 'queued' as const,
+        inProgress: true,
+        syncStartedAt: claimedAt.toISOString(),
+      },
+      202,
+    );
   });
 
   // ── Sync history ───────────────────────────────────────────────────────────
@@ -798,7 +722,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     const id = c.req.param('id');
     const connection = await prisma.connection.findFirst({
       where: { id, userId: c.get('userId') },
-      select: { id: true, syncStartedAt: true },
+      select: { id: true, status: true, syncStartedAt: true },
     });
     if (!connection) return c.json({ error: 'Not found' }, 404);
 
@@ -814,6 +738,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       items: logs,
       nextCursor: null,
       inProgress,
+      connectionStatus: connection.status,
       syncStartedAt: connection.syncStartedAt,
     });
   });

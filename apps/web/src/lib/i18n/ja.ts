@@ -271,6 +271,8 @@ export const ja: Record<MsgKey, string> = {
   'conn.trustedDevice': '信頼済みデバイス',
   'conn.connected': '{provider} を接続しました — 次回の同期でデータが取り込まれます',
   'conn.anotherSync': '別の同期が実行中です',
+  'conn.syncTimeout': '同期に時間がかかりすぎています — 接続を確認して再試行してください',
+  'conn.syncFailedCheck': '同期に失敗しました — 接続を確認して再試行してください',
 
   'sync.summary': '同期完了 — {items}',
   'sync.nothingNew': '同期完了 — 新着なし',

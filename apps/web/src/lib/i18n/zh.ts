@@ -266,6 +266,8 @@ export const zh: Record<MsgKey, string> = {
   'conn.trustedDevice': '您的受信任设备',
   'conn.connected': '{provider} 已连接 — 数据将在下次同步时导入',
   'conn.anotherSync': '另一个同步正在进行中',
+  'conn.syncTimeout': '同步耗时过长 — 请检查连接后重试',
+  'conn.syncFailedCheck': '同步失败 — 请检查连接后重试',
 
   'sync.summary': '已同步 — {items}',
   'sync.nothingNew': '已同步 — 没有新内容',

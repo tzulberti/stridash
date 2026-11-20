@@ -271,6 +271,10 @@ export const nl: Record<MsgKey, string> = {
   'conn.trustedDevice': 'uw vertrouwde apparaat',
   'conn.connected': '{provider} verbonden — gegevens stromen binnen bij de volgende synchronisatie',
   'conn.anotherSync': 'er loopt al een andere synchronisatie',
+  'conn.syncTimeout':
+    'de synchronisatie duurt te lang — controleer de verbinding en probeer het opnieuw',
+  'conn.syncFailedCheck':
+    'synchronisatie mislukt — controleer de verbinding en probeer het opnieuw',
 
   'sync.summary': 'gesynchroniseerd — {items}',
   'sync.nothingNew': 'gesynchroniseerd — niets nieuws',

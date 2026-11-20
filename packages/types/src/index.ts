@@ -140,7 +140,7 @@ export interface GarminMfaRequest {
   code: string;
 }
 
-export type SyncKind = 'ACTIVITIES' | 'MEASUREMENTS' | 'TOKEN_REFRESH';
+export type SyncKind = 'ACTIVITIES' | 'MEASUREMENTS' | 'WELLNESS' | 'TOKEN_REFRESH';
 export type SyncStatus = 'OK' | 'PARTIAL' | 'ERROR';
 
 export interface SyncLog {

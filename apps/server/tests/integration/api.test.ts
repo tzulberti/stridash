@@ -21,6 +21,7 @@ import { createApp } from '../../src/index.js';
 import { prisma } from '../../src/db.js';
 import { encryptToken } from '../../src/crypto.js';
 import { ingestActivity } from '../../src/services/activity-ingest.js';
+import { recoverStaleSyncLocks, SYNC_STALE_MS } from '../../src/services/sync-queue.js';
 import { IgpSportError } from '../../src/providers/igpsport/client.js';
 import type { ActivityType } from '../../src/generated/prisma/client.js';
 import type { Env } from '../../src/env.js';
@@ -47,6 +48,20 @@ const authed = (token: string, extra: Record<string, unknown> = {}): RequestInit
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
   ...extra,
 });
+
+/** Poll a DB/API condition; queued sync work is intentionally asynchronous. */
+async function waitFor(
+  condition: () => Promise<boolean>,
+  message = 'condition',
+  timeoutMs = 5_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timed out waiting for ${message}`);
+}
 
 // ─── Users (registered through the real API so hashes/tokens are genuine) ────
 
@@ -877,7 +892,7 @@ describe('connections', () => {
     expect(syncIgpSportConnection).not.toHaveBeenCalled();
   });
 
-  it('allows only one concurrent sync per connection and clears the lock', async () => {
+  it('queues one concurrent sync per connection and clears the lock', async () => {
     const aliceId = (
       await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } })
     ).id;
@@ -896,22 +911,37 @@ describe('connections', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    syncIgpSportConnection.mockImplementationOnce(async () => {
+    syncIgpSportConnection.mockClear();
+    syncIgpSportConnection.mockImplementationOnce(async (_env, connection) => {
       await gate;
-      return { status: 'OK', itemsPulled: 0 };
+      await prisma.syncLog.create({
+        data: {
+          connectionId: connection.id,
+          kind: 'ACTIVITIES',
+          status: 'OK',
+          itemsCreated: 2,
+          itemsUpdated: 1,
+          finishedAt: new Date(),
+        },
+      });
+      return { status: 'OK', itemsPulled: 2 };
     });
 
-    const first = app.request(`/api/connections/${igps.id}/sync`, {
+    const first = await app.request(`/api/connections/${igps.id}/sync`, {
       method: 'POST',
       ...authed(aliceToken, { method: 'POST' }),
     });
+    expect(first.status).toBe(202);
+    const firstBody = await json(first);
+    expect(firstBody.status).toBe('queued');
+    expect(firstBody.inProgress).toBe(true);
 
-    // wait for the first request to claim the lock
-    for (let i = 0; i < 100; i++) {
+    // the worker may not have reached the mocked provider yet; the DB claim
+    // is set before enqueue either way
+    await waitFor(async () => {
       const row = await prisma.connection.findUniqueOrThrow({ where: { id: igps.id } });
-      if (row.syncStartedAt) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+      return row.syncStartedAt !== null;
+    }, 'sync claim');
 
     const second = await app.request(`/api/connections/${igps.id}/sync`, {
       method: 'POST',
@@ -927,14 +957,24 @@ describe('connections', () => {
     expect(status.inProgress).toBe(true);
 
     release();
-    expect((await first).status).toBe(200);
+    await waitFor(async () => {
+      const row = await prisma.connection.findUniqueOrThrow({ where: { id: igps.id } });
+      return row.syncStartedAt === null;
+    }, 'sync lock release');
 
-    const row = await prisma.connection.findUniqueOrThrow({ where: { id: igps.id } });
-    expect(row.syncStartedAt).toBeNull();
     const after = await json(
       await app.request(`/api/connections/${igps.id}/syncs`, authed(aliceToken)),
     );
     expect(after.inProgress).toBe(false);
+    expect(after.connectionStatus).toBe('ACTIVE');
+    const latest = (after.items as Json[])[0];
+    expect(latest).toMatchObject({
+      kind: 'ACTIVITIES',
+      status: 'OK',
+      itemsCreated: 2,
+      itemsUpdated: 1,
+    });
+    expect(syncIgpSportConnection).toHaveBeenCalledTimes(1);
   });
 
   it('throttles connection-create attempts per user', async () => {
@@ -959,7 +999,7 @@ describe('connections', () => {
     expect(second.headers.get('retry-after')).toBeTruthy();
   });
 
-  it('a credential rejection answers 502 + reconnect message and marks ERROR', async () => {
+  it('a credential rejection marks the connection ERROR in the worker', async () => {
     // dedicated IGPSPORT connection so the dispatch hits the mocked service
     const igps = await prisma.connection.create({
       data: {
@@ -973,20 +1013,27 @@ describe('connections', () => {
       },
     });
     syncIgpSportConnection.mockRejectedValueOnce(new IgpSportError('bad credentials', 401));
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = await app.request(`/api/connections/${igps.id}/sync`, {
       method: 'POST',
       ...authed(aliceToken, { method: 'POST' }),
     });
-    expect(res.status).toBe(502);
-    const body = await json(res);
-    expect(String(body.error)).toContain('reconnect the account');
-    expect(body.provider).toBe('igpsport');
-    // the connection is now marked ERROR server-side
-    const row = await prisma.connection.findUniqueOrThrow({ where: { id: igps.id } });
-    expect(row.status).toBe('ERROR');
+    expect(res.status).toBe(202);
+    expect((await json(res)).status).toBe('queued');
+
+    await waitFor(async () => {
+      const row = await prisma.connection.findUniqueOrThrow({ where: { id: igps.id } });
+      return row.status === 'ERROR' && row.syncStartedAt === null;
+    }, 'credential failure to mark ERROR');
+    errorLog.mockRestore();
+    const status = await json(
+      await app.request(`/api/connections/${igps.id}/syncs`, authed(aliceToken)),
+    );
+    expect(status.connectionStatus).toBe('ERROR');
+    expect(status.inProgress).toBe(false);
   });
 
-  it('an unknown sync failure rethrows into the global 500 handler', async () => {
+  it('an unknown sync failure is logged and leaves the connection ACTIVE', async () => {
     const igps = await prisma.connection.create({
       data: {
         userId: (await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } }))
@@ -999,14 +1046,53 @@ describe('connections', () => {
       },
     });
     syncIgpSportConnection.mockRejectedValueOnce(new TypeError('programmer error'));
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = await app.request(`/api/connections/${igps.id}/sync`, {
       method: 'POST',
       ...authed(aliceToken, { method: 'POST' }),
     });
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(202);
+
+    await waitFor(async () => {
+      const row = await prisma.connection.findUniqueOrThrow({ where: { id: igps.id } });
+      return row.syncStartedAt === null;
+    }, 'unknown failure to release the lock');
+    errorLog.mockRestore();
     // unknown failures must NOT mark the connection (that's a bug, not bad creds)
     const row = await prisma.connection.findUniqueOrThrow({ where: { id: igps.id } });
     expect(row.status).toBe('ACTIVE');
+  });
+
+  it('clears stale locks and marks interrupted sync logs at startup', async () => {
+    const aliceId = (
+      await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } })
+    ).id;
+    const staleAt = new Date(Date.now() - SYNC_STALE_MS - 1_000);
+    const stale = await prisma.connection.create({
+      data: {
+        userId: aliceId,
+        provider: 'IGPSPORT',
+        providerUserId: 'stale-sync-1',
+        status: 'ACTIVE',
+        accessTokenEnc: encryptToken('stale-access', env.STRIDASH_ENC_KEY),
+        scopes: [],
+        syncStartedAt: staleAt,
+      },
+    });
+    const log = await prisma.syncLog.create({
+      data: { connectionId: stale.id, kind: 'ACTIVITIES', status: 'OK', startedAt: staleAt },
+    });
+
+    const warnLog = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const cleared = await recoverStaleSyncLocks();
+    warnLog.mockRestore();
+    expect(cleared).toBeGreaterThanOrEqual(1);
+
+    const row = await prisma.connection.findUniqueOrThrow({ where: { id: stale.id } });
+    expect(row.syncStartedAt).toBeNull();
+    const interrupted = await prisma.syncLog.findUniqueOrThrow({ where: { id: log.id } });
+    expect(interrupted.status).toBe('ERROR');
+    expect(interrupted.finishedAt).not.toBeNull();
   });
 
   it('soft-revokes on delete: tokens wiped, activities kept', async () => {

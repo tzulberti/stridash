@@ -65,7 +65,7 @@ case "${1:-}" in
     ;;
   sync)
     auth
-    echo "syncing $2… (first sync pulls history; can take a moment)"
+    echo "queued sync $2 — poll with: $0 syncs $2"
     req -X POST "$BASE/connections/$2/sync" -H "Authorization: Bearer $BIG" | head -30
     ;;
   status)

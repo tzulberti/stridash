@@ -270,6 +270,8 @@ export const hi: Record<MsgKey, string> = {
   'conn.trustedDevice': 'आपका भरोसेमंद डिवाइस',
   'conn.connected': '{provider} जुड़ गया — अगले सिंक में डेटा आ जाएगा',
   'conn.anotherSync': 'एक और सिंक पहले से चल रहा है',
+  'conn.syncTimeout': 'सिंक में बहुत अधिक समय लग रहा है — कनेक्शन जाँचें और फिर कोशिश करें',
+  'conn.syncFailedCheck': 'सिंक विफल रहा — कनेक्शन जाँचें और फिर कोशिश करें',
 
   'sync.summary': 'सिंक पूर्ण — {items}',
   'sync.nothingNew': 'सिंक पूर्ण — कुछ नया नहीं',
