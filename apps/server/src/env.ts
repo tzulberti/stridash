@@ -67,6 +67,11 @@ const envSchema = z
       .int()
       .positive()
       .default(15 * 60 * 1000),
+    /**
+     * Registration attempts per IP within one window (default 10/15 min).
+     * Compensating control for the accepted registration-enumeration risk.
+     */
+    STRIDASH_REGISTER_RATE_LIMIT: z.coerce.number().int().positive().default(10),
     /** Login attempts per email within one window (default 10/15 min). */
     STRIDASH_LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),
     /** Connection attempts per user within one window (default 10/15 min). */

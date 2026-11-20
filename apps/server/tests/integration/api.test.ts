@@ -35,6 +35,7 @@ const env: Env = {
   // the suite drives auth a lot; the dedicated limiter test builds its own app
   STRIDASH_AUTH_RATE_LIMIT: 1000,
   STRIDASH_AUTH_RATE_WINDOW_MS: 60_000,
+  STRIDASH_REGISTER_RATE_LIMIT: 1000,
   STRIDASH_LOGIN_RATE_LIMIT: 1000,
   STRIDASH_CONNECTION_RATE_LIMIT: 1000,
   STRIDASH_CONNECTION_RATE_WINDOW_MS: 60_000,
@@ -318,6 +319,31 @@ describe('auth', () => {
     expect((await attempt()).status).toBe(401);
     expect((await attempt()).status).toBe(401);
     const blocked = await attempt();
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('retry-after')).toBeTruthy();
+  });
+
+  it('rate-limits repeated registration attempts (S5)', async () => {
+    const limited = createApp({
+      ...env,
+      STRIDASH_AUTH_RATE_LIMIT: 100,
+      STRIDASH_REGISTER_RATE_LIMIT: 2,
+    });
+    const suffix = Date.now();
+    const attempt = (n: number) =>
+      limited.request('/api/auth/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: `probe-${suffix}-${n}@test.stridash`,
+          password: 'integration-pass-1',
+          displayName: `Probe ${n}`,
+        }),
+      });
+
+    expect((await attempt(1)).status).toBe(201);
+    expect((await attempt(2)).status).toBe(201);
+    const blocked = await attempt(3);
     expect(blocked.status).toBe(429);
     expect(blocked.headers.get('retry-after')).toBeTruthy();
   });

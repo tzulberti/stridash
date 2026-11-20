@@ -54,8 +54,13 @@ function tooManyRequests(c: Context, retryAfterS: number): Response {
 /**
  * A real scrypt hash for a throwaway password. Login verifies against this
  * when the email is unknown, so an attacker cannot distinguish "no such
- * account" from "wrong password" by timing the response (registration still
- * reveals existence via 409 — that is a deliberate product trade-off).
+ * account" from "wrong password" by timing the response.
+ *
+ * Registration still returns `409 Email already registered`. Closing that
+ * would require a generic response plus a verification email (otherwise the
+ * attacker can simply try to log in with the credentials they just supplied).
+ * Until mail/verification exists, the residual enumeration risk is explicitly
+ * accepted and throttled per IP — see docs/risks-todo.md (S5).
  */
 let dummyPasswordHash: Promise<string> | null = null;
 function getDummyPasswordHash(): Promise<string> {
@@ -80,6 +85,12 @@ export function authRoutes(env: Env): Hono {
     env.STRIDASH_LOGIN_RATE_LIMIT,
     env.STRIDASH_AUTH_RATE_WINDOW_MS,
   );
+  // Narrower than the shared auth bucket: registration is the one endpoint
+  // that discloses whether an email exists (S5, accepted residual risk).
+  const registerLimiter = new FixedWindowLimiter(
+    env.STRIDASH_REGISTER_RATE_LIMIT,
+    env.STRIDASH_AUTH_RATE_WINDOW_MS,
+  );
 
   routes.use('*', async (c, next) => {
     const result = ipLimiter.consume(clientKey(c, env.STRIDASH_TRUST_PROXY));
@@ -88,6 +99,9 @@ export function authRoutes(env: Env): Hono {
   });
 
   routes.post('/register', async (c) => {
+    const perIp = registerLimiter.consume(clientKey(c, env.STRIDASH_TRUST_PROXY));
+    if (!perIp.allowed) return tooManyRequests(c, perIp.retryAfterS);
+
     const body = registerSchema.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       return c.json({ error: 'Invalid request', detail: body.error.flatten().fieldErrors }, 400);

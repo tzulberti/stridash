@@ -31,9 +31,10 @@ maintainability. Check the box when the fix (and its test) has landed.
 > accepted. Test-only follow-ups from the post-landing review are tracked as
 > **T1–T22** at the end of this file.
 >
-> **Status 2026-11-19:** S5 timing, S6 key management, S7 (queue/worker), S8
-> (audit gate + zod 4), S9 and S10 landed with tests. Still open: S5
-> registration enumeration (product decision).
+> **Status 2026-11-20:** S5 login timing, S6 key management, S7 (queue/worker),
+> S8 (audit gate + zod 4), S9 and S10 landed with tests. S5 registration
+> enumeration is **explicitly accepted** (documented and separately
+> rate-limited); email verification is the trigger to close it fully.
 
 ---
 
@@ -139,10 +140,9 @@ schemas use `.min(1)` with no maximum.
 limits on credentials and provider identifiers/passwords. Integration test
 posts a 2 MiB body and expects 413.
 
-### [ ] S5. User enumeration — **Low/Medium**
+### [x] S5. User enumeration — **Low/Medium** (residual risk accepted)
 
-**Where:** `apps/server/src/routes/auth.ts:73` (unknown email skips scrypt),
-`:56` (`409 Email already registered`).
+**Where:** `apps/server/src/routes/auth.ts` (`/login` and `/register`).
 
 **Problem:** identical messages (good) but the timing difference reveals
 whether an email exists; registration confirms it outright.
@@ -160,6 +160,31 @@ guards against a missing scrypt (ratio stays far from 1 ms vs 40 ms). Register
 still returns `409 Email already registered` — closing that requires the
 product decision above (generic `2xx` + verification email, or a deliberate
 acceptance of the enumeration).
+
+**Decision 2026-11-20 — accepted, not silently “fixed”:** registration keeps
+the explicit `409`. A generic `2xx` would not close the hole without email
+verification: an attacker can immediately try the password they just supplied;
+a fresh account logs in, while an existing account with a different password
+does not. That still leaks existence, while making legitimate sign-ups
+confusing. Mail delivery, verification tokens and a verified-login gate are a
+product feature, not a safe emergency change.
+
+**Compensating controls:**
+
+- the shared per-IP auth bucket (`STRIDASH_AUTH_RATE_LIMIT`, 30/15 min), plus
+  a narrower registration bucket (`STRIDASH_REGISTER_RATE_LIMIT`, 10/15 min);
+- login timing equalization against a warmed dummy scrypt hash;
+- one generic login error for unknown email and wrong password;
+- scrypt password hashes, no email addresses in logs, and the existing body
+  limits.
+
+**Residual risk:** an attacker can learn whether one specific email has an
+account — one bit per throttled probe. No credential, session or user data is
+exposed. This is accepted for the current self-hosted, invite-scale product.
+
+**Revisit trigger:** when verification email / password-reset infrastructure
+exists, switch registration to a generic `202`, send a single-use link, and
+gate login on verification; only then is the enumeration actually closed.
 
 ---
 

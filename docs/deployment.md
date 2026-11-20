@@ -47,6 +47,10 @@ server {
 - Set `STRIDASH_TRUST_PROXY=true` **only** when the proxy overwrites
   `X-Forwarded-For`; otherwise clients can spoof their IP and bypass the
   auth/connection rate limiters.
+- Registration is separately rate-limited per IP
+  (`STRIDASH_REGISTER_RATE_LIMIT`). It still returns `409` for an existing
+  email; that enumeration risk is explicitly accepted until verification
+  email exists (see `docs/risks-todo.md`, S5).
 - The mobile app's `http://localhost:3000` default is for local development
   only. Point `EXPO_PUBLIC_API_URL` at the HTTPS host before testing from a
   phone.
