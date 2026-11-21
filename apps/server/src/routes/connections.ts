@@ -23,6 +23,8 @@ import { redactProviderDetail } from '../redact.js';
 import { ZwiftClient, ZwiftError, zwiftSignIn } from '../providers/zwift/client.js';
 import { FixedWindowLimiter } from '../rate-limit.js';
 import { enqueueConnectionSync, releaseSyncLock, SYNC_STALE_MS } from '../services/sync-queue.js';
+import { upsertStableConnection } from '../services/connection-identity.js';
+import { uuidParam } from '../params.js';
 import type { Env } from '../env.js';
 
 const omronConnectSchema = z.object({
@@ -165,29 +167,25 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       // identity endpoint is best-effort; don't block connecting
     }
 
-    const connection = await prisma.connection.upsert({
-      where: {
-        userId_provider_providerUserId: {
-          userId: c.get('userId'),
-          provider: 'OMRON',
-          providerUserId,
-        },
-      },
+    const connection = await upsertStableConnection({
+      userId: c.get('userId'),
+      provider: 'OMRON',
+      providerUserId,
+      login: identifier,
+      configKey: 'omron',
+      loginField: 'identifier',
       create: {
-        userId: c.get('userId'),
-        provider: 'OMRON',
-        providerUserId,
         status: 'ACTIVE',
         accessTokenEnc: encryptToken(tokens.accessToken, env),
         refreshTokenEnc: encryptToken(tokens.refreshToken, env),
         scopes: ['WEIGHT', 'BPM'],
-        config: { omron: { country: country.toUpperCase() } } as never,
+        config: { omron: { country: country.toUpperCase(), identifier } } as never,
       },
       update: {
         status: 'ACTIVE',
         accessTokenEnc: encryptToken(tokens.accessToken, env),
         refreshTokenEnc: encryptToken(tokens.refreshToken, env),
-        config: { omron: { country: country.toUpperCase() } } as never,
+        config: { omron: { country: country.toUpperCase(), identifier } } as never,
       },
       select: {
         id: true,
@@ -242,18 +240,14 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     const providerUserId = claims.memberId || username;
     const expiresAt = claims.exp ? new Date(claims.exp * 1000) : new Date(Date.now() + 3600 * 1000);
 
-    const connection = await prisma.connection.upsert({
-      where: {
-        userId_provider_providerUserId: {
-          userId: c.get('userId'),
-          provider: 'IGPSPORT',
-          providerUserId,
-        },
-      },
+    const connection = await upsertStableConnection({
+      userId: c.get('userId'),
+      provider: 'IGPSPORT',
+      providerUserId,
+      login: username,
+      configKey: 'igpsport',
+      loginField: 'username',
       create: {
-        userId: c.get('userId'),
-        provider: 'IGPSPORT',
-        providerUserId,
         status: 'ACTIVE',
         accessTokenEnc: encryptToken(token, env),
         // NOTE: the iGPSPORT API has no usable refresh-token grant; the
@@ -327,18 +321,14 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       // identity endpoint is best-effort; the connector falls back to the username
     }
 
-    const connection = await prisma.connection.upsert({
-      where: {
-        userId_provider_providerUserId: {
-          userId: c.get('userId'),
-          provider: 'ZWIFT',
-          providerUserId,
-        },
-      },
+    const connection = await upsertStableConnection({
+      userId: c.get('userId'),
+      provider: 'ZWIFT',
+      providerUserId,
+      login: username,
+      configKey: 'zwift',
+      loginField: 'username',
       create: {
-        userId: c.get('userId'),
-        provider: 'ZWIFT',
-        providerUserId,
         status: 'ACTIVE',
         accessTokenEnc: encryptToken(tokens.accessToken, env),
         refreshTokenEnc: tokens.refreshToken ? encryptToken(tokens.refreshToken, env) : null,
@@ -406,18 +396,14 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     if ('flow' in outcome) {
       // MFA_REQUIRED — park the pending login (SSO session cookies, also
       // secret) encrypted; the caller completes it with the code.
-      const connection = await prisma.connection.upsert({
-        where: {
-          userId_provider_providerUserId: {
-            userId: c.get('userId'),
-            provider: 'GARMIN',
-            providerUserId: email, // placeholder identity until the login completes
-          },
-        },
+      const connection = await upsertStableConnection({
+        userId: c.get('userId'),
+        provider: 'GARMIN',
+        providerUserId: email, // placeholder until the login completes
+        login: email,
+        configKey: 'garmin',
+        loginField: 'email',
         create: {
-          userId: c.get('userId'),
-          provider: 'GARMIN',
-          providerUserId: email,
           status: 'PENDING',
           refreshTokenEnc: encryptToken(JSON.stringify(outcome), env),
           config: { garmin: { email, pendingMfaMethod: outcome.method } } as never,
@@ -477,23 +463,19 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     let providerUserId = email;
     try {
       const me = await getProfile(di.diToken);
-      providerUserId = String(me.displayName ?? me.userName ?? me.userId ?? email);
+      providerUserId = String(me.userId ?? me.userName ?? me.displayName ?? email);
     } catch {
       // identity endpoint is best-effort; don't block connecting
     }
 
-    const connection = await prisma.connection.upsert({
-      where: {
-        userId_provider_providerUserId: {
-          userId: c.get('userId'),
-          provider: 'GARMIN',
-          providerUserId,
-        },
-      },
+    const connection = await upsertStableConnection({
+      userId: c.get('userId'),
+      provider: 'GARMIN',
+      providerUserId,
+      login: email,
+      configKey: 'garmin',
+      loginField: 'email',
       create: {
-        userId: c.get('userId'),
-        provider: 'GARMIN',
-        providerUserId,
         status: 'ACTIVE',
         accessTokenEnc: encryptToken(di.diToken, env),
         refreshTokenEnc: di.diRefreshToken ? encryptToken(di.diRefreshToken, env) : null,
@@ -526,7 +508,8 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
 
   /** Complete a pending Garmin MFA login with the verification code. */
   routes.post('/:id/mfa', async (c) => {
-    const id = c.req.param('id');
+    const id = uuidParam(c);
+    if (!id) return c.json({ error: 'Invalid connection id' }, 400);
     const parsed = garminMfaSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
       return c.json({ error: 'Invalid body', detail: parsed.error.flatten().fieldErrors }, 400);
@@ -577,7 +560,7 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       connection.providerUserId;
     try {
       const me = await getProfile(di.diToken);
-      providerUserId = String(me.displayName ?? me.userName ?? me.userId ?? providerUserId);
+      providerUserId = String(me.userId ?? me.userName ?? me.displayName ?? providerUserId);
     } catch {
       // best-effort identity
     }
@@ -617,7 +600,8 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
   // ── Revoke ─────────────────────────────────────────────────────────────────
 
   routes.delete('/:id', async (c) => {
-    const id = c.req.param('id');
+    const id = uuidParam(c);
+    if (!id) return c.json({ error: 'Invalid connection id' }, 400);
     const connection = await prisma.connection.findFirst({
       where: { id, userId: c.get('userId') },
     });
@@ -638,7 +622,8 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
   // ── Sync now ───────────────────────────────────────────────────────────────
 
   routes.post('/:id/sync', async (c) => {
-    const id = c.req.param('id');
+    const id = uuidParam(c);
+    if (!id) return c.json({ error: 'Invalid connection id' }, 400);
     const connection = await prisma.connection.findFirst({
       where: { id, userId: c.get('userId') },
     });
@@ -719,7 +704,8 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
   // ── Sync history ───────────────────────────────────────────────────────────
 
   routes.get('/:id/syncs', async (c) => {
-    const id = c.req.param('id');
+    const id = uuidParam(c);
+    if (!id) return c.json({ error: 'Invalid connection id' }, 400);
     const connection = await prisma.connection.findFirst({
       where: { id, userId: c.get('userId') },
       select: { id: true, status: true, syncStartedAt: true },

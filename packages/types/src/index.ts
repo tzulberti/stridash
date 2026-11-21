@@ -180,8 +180,9 @@ export interface Activity {
   maxSpeedMs: number | null;
   avgHr: number | null;
   maxHr: number | null;
-  /** minutes per HR zone, index 0 = zone 1 — source-reported when available */
-  hrZonesMin: number[] | null;
+  /** minutes per HR zone, index 0 = zone 1 — source-reported when available;
+   * omitted from the feed list and present on the detail endpoint */
+  hrZonesMin?: number[] | null;
   avgPowerW: number | null;
   maxPowerW: number | null;
   avgCadence: number | null;
@@ -211,7 +212,8 @@ export interface Activity {
   detailRaw?: unknown;
   indoor: boolean;
   gearId: string | null;
-  notes: string | null;
+  /** feed rows omit free-text notes; the detail endpoint includes them */
+  notes?: string | null;
   createdAt: string;
 }
 

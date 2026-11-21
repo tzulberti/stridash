@@ -79,7 +79,7 @@ clear error list.
 | Route | Behavior |
 |---|---|
 | `POST /api/connections` | body `{provider:"OMRON", identifier, password, country}` — `identifier` is the account's email OR username (the protocol's login field is `username`); verifies the credentials live against Omron, **stores only encrypted tokens** (never the password), returns the connection |
-| `POST /api/connections/:id/sync` | queues a background sync (**202**); poll `GET /api/connections/:id/syncs`. The worker refreshes the token if needed, pulls all devices (BPM + scale) since the last sync (1 day overlap for corrections), upserts into `measurements` (dedup: `connection_id + kind + measured_at`), writes a `sync_logs` row |
+| `POST /api/connections/:id/sync` | queues a background sync (**202**); poll `GET /api/connections/:id/syncs`. The worker refreshes the token if needed, pulls all devices (BPM + scale) since the last sync (1 day overlap for corrections), upserts into `measurements` (dedup: `user + provider + kind + measured_at`, so reconnecting under a new connection id does not duplicate readings), writes a `sync_logs` row |
 | `GET /api/connections/:id/syncs` | last 50 sync logs |
 
 Single-device failures degrade the sync log to `PARTIAL` instead of failing
@@ -90,7 +90,7 @@ the run; auth failures throw and mark the log `ERROR`.
 - Passwords are sent once over TLS at connect time and **never stored** —
   refresh tokens (AES-256-GCM) drive subsequent syncs. If Omron revokes a
   token, the connection flips to `ERROR` and the user re-connects.
-- `connection.config` holds only non-secret metadata (`{omron: {country}}`);
+- `connection.config` holds only non-secret metadata (`{omron: {country, identifier}}`; `identifier` is used to find the same connection when the identity endpoint is flaky);
   tokens live only in the encrypted columns.
 - The Omron account holder's implicit trust of Stridash is unavoidable for
   this integration class; a self-user can point receipts/logs at their own

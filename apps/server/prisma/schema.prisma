@@ -587,6 +587,10 @@ model Measurement {
   userId                String          @db.Uuid @map("user_id")
   /// null = manual entry in Stridash
   connectionId          String?         @db.Uuid @map("connection_id")
+  /// Provider that produced this reading; MANUAL for hand-entered rows.
+  /// Dedup identity is per user+provider, so reconnecting Omron under a new
+  /// provider id does not duplicate every weigh-in.
+  provider              Provider
   kind                  MeasurementKind
   /// Dedup key component — see docs/data-model.md
   measuredAt            DateTime        @map("measured_at") @db.Timestamptz(6)
@@ -629,7 +633,7 @@ model Measurement {
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   connection Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
 
-  @@unique([connectionId, kind, measuredAt])
+  @@unique([userId, provider, kind, measuredAt])
   @@index([userId, measuredAt])
   @@map("measurements")
 }

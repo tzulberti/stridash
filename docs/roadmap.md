@@ -89,13 +89,15 @@ no refresh token (re-exchange on expiry). The auth half is a swap-in.)*
 - [ ] Weight / body composition ingest (Garmin Index or any scale synced to
       Garmin)
 - [ ] Blood pressure ingest
-- [ ] Dedup merge of stored duplicates (2026-11-13 finding) — **ingest half
-      landed 2026-11-18**: provider identity + tolerance matching (same type,
-      start ±60 s, distance ±100 m) now live in `services/activity-ingest.ts`
-      under a per-user advisory lock, so new duplicates (including the "Zwift -
-      Devedeset Lite" 21 s / 1.9 m case) no longer occur. Remaining: the
-      one-time merge pass collapsing duplicates stored before the fix into one
-      row carrying both `activity_sources` (+ both series); covers the
+- [x] Dedup merge of stored duplicates (2026-11-13 finding) — **ingest half
+      landed 2026-11-18, merge pass 2026-11-20**: provider identity + tolerance
+      matching (same type, start ±60 s, distance ±100 m) live in
+      `services/activity-ingest.ts` under a per-user advisory lock, so new
+      duplicates (including the "Zwift - Devedeset Lite" 21 s / 1.9 m case) no
+      longer occur. `services/activity-merge.ts` collapses duplicates stored
+      before the fix into one row carrying both `activity_sources` and both
+      series; the operator runs `npm run data:merge-activities -w
+      @stridash/server` (dry run) then `-- --apply`. Covers the
       Strava-originated case too. See [`data-model.md`](data-model.md)
       "Deduplication".
 - [ ] Migrate auth to the official Garmin Personal API (removes the
@@ -120,10 +122,12 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [x] Region config validated for the user's account country
 - [x] Unit tests for the value-code mapping (`apps/server/tests/`)
 - [ ] Real-account E2E verification (needs a live Omron account)
-- [ ] Reconnect the KRD-703T + clean up the ~88 duplicate weigh-ins the
-      broken connection produced (2026-11 finding): dedupe `measurements`
-      groups keeping the canonical row per (user, timestamp), show the
-      would-be-deleted report first, then re-link the account
+- [x] Clean up the ~88 duplicate weigh-ins the broken connection produced
+      (2026-11 finding): migration `20261120150000_measurement_provider_identity`
+      folds duplicates per `(user, provider, kind, measured_at)` keeping the
+      most-populated then oldest row, and reconnect now updates the existing
+      connection instead of creating a second identity. Operational follow-up:
+      reconnect the KRD-703T and confirm the next sync.
 - [ ] Register for the OMRON Connect Partner API (official OAuth2 + consent
       flow via [omron-connect-create.readme.io](https://omron-connect-create.readme.io);
       app registration, production approval) and retire the

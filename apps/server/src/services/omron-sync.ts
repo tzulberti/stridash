@@ -1,7 +1,7 @@
 /**
  * Omron sync service: pull every registered scale / BP monitor's measurements
  * from the Omron Connect cloud and upsert them into `measurements` (dedup key:
- * connection_id + kind + measured_at), writing a sync_logs row per run.
+ * user + provider + kind + measured_at), writing a sync_logs row per run.
  *
  * Runs server-side only — the apps never talk to Omron directly (that is the
  * whole point of Stridash).
@@ -55,7 +55,7 @@ const DECIMAL_FIELDS = new Set([
 
 /** Update payload: Prisma Decimal nulling needs `{ set: null }` (create accepts null directly). */
 function toUpdatePayload(data: Record<string, unknown>): Record<string, unknown> {
-  const { kind: _k, connectionId: _c, measuredAt: _m, ...rest } = data;
+  const { kind: _k, provider: _p, connectionId: _c, measuredAt: _m, ...rest } = data;
   return Object.fromEntries(
     Object.entries(rest).map(([k, v]) =>
       v === null && DECIMAL_FIELDS.has(k) ? [k, { set: null }] : [k, v],
@@ -71,6 +71,7 @@ function toMeasurementRowNonNullable(
   return {
     kind: input.kind,
     userId,
+    provider: 'OMRON' as const,
     connectionId: input.connectionId,
     measuredAt: input.measuredAt,
     bodyFatPct: input.bodyFatPct ?? null,
@@ -264,8 +265,9 @@ async function syncDevice(
     const data = toMeasurementRowNonNullable(userId, row);
     const existing = await prisma.measurement.findUnique({
       where: {
-        connectionId_kind_measuredAt: {
-          connectionId: row.connectionId,
+        userId_provider_kind_measuredAt: {
+          userId,
+          provider: 'OMRON',
           kind: row.kind,
           measuredAt: row.measuredAt,
         },

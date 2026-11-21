@@ -8,14 +8,56 @@ import { safeErrorForLog } from '../redact.js';
 import { resyncGarminActivity } from '../services/garmin-sync.js';
 import { resyncIgpSportActivity } from '../services/igpsport-sync.js';
 import { resyncZwiftActivity } from '../services/zwift-sync.js';
+import { uuidParam } from '../params.js';
 
 const listQuerySchema = z.object({
   /** ISO date lower bound (activities.start_time / measurements.measured_at) */
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
+  cursor: z.string().uuid().optional(),
 });
+
+/** Feed rows: scalars the list actually renders. Raw/detail payloads, notes
+ * and HR-zone arrays live only on `/activities/:id` (D6). */
+const feedActivitySelect = {
+  id: true,
+  userId: true,
+  headline: true,
+  workoutName: true,
+  type: true,
+  startTime: true,
+  durationS: true,
+  movingTimeS: true,
+  distanceM: true,
+  avgSpeedMs: true,
+  maxSpeedMs: true,
+  totalAscentM: true,
+  totalDescentM: true,
+  elevationHighM: true,
+  elevationLowM: true,
+  avgHr: true,
+  maxHr: true,
+  avgPowerW: true,
+  maxPowerW: true,
+  avgCadence: true,
+  maxCadence: true,
+  caloriesKcal: true,
+  trainingLoad: true,
+  sweatLossMl: true,
+  aerobicTe: true,
+  anaerobicTe: true,
+  aerobicTeMessage: true,
+  anaerobicTeMessage: true,
+  vo2max: true,
+  recoveryMinutes: true,
+  normalizedPowerW: true,
+  indoor: true,
+  gearId: true,
+  deviceId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const satisfies Prisma.ActivitySelect;
 
 /** Serialization helper: Prisma Decimals→number, Dates→ISO strings. */
 function serializeRow(row: Record<string, unknown>): Record<string, unknown> {
@@ -266,7 +308,20 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
    * measurements, sleep, wellness, gear, components and refresh tokens
    * (every FK from users is ON DELETE CASCADE). Irreversible. */
   routes.delete('/me', async (c) => {
-    await prisma.user.delete({ where: { id: c.get('userId') } });
+    try {
+      await prisma.user.delete({ where: { id: c.get('userId') } });
+    } catch (err) {
+      // A stale token can reach this after the account is already gone.
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'code' in err &&
+        (err as { code?: string }).code === 'P2025'
+      ) {
+        return c.json({ error: 'Not found' }, 404);
+      }
+      throw err;
+    }
     return c.json({ ok: true });
   });
 
@@ -287,6 +342,7 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
             }
           : {}),
       },
+      select: feedActivitySelect,
       orderBy: { startTime: 'desc' },
       take: q.data.limit,
       // cursor semantics: without skip the cursor row itself is re-served
@@ -401,7 +457,8 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   });
 
   routes.get('/activities/:id', async (c) => {
-    const id = c.req.param('id');
+    const id = uuidParam(c);
+    if (!id) return c.json({ error: 'Invalid activity id' }, 400);
     const activity = await prisma.activity.findFirst({
       where: { id, userId: c.get('userId') },
       include: {
@@ -440,7 +497,8 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
    * outcomes otherwise (a provider failure is reported, not thrown).
    */
   routes.post('/activities/:id/resync', async (c) => {
-    const id = c.req.param('id');
+    const id = uuidParam(c);
+    if (!id) return c.json({ error: 'Invalid activity id' }, 400);
     const activity = await prisma.activity.findFirst({
       where: { id, userId: c.get('userId') },
       select: {
@@ -512,8 +570,10 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
    * ±40% when the base carries no distance (WORKOUT/OTHER rows). Newest
    * first; provider-lean rows (picker needs headline/date/distance/time). */
   routes.get('/activities/:id/similar', async (c) => {
+    const id = uuidParam(c);
+    if (!id) return c.json({ error: 'Invalid activity id' }, 400);
     const base = await prisma.activity.findFirst({
-      where: { id: c.req.param('id'), userId: c.get('userId') },
+      where: { id, userId: c.get('userId') },
       select: { id: true, type: true, distanceM: true, durationS: true },
     });
     if (!base) return c.json({ error: 'Not found' }, 404);

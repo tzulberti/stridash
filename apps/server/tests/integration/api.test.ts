@@ -22,6 +22,8 @@ import { prisma } from '../../src/db.js';
 import { encryptToken } from '../../src/crypto.js';
 import { ingestActivity } from '../../src/services/activity-ingest.js';
 import { recoverStaleSyncLocks, SYNC_STALE_MS } from '../../src/services/sync-queue.js';
+import { upsertStableConnection } from '../../src/services/connection-identity.js';
+import { mergeDuplicateActivities } from '../../src/services/activity-merge.js';
 import { IgpSportError } from '../../src/providers/igpsport/client.js';
 import type { ActivityType } from '../../src/generated/prisma/client.js';
 import type { Env } from '../../src/env.js';
@@ -295,6 +297,12 @@ describe('auth', () => {
     });
     expect(del.status).toBe(200);
 
+    const again = await app.request('/api/me', {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${reg.accessToken}` },
+    });
+    expect(again.status).toBe(404);
+
     const refresh = await app.request('/api/auth/refresh', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -346,6 +354,25 @@ describe('auth', () => {
     const blocked = await attempt(3);
     expect(blocked.status).toBe(429);
     expect(blocked.headers.get('retry-after')).toBeTruthy();
+  });
+
+  it('rejects malformed ids and cursors with 400 (D5)', async () => {
+    expect((await app.request('/api/activities/not-a-uuid', authed(aliceToken))).status).toBe(400);
+    expect((await app.request('/api/activities?cursor=abc', authed(aliceToken))).status).toBe(400);
+    expect(
+      (await app.request('/api/activities/not-a-uuid/similar', authed(aliceToken))).status,
+    ).toBe(400);
+    expect(
+      (
+        await app.request(
+          '/api/connections/not-a-uuid/sync',
+          authed(aliceToken, { method: 'POST' }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (await app.request('/api/connections/not-a-uuid/syncs', authed(aliceToken))).status,
+    ).toBe(400);
   });
 
   it('rejects oversized request bodies (S4)', async () => {
@@ -422,6 +449,9 @@ describe('activities list', () => {
           distanceM,
           indoor: provider === 'ZWIFT',
           raw: { provider, sourceRow: {} },
+          detailRaw: { provider, detail: true },
+          notes: 'private note',
+          hrZonesMin: [1, 2, 3],
         },
       });
 
@@ -487,6 +517,13 @@ describe('activities list', () => {
     expect(items[0].headline).toBe('Zwift - Half an Hour of Relaxation');
     expect(items[0].workoutName).toBeNull(); // legacy seeded row — column not set
     expect(items[1].providers).toEqual(['GARMIN']);
+    // D6: the feed omits raw/detail payloads, notes and HR-zone arrays
+    for (const item of items) {
+      expect(item).not.toHaveProperty('raw');
+      expect(item).not.toHaveProperty('detailRaw');
+      expect(item).not.toHaveProperty('notes');
+      expect(item).not.toHaveProperty('hrZonesMin');
+    }
     // tokens never appear anywhere in the payload
     expect(JSON.stringify(body)).not.toContain('garmin-access');
   });
@@ -552,6 +589,11 @@ describe('activities list', () => {
     expect(a.vo2max).toBeCloseTo(49.36, 2);
     expect(a.recoveryMinutes).toBe(1584);
     expect(a.normalizedPowerW).toBe(400);
+    // D6: the detail endpoint keeps the full row the feed omits
+    expect(a.raw).toBeTruthy();
+    expect(a.detailRaw).toBeTruthy();
+    expect(a.notes).toBe('private note');
+    expect(a.hrZonesMin).toEqual([1, 2, 3]);
   });
 });
 
@@ -750,6 +792,207 @@ describe('activity re-sync', () => {
     const body = await json(await app.request(`/api/activities/${runId}`, authed(aliceToken)));
     const a = (body.items as Json[])[0];
     expect(a.providers).toEqual(['GARMIN']);
+  });
+});
+
+// ─── Activity merge pass (D2) ────────────────────────────────────────────────
+
+describe('activity merge pass', () => {
+  it('merges a tolerance-matched duplicate and keeps both sources/series (D2)', async () => {
+    const user = await prisma.user.create({
+      data: { email: `merge-${randomUUID()}@test.stridash`, displayName: 'Merge Test' },
+    });
+    const garmin = await prisma.connection.create({
+      data: {
+        userId: user.id,
+        provider: 'GARMIN',
+        providerUserId: `garmin-${randomUUID()}`,
+        status: 'ACTIVE',
+      },
+    });
+    const zwift = await prisma.connection.create({
+      data: {
+        userId: user.id,
+        provider: 'ZWIFT',
+        providerUserId: `zwift-${randomUUID()}`,
+        status: 'ACTIVE',
+      },
+    });
+
+    const canonical = await prisma.activity.create({
+      data: {
+        userId: user.id,
+        headline: 'Morning ride',
+        type: 'RIDE',
+        startTime: new Date('2025-03-01T10:00:00Z'),
+        durationS: 3600,
+        distanceM: 30_000,
+      },
+    });
+    const duplicate = await prisma.activity.create({
+      data: {
+        userId: user.id,
+        headline: 'Morning ride',
+        type: 'RIDE',
+        startTime: new Date('2025-03-01T10:00:21Z'),
+        durationS: 3600,
+        distanceM: 30_001.9,
+        gearId: null,
+      },
+    });
+    await prisma.activitySource.createMany({
+      data: [
+        {
+          activityId: canonical.id,
+          connectionId: garmin.id,
+          sourceActivityId: 'garmin-merge-1',
+          sourceUpdatedAt: new Date(),
+        },
+        {
+          activityId: duplicate.id,
+          connectionId: zwift.id,
+          sourceActivityId: 'zwift-merge-1',
+          sourceUpdatedAt: new Date(),
+        },
+      ],
+    });
+    await prisma.activityDataPoint.create({
+      data: {
+        activityId: canonical.id,
+        provider: 'GARMIN',
+        sampleCount: 50,
+        series: { timeMs: [0, 1000] },
+      },
+    });
+    await prisma.activityDataPoint.create({
+      data: {
+        activityId: duplicate.id,
+        provider: 'ZWIFT',
+        sampleCount: 80,
+        series: { timeMs: [0, 1000, 2000] },
+      },
+    });
+
+    const dry = await mergeDuplicateActivities({ userId: user.id, dryRun: true });
+    expect(dry.groups).toHaveLength(1);
+    expect(await prisma.activity.count({ where: { userId: user.id } })).toBe(2);
+
+    const applied = await mergeDuplicateActivities({ userId: user.id });
+    expect(applied.mergedActivities).toBe(1);
+    expect(applied.movedSources).toBe(1);
+    expect(applied.movedSeries).toBe(1);
+
+    const remaining = await prisma.activity.findMany({
+      where: { userId: user.id },
+      include: { sources: true, dataPoints: true },
+    });
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]!.id).toBe(canonical.id);
+    expect(remaining[0]!.sources).toHaveLength(2);
+    expect(remaining[0]!.dataPoints.map((point) => point.provider).sort()).toEqual([
+      'GARMIN',
+      'ZWIFT',
+    ]);
+  });
+});
+
+// ─── Stable connection identity (D4) ─────────────────────────────────────────
+
+describe('connection identity', () => {
+  it('updates the fallback login row when the provider id resolves later (D4)', async () => {
+    const alice = await prisma.user.findUniqueOrThrow({
+      where: { email: 'alice@test.stridash' },
+    });
+    const email = `stable-${randomUUID()}@test.stridash`;
+    const fallback = await prisma.connection.create({
+      data: {
+        userId: alice.id,
+        provider: 'GARMIN',
+        providerUserId: email,
+        status: 'ACTIVE',
+        config: { garmin: { email } },
+      },
+    });
+
+    const updated = await upsertStableConnection({
+      userId: alice.id,
+      provider: 'GARMIN',
+      providerUserId: 'athlete-123',
+      login: email,
+      configKey: 'garmin',
+      loginField: 'email',
+      create: { status: 'ACTIVE', config: { garmin: { email } } as never },
+      update: { status: 'ACTIVE', config: { garmin: { email } } as never },
+      select: { id: true, providerUserId: true, config: true, status: true },
+    });
+
+    expect(updated.id).toBe(fallback.id);
+    expect(updated.providerUserId).toBe('athlete-123');
+
+    const rows = await prisma.connection.findMany({
+      where: { userId: alice.id, provider: 'GARMIN' },
+      select: { id: true, config: true },
+    });
+    const sameLogin = rows.filter(
+      (row) => (row.config as { garmin?: { email?: string } })?.garmin?.email === email,
+    );
+    expect(sameLogin).toHaveLength(1);
+    expect(sameLogin[0]!.id).toBe(fallback.id);
+  });
+});
+
+// ─── Measurement identity (D3) ───────────────────────────────────────────────
+
+describe('measurement identity', () => {
+  it('dedupes per user+provider+kind+time across Omron reconnects (D3)', async () => {
+    const alice = await prisma.user.findUniqueOrThrow({
+      where: { email: 'alice@test.stridash' },
+    });
+    const base = { userId: alice.id, provider: 'OMRON' as const, status: 'ACTIVE' as const };
+    const firstConn = await prisma.connection.create({
+      data: { ...base, providerUserId: `omron-old-${randomUUID()}` },
+    });
+    const secondConn = await prisma.connection.create({
+      data: { ...base, providerUserId: `omron-new-${randomUUID()}` },
+    });
+    const measuredAt = new Date('2025-01-02T07:30:00Z');
+
+    const first = await prisma.measurement.create({
+      data: {
+        userId: alice.id,
+        connectionId: firstConn.id,
+        provider: 'OMRON',
+        kind: 'WEIGH_IN',
+        measuredAt,
+        weightKg: 70,
+      },
+    });
+
+    // same physical reading via the reconnected account: same new key
+    await expect(
+      prisma.measurement.create({
+        data: {
+          userId: alice.id,
+          connectionId: secondConn.id,
+          provider: 'OMRON',
+          kind: 'WEIGH_IN',
+          measuredAt,
+          weightKg: 70,
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'P2002' });
+
+    const found = await prisma.measurement.findUnique({
+      where: {
+        userId_provider_kind_measuredAt: {
+          userId: alice.id,
+          provider: 'OMRON',
+          kind: 'WEIGH_IN',
+          measuredAt,
+        },
+      },
+    });
+    expect(found?.id).toBe(first.id);
   });
 });
 

@@ -32,9 +32,11 @@ maintainability. Check the box when the fix (and its test) has landed.
 > **T1–T22** at the end of this file.
 >
 > **Status 2026-11-20:** S5 login timing, S6 key management, S7 (queue/worker),
-> S8 (audit gate + zod 4), S9 and S10 landed with tests. S5 registration
-> enumeration is **explicitly accepted** (documented and separately
-> rate-limited); email verification is the trigger to close it fully.
+> S8 (audit gate + zod 4), S9 and S10 landed with tests. D2–D6 also landed with
+> tests; **no P1 items remain**. S5 registration enumeration is **explicitly
+> accepted** (documented and separately rate-limited); email verification is
+> the trigger to close it fully. D2's operator merge script still needs to be
+> run against deployments that already hold pre-fix duplicate activities.
 
 ---
 
@@ -375,11 +377,12 @@ start ±60 s, distance ±100 m; null distance requires the exact start). Provide
 identity also stops two of the same connection's activities from ever folding
 together. Integration tests cover null-distance duplicates, parallel ingests,
 the real 21 s/1.9 m Garmin/Zwift case, and the non-merge guards. Existing stored
-duplicates still need the D2 merge pass; a nullable-safe unique expression index
-on `activities` is deferred until that pass clears the old rows. Test-only
-follow-ups: **T1–T9** in “Test coverage gaps” below.
+duplicates are handled by the D2 operator merge pass (see below); a
+nullable-safe unique expression index on `activities` is deferred until that
+pass has run on every deployment. Test-only follow-ups: **T1–T9** in “Test
+coverage gaps” below.
 
-### [ ] D2. Cross-provider dedupe uses exact equality — **Medium**
+### [x] D2. Cross-provider dedupe uses exact equality — **Medium**
 
 **Where:** the three `upsertActivity` implementations listed in D1.
 
@@ -391,11 +394,16 @@ normalization.
 plus a merge step for existing duplicates (keep one `activity`, move
 `activity_sources`).
 
-**Partially landed 2026-11-18:** the ingest-time tolerance matching shipped with
-D1 (shared `services/activity-ingest.ts`). Only the one-time merge/backfill of
-duplicates already stored before this change remains open.
+**Landed 2026-11-20:** the ingest-time tolerance matching shipped with D1
+(shared `services/activity-ingest.ts`). Existing duplicates are collapsed by
+`services/activity-merge.ts`, which keeps the canonical (earliest) row, moves
+every `activity_sources` row onto it, keeps the richer series per provider and
+deletes the duplicate. `npm run data:merge-activities -w @stridash/server`
+defaults to a dry run; `--apply` mutates. Unit tests cover the window/null
+cases, same-connection exclusion and the no-chain rule; the integration test
+runs the pass with both Garmin and Zwift sources/series.
 
-### [ ] D3. Measurement dedupe includes `connectionId` — **Medium**
+### [x] D3. Measurement dedupe includes `connectionId` — **Medium**
 
 **Where:** `schema.prisma:603` (`@@unique([connectionId, kind, measuredAt])`),
 `services/omron-sync.ts:264`.
@@ -408,7 +416,14 @@ weigh-ins from exactly this). Sleep/wellness correctly key on
 **Fix:** migrate the key to `(userId, provider, kind, measuredAt)` and merge
 existing duplicates; keep `connectionId` as provenance only.
 
-### [ ] D4. Best-effort identity destabilizes the connection key — **Medium**
+**Landed 2026-11-20:** migration `20261120150000_measurement_provider_identity`
+adds `provider`, backfills it from the connection (`MANUAL` when null), folds
+pre-existing duplicates keeping the most-populated then oldest row, and swaps
+the unique key. `services/omron-sync.ts` writes `provider = 'OMRON'` and
+upserts on the new key. An integration test proves a reconnect-style duplicate
+with a different `connectionId` is rejected by the new identity.
+
+### [x] D4. Best-effort identity destabilizes the connection key — **Medium**
 
 **Where:** `routes/connections.ts:203` (Omron), `:441` (Garmin), Zwift's
 username fallback.
@@ -422,7 +437,15 @@ name/athlete id, producing a **second connection row for the same account**
 provider)` + stored config email/username and update that row, or mark the
 connection PENDING until identity is resolved.
 
-### [ ] D5. Invalid IDs → 500; double delete → 500; refresh after delete → 200 — **Medium**
+**Landed 2026-11-20:** `services/connection-identity.ts` looks up an existing
+connection by resolved provider id or the login saved in `config`
+(`omron.identifier`, `garmin.email`, `zwift.username`, `igpsport.username`) and
+updates it in place under a `connection:<user>:<provider>` advisory lock. All
+connect paths use it, and Garmin now prefers the numeric `userId` over the
+mutable display name. An integration test updates a fallback login row when the
+resolved id later changes.
+
+### [x] D5. Invalid IDs → 500; double delete → 500; refresh after delete → 200 — **Medium**
 
 **Where:** `routes/data.ts:277-292` (cursor), `:402` (`:id`),
 `connections.ts:688` (`:id`), `data.ts:268` (`DELETE /me`),
@@ -435,7 +458,12 @@ Reproduced separately: refresh after deletion → 200 (also S3).
 **Fix:** `z.string().uuid()` on all path/query ids, return 400/404; catch
 Prisma `P2025` as 404; verify user existence in refresh.
 
-### [ ] D6. Activity feed returns raw payloads — **Medium**
+**Landed 2026-11-20:** `params.ts` validates every `:id` used by activity and
+connection routes; the list cursor is a UUID too. `DELETE /me` maps Prisma
+`P2025` to 404, and refresh already verifies the user still exists (S3).
+Integration tests cover malformed ids/cursors and the second delete.
+
+### [x] D6. Activity feed returns raw payloads — **Medium**
 
 **Where:** `routes/data.ts:277` (`prisma.activity.findMany` with no `select`).
 
@@ -446,6 +474,12 @@ Prisma `P2025` as 404; verify user existence in refresh.
 **Fix:** `select` the feed columns; keep the full row + series on
 `/activities/:id`. Add an integration test asserting `raw`/`detailRaw` are
 absent from the list.
+
+**Landed 2026-11-20:** the list uses an explicit feed projection (no `raw`,
+`detailRaw`, `notes` or `hrZonesMin`); the detail endpoint still returns the
+full row plus series. The shared `Activity` type marks feed-omitted fields
+optional, and the integration seed sets heavy fields before asserting they are
+absent.
 
 ---
 
@@ -574,8 +608,8 @@ and future MCP server both benefit from a generated client.
 2. **S2 + S4** (async scrypt, limiter, body limit) — one small middleware PR.
 3. **S3** (refresh-token table, rotation, logout) — needs a migration.
 4. **D5** (UUID validation + error semantics) — mechanical, testable.
-5. ~~**D1 + D2 ingest matching**~~ — landed 2026-11-18; only the merge/backfill
-   of pre-existing duplicates (D2) remains.
+5. ~~**D1 + D2 ingest matching**~~ — landed 2026-11-18; the D2 operator merge
+   script landed 2026-11-20 and still needs a dry run/apply on deployments.
 6. **S6 + S7 + C7** (key management, sync lock/queue, scheduler).
 7. **D3 + D4** (measurement key, connection identity) — migrations.
 8. **D6 + D7** (feed select, streaming export).

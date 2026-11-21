@@ -165,6 +165,7 @@ erDiagram
         uuid7 id PK "UUIDv7"
         uuid7 user_id FK
         uuid7 connection_id FK "null = manual"
+        enum provider
         enum kind
         timestamptz measured_at "dedup key"
         decimal weight_kg
@@ -207,7 +208,8 @@ Notes not visible in the diagram:
     `latDeg`, `lngDeg`, `distanceM`, `altitudeM`, `speedMs`, `hrBpm`,
     `cadenceRpm`, `powerW`, `temperatureC`); delivering providers simply
     omit the streams they don't have.
-  - `measurements`: `(connection_id, kind, measured_at)`
+  - `measurements`: `(user_id, provider, kind, measured_at)` — provider identity
+    survives an Omron reconnect; `connection_id` is provenance only
 - Omron body-composition value → column mapping (incl. the values omramin
   drops, like impedance and the segmental arms/trunk/legs breakdown) is
   documented in [`data-model.md`](data-model.md).

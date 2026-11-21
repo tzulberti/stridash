@@ -15,7 +15,8 @@
     "crypto:reencrypt": "tsx --env-file=.env src/scripts/reencrypt-tokens.ts",
     "start": "tsx --env-file=.env src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "data:merge-activities": "tsx --env-file=.env src/scripts/merge-duplicate-activities.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

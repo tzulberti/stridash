@@ -70,6 +70,13 @@ One row per (user, external account). Provider-agnostic by design.
 
 Unique on (`user_id`, `provider`, `provider_user_id`).
 
+Connect is stable across best-effort identity failures: the connect paths look
+for an existing row by resolved provider id **or** the login saved in `config`
+(`omron.identifier`, `garmin.email`, `zwift.username`, `igpsport.username`) and
+update it under a `connection:<user>:<provider>` advisory lock. A transient
+identity-endpoint failure therefore cannot create a second row when the real id
+resolves later.
+
 ### `sync_logs`
 
 Audit/observability for every background sync run (token refreshes, pull
@@ -105,7 +112,7 @@ don't map get parked in `raw` for later backfill.
 | `total_ascent_m` / `total_descent_m` | numeric nullable | cumulative climb/drop |
 | `elevation_high_m` / `elevation_low_m` | numeric nullable | altitude range |
 | `avg_hr` / `max_hr` | int nullable | heart rate |
-| `hr_zones_min` | jsonb nullable | minutes per HR zone (index 0 = zone 1), source-reported when available |
+| `hr_zones_min` | jsonb nullable | minutes per HR zone (index 0 = zone 1), source-reported when available; omitted from the feed list, returned by `/activities/:id` |
 | `avg_power_w` / `max_power_w` | int nullable | cycling power |
 | `avg_cadence` / `max_cadence` | int nullable | rpm (or run step-cadence as delivered) |
 | `calories_kcal` | int nullable | |
@@ -142,8 +149,22 @@ a DB-level fallback for non-null distances; Postgres treats NULLs as distinct,
 which is why NULL-distance identity is resolved by rule 2 rather than a
 constraint. The 2026-11-13 case (Garmin FIT start 10:40:51 / 11537.84 m vs
 Zwift 10:40:30.082 / 11539.70 m — 21 s / 1.9 m apart) is covered by an
-integration test. Duplicates stored before this change still need the one-time
-merge pass tracked on the [roadmap](roadmap.md).
+integration test.
+
+**Merging pre-fix duplicates.** `services/activity-merge.ts` groups stored rows
+with the same rule, keeps the earliest row per group, moves all
+`activity_sources` onto it, and keeps one series per provider (higher
+`sample_count` wins). Rows sharing a provider connection are never grouped —
+those are distinct workouts. Run it as an operator after a backup:
+
+```bash
+npm run data:merge-activities -w @stridash/server                 # dry run
+npm run data:merge-activities -w @stridash/server -- --apply
+npm run data:merge-activities -w @stridash/server -- --user <uuid>  # one user
+```
+
+The feed list uses a projection that omits `raw`, `detail_raw`, `notes` and
+`hr_zones_min`; `/activities/:id` still returns the full row plus its series.
 
 ### `activity_sources`
 
@@ -232,9 +253,10 @@ values, etc.) land without migrations.
 |---|---|---|
 | `id` | `uuid` (v7) PK | |
 | `user_id` | `uuid` (v7) FK → users | |
-| `connection_id` | `uuid` (v7) FK → connections nullable | NULL = manual entry |
+| `connection_id` | `uuid` (v7) FK → connections nullable | NULL = manual entry; provenance only |
+| `provider` | enum | provider that produced the reading; `MANUAL` for hand-entered rows |
 | `kind` | enum | `WEIGH_IN` \| `BLOOD_PRESSURE` |
-| `measured_at` | timestamptz | canonical dedup key (with `connection`) |
+| `measured_at` | timestamptz | canonical dedup key (with user/provider/kind) |
 | --- WEIGH_IN columns --- | | |
 | `weight_kg` | numeric | |
 | `body_fat_pct` | numeric nullable | Omron: body fat % |
@@ -275,8 +297,12 @@ per-body-part trends without 12 sparse columns:
 }
 ```
 
-Dedup index: `uniq (connection_id, kind, measured_at)` — matches omramin's
-timestamp-based duplicate detection.
+Dedup index: `uniq (user_id, provider, kind, measured_at)` — matches Omron's
+timestamp-based duplicate detection without tying identity to a reconnectable
+`connection_id`. Migration `20261120150000_measurement_provider_identity`
+backfills `provider` from the owning connection (`MANUAL` when null), folds
+existing duplicates keeping the most-populated then oldest row, and swaps the
+index.
 
 ### `gear`
 

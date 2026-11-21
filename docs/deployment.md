@@ -143,3 +143,30 @@ New writes use `STRIDASH_PROVIDER_ENC_KEY` when set, otherwise
 Take a database backup before step 4. The script rewrites `accessTokenEnc` and
 `refreshTokenEnc`; rows that cannot be decrypted are reported and left
 untouched, and the process exits non-zero.
+
+## One-time dedup cleanup
+
+Take a backup before either pass. The measurement cleanup runs automatically as
+part of migration `20261120150000_measurement_provider_identity`; it keeps the
+most-populated then oldest row per `(user, provider, kind, measured_at)` and
+changes the unique key so Omron reconnects no longer duplicate weigh-ins.
+
+Activities stored before the tolerance matcher landed need an explicit operator
+run. It is dry-run by default:
+
+```bash
+npm run data:merge-activities -w @stridash/server
+npm run data:merge-activities -w @stridash/server -- --user <uuid>
+```
+
+Review the reported canonical/duplicate ids, then apply (optionally for one
+user):
+
+```bash
+npm run data:merge-activities -w @stridash/server -- --apply
+npm run data:merge-activities -w @stridash/server -- --user <uuid> --apply
+```
+
+The pass keeps the earliest row, moves all `activity_sources` onto it, keeps the
+richer series per provider and never merges two activities from the same
+provider connection. It is safe to re-run; a clean run reports zero groups.
