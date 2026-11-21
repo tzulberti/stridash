@@ -503,7 +503,7 @@ JSON dump").
 **Fix:** stream NDJSON (one row per line, headers per entity) or paginate with
 a resume token; decide whether streams are in scope.
 
-### [ ] D8. `tokenExpiresAt` is not persisted after a Garmin refresh — **Low**
+### [x] D8. `tokenExpiresAt` is not persisted after a Garmin refresh — **Low**
 
 **Where:** `services/garmin-tokens.ts:51` (sets `null`; the comment says it is
 refreshed "below right after", but nothing follows).
@@ -512,6 +512,10 @@ refreshed "below right after", but nothing follows).
 `maybeRefresh` re-parses the JWT. Misleading state and extra work.
 
 **Fix:** set `new Date(peekJwtExpMs(next.diToken)!)` when persisting.
+
+**Landed 2026-11-21:** `ensureGarminTokens` now persists
+`peekJwtExpMs(next.diToken)` as `tokenExpiresAt` and still stores `null` when
+the refreshed token has no `exp` claim. Unit tests cover both branches.
 
 ### [ ] D9. Sync loops are N+1; `activity_sources` lacks a connection index — **Low/Medium**
 
@@ -630,7 +634,7 @@ lands.
 
 ### Recent changes — ingest / dedupe
 
-- [ ] **T1. Parallel race that only the advisory lock can prevent.** The
+- [x] **T1. Parallel race that only the advisory lock can prevent.** The
       current parallel test uses the same start + distance, so the
       `(user_id, start_time, type, distance_m)` unique constraint would also
       stop a duplicate; a lost lock in the tolerance or NULL path would still
@@ -638,15 +642,15 @@ lands.
       ±1.9 m; (b) two connections, both `distance_m = NULL`, exact same start.
       Both must produce one activity and two sources.
       (`apps/server/tests/integration/api.test.ts`)
-- [ ] **T2. Tolerance boundaries.** Exactly 60 s and 100 m must match; 61 s
+- [x] **T2. Tolerance boundaries.** Exactly 60 s and 100 m must match; 61 s
       and 101 m must not. Pin both dimensions independently so the constants
       cannot drift silently.
-- [ ] **T3. Type and user isolation.** Same start/distance but a different
+- [x] **T3. Type and user isolation.** Same start/distance but a different
       `type`, and the same key under a different user, must stay separate.
-- [ ] **T4. NULL ↔ non-NULL exact start.** An existing NULL-distance row plus
+- [x] **T4. NULL ↔ non-NULL exact start.** An existing NULL-distance row plus
       a non-NULL provider at the exact start merges (and vice versa); NULL at
       a non-exact start must not. Covers the enrichment `OR` branch.
-- [ ] **T5. Closest candidate wins.** With two matching candidates inside the
+- [x] **T5. Closest candidate wins.** With two matching candidates inside the
       window, the closest start is chosen; equal starts fall through to the
       closest distance. Covers the sort/tie-break branch.
 - [ ] **T6. `onMatch` gear/device fill.** Drive the shared service with an
@@ -658,7 +662,7 @@ lands.
       tests asserting the created scalars and the `activity_data_points` row
       after the refactor. Zwift has orchestration tests; Garmin/iGPSPORT do
       not.
-- [ ] **T8. `activity_sources` unique constraint.** A direct duplicate insert
+- [x] **T8. `activity_sources` unique constraint.** A direct duplicate insert
       of `(connection_id, source_activity_id)` raises `P2002`.
 - [ ] **T9. Migration cleanup of duplicate provenance rows.** On a seeded DB
       that already contains duplicate `(connection_id, source_activity_id)`
@@ -666,6 +670,11 @@ lands.
       migration and assert the oldest activity keeps the source and the unique
       index exists. Needs a dedicated stepwise-migration harness — the normal
       setup applies everything to an empty DB, so this branch never runs.
+
+**Landed 2026-11-21:** T1–T5 and T8 now have integration coverage in
+`activity ingest dedupe` (parallel tolerance/NULL races, both tolerance
+boundaries, type + user isolation, NULL ↔ non-NULL enrichment, closest
+candidate selection, and the provider-source `P2002`).
 
 ### Recent changes — auth
 

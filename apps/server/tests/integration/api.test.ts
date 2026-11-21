@@ -1892,16 +1892,23 @@ describe('activity ingest dedupe', () => {
 
   type Conn = { id: string; userId: string };
 
-  async function connection(provider: 'GARMIN' | 'ZWIFT' | 'IGPSPORT'): Promise<Conn> {
+  async function connectionFor(
+    ownerId: string,
+    provider: 'GARMIN' | 'ZWIFT' | 'IGPSPORT',
+  ): Promise<Conn> {
     return prisma.connection.create({
       data: {
-        userId,
+        userId: ownerId,
         provider,
         providerUserId: `${provider}:${randomUUID()}`,
         status: 'ACTIVE',
       },
       select: { id: true, userId: true },
     });
+  }
+
+  async function connection(provider: 'GARMIN' | 'ZWIFT' | 'IGPSPORT'): Promise<Conn> {
+    return connectionFor(userId, provider);
   }
 
   function ingest(
@@ -2020,6 +2027,232 @@ describe('activity ingest dedupe', () => {
     await ingest(zwift, 'far-b', { startTime, distanceM: 10_250 });
 
     expect(await rowsFor(garmin, zwift)).toHaveLength(2);
+  });
+
+  it('serializes parallel tolerance-matched ingests (T1)', async () => {
+    const garmin = await connection('GARMIN');
+    const zwift = await connection('ZWIFT');
+    const startTime = new Date('2026-11-18T15:00:00.000Z');
+
+    const results = await Promise.all([
+      ingest(garmin, 'parallel-tol-g', { startTime, distanceM: 10_000 }),
+      ingest(zwift, 'parallel-tol-z', {
+        startTime: new Date(startTime.getTime() + 21_000),
+        distanceM: 10_001.9,
+      }),
+    ]);
+
+    expect(results.filter((r) => r.created)).toHaveLength(1);
+    const rows = await rowsFor(garmin, zwift);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.sources).toHaveLength(2);
+  });
+
+  it('serializes parallel NULL-distance ingests at the exact start (T1)', async () => {
+    const garmin = await connection('GARMIN');
+    const zwift = await connection('ZWIFT');
+    const startTime = new Date('2026-11-18T15:10:00.000Z');
+
+    const results = await Promise.all([
+      ingest(garmin, 'parallel-null-g', { startTime, distanceM: null }),
+      ingest(zwift, 'parallel-null-z', { startTime, distanceM: null }),
+    ]);
+
+    expect(results.filter((r) => r.created)).toHaveLength(1);
+    const rows = await rowsFor(garmin, zwift);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.sources).toHaveLength(2);
+  });
+
+  it('pins the 60 s and 100 m matching boundaries (T2)', async () => {
+    const exactStart = new Date('2026-11-18T16:00:00.000Z');
+    const exactGarmin = await connection('GARMIN');
+    const exactZwift = await connection('ZWIFT');
+    await ingest(exactGarmin, 'edge-exact-g', { startTime: exactStart, distanceM: 10_000 });
+    await ingest(exactZwift, 'edge-exact-z', {
+      startTime: new Date(exactStart.getTime() + 60_000),
+      distanceM: 10_100,
+    });
+    const exactRows = await rowsFor(exactGarmin, exactZwift);
+    expect(exactRows).toHaveLength(1);
+    expect(exactRows[0]!.sources).toHaveLength(2);
+
+    const overStart = new Date('2026-11-18T17:00:00.000Z');
+    const overTimeGarmin = await connection('GARMIN');
+    const overTimeZwift = await connection('ZWIFT');
+    await ingest(overTimeGarmin, 'edge-over-time-g', { startTime: overStart, distanceM: 10_000 });
+    await ingest(overTimeZwift, 'edge-over-time-z', {
+      startTime: new Date(overStart.getTime() + 61_000),
+      distanceM: 10_000,
+    });
+    expect(await rowsFor(overTimeGarmin, overTimeZwift)).toHaveLength(2);
+
+    const overDistanceStart = new Date('2026-11-18T18:00:00.000Z');
+    const overDistanceGarmin = await connection('GARMIN');
+    const overDistanceZwift = await connection('ZWIFT');
+    await ingest(overDistanceGarmin, 'edge-over-dist-g', {
+      startTime: overDistanceStart,
+      distanceM: 10_000,
+    });
+    await ingest(overDistanceZwift, 'edge-over-dist-z', {
+      startTime: overDistanceStart,
+      distanceM: 10_101,
+    });
+    expect(await rowsFor(overDistanceGarmin, overDistanceZwift)).toHaveLength(2);
+  });
+
+  it('does not merge across activity types (T3)', async () => {
+    const garmin = await connection('GARMIN');
+    const zwift = await connection('ZWIFT');
+    const startTime = new Date('2026-11-18T19:00:00.000Z');
+
+    await ingest(garmin, 'type-ride', { type: 'RIDE', startTime, distanceM: 10_000 });
+    await ingest(zwift, 'type-workout', { type: 'WORKOUT', startTime, distanceM: 10_000 });
+
+    expect(await rowsFor(garmin, zwift)).toHaveLength(2);
+  });
+
+  it('does not merge across users (T3)', async () => {
+    const other = await prisma.user.create({
+      data: { email: `dedupe-other-${randomUUID()}@test.stridash`, displayName: 'Other' },
+      select: { id: true },
+    });
+    const otherConnection = await connectionFor(other.id, 'GARMIN');
+    const startTime = new Date('2026-11-18T19:10:00.000Z');
+    const before = await prisma.activity.count({ where: { userId } });
+
+    await ingest(otherConnection, 'other-user-source', { startTime, distanceM: 10_000 });
+
+    expect(await prisma.activity.count({ where: { userId: other.id } })).toBe(1);
+    expect(await prisma.activity.count({ where: { userId } })).toBe(before);
+  });
+
+  it('matches NULL and non-NULL distances only at the exact start (T4)', async () => {
+    const nullFirstStart = new Date('2026-11-18T20:00:00.000Z');
+    const nullFirstGarmin = await connection('GARMIN');
+    const nullFirstZwift = await connection('ZWIFT');
+    await ingest(nullFirstGarmin, 'null-first-g', {
+      startTime: nullFirstStart,
+      distanceM: null,
+    });
+    await ingest(nullFirstZwift, 'null-first-z', {
+      startTime: nullFirstStart,
+      distanceM: 10_000,
+    });
+    const nullFirstRows = await rowsFor(nullFirstGarmin, nullFirstZwift);
+    expect(nullFirstRows).toHaveLength(1);
+    expect(nullFirstRows[0]!.sources).toHaveLength(2);
+
+    const nonNullFirstStart = new Date('2026-11-18T20:10:00.000Z');
+    const nonNullFirstGarmin = await connection('GARMIN');
+    const nonNullFirstZwift = await connection('ZWIFT');
+    await ingest(nonNullFirstGarmin, 'non-null-first-g', {
+      startTime: nonNullFirstStart,
+      distanceM: 10_000,
+    });
+    await ingest(nonNullFirstZwift, 'non-null-first-z', {
+      startTime: nonNullFirstStart,
+      distanceM: null,
+    });
+    const nonNullFirstRows = await rowsFor(nonNullFirstGarmin, nonNullFirstZwift);
+    expect(nonNullFirstRows).toHaveLength(1);
+    expect(nonNullFirstRows[0]!.sources).toHaveLength(2);
+
+    const shiftedStart = new Date('2026-11-18T20:20:00.000Z');
+    const shiftedGarmin = await connection('GARMIN');
+    const shiftedZwift = await connection('ZWIFT');
+    await ingest(shiftedGarmin, 'shifted-null-g', { startTime: shiftedStart, distanceM: null });
+    await ingest(shiftedZwift, 'shifted-null-z', {
+      startTime: new Date(shiftedStart.getTime() + 1_000),
+      distanceM: 10_000,
+    });
+    expect(await rowsFor(shiftedGarmin, shiftedZwift)).toHaveLength(2);
+  });
+
+  it('picks the closest start, then closest distance, from multiple candidates (T5)', async () => {
+    const zwift = await connection('ZWIFT');
+    const startTime = new Date('2026-11-18T21:00:00.000Z');
+    const near = await prisma.activity.create({
+      data: {
+        userId,
+        headline: 'Near candidate',
+        type: 'RIDE',
+        startTime: new Date(startTime.getTime() + 5_000),
+        durationS: 3600,
+        distanceM: 10_000,
+      },
+      select: { id: true },
+    });
+    await prisma.activity.create({
+      data: {
+        userId,
+        headline: 'Far candidate',
+        type: 'RIDE',
+        startTime: new Date(startTime.getTime() + 30_000),
+        durationS: 3600,
+        distanceM: 10_000,
+      },
+    });
+
+    const closest = await ingest(zwift, 'closest-start-z', { startTime, distanceM: 10_000 });
+    expect(closest.activityId).toBe(near.id);
+
+    const tieStart = new Date('2026-11-18T21:20:00.000Z');
+    const tieFarDistance = await prisma.activity.create({
+      data: {
+        userId,
+        headline: 'Tie far distance',
+        type: 'RIDE',
+        startTime: tieStart,
+        durationS: 3600,
+        distanceM: 10_050,
+      },
+      select: { id: true },
+    });
+    await prisma.activity.create({
+      data: {
+        userId,
+        headline: 'Tie near distance',
+        type: 'RIDE',
+        startTime: tieStart,
+        durationS: 3600,
+        distanceM: 10_000,
+      },
+    });
+    const tieZwift = await connection('ZWIFT');
+    const closestDistance = await ingest(tieZwift, 'closest-distance-z', {
+      startTime: tieStart,
+      distanceM: 10_049,
+    });
+    expect(closestDistance.activityId).toBe(tieFarDistance.id);
+  });
+
+  it('enforces provider-side activity source uniqueness (T8)', async () => {
+    const garmin = await connection('GARMIN');
+    const startTime = new Date('2026-11-18T22:00:00.000Z');
+    await ingest(garmin, 'unique-source-id', { startTime, distanceM: 10_000 });
+    const other = await prisma.activity.create({
+      data: {
+        userId,
+        headline: 'Other activity',
+        type: 'RIDE',
+        startTime: new Date('2026-11-18T23:00:00.000Z'),
+        durationS: 1800,
+        distanceM: 5_000,
+      },
+      select: { id: true },
+    });
+
+    await expect(
+      prisma.activitySource.create({
+        data: {
+          activityId: other.id,
+          connectionId: garmin.id,
+          sourceActivityId: 'unique-source-id',
+          sourceUpdatedAt: new Date(),
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'P2002' });
   });
 
   it('lets provider identity win over a shifted start time', async () => {

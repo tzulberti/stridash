@@ -5,7 +5,7 @@
 
 import { prisma } from '../db.js';
 import { encryptToken, decryptToken } from '../crypto.js';
-import { GarminError, type DiTokens } from '../providers/garmin/sso.js';
+import { GarminError, peekJwtExpMs, type DiTokens } from '../providers/garmin/sso.js';
 import { maybeRefresh } from '../providers/garmin/api.js';
 import type { Env } from '../env.js';
 
@@ -41,12 +41,13 @@ export async function ensureGarminTokens(
   const tokens: DiTokens = { diToken, diRefreshToken: diRefreshToken ?? undefined, diClientId };
   const { fresh, tokens: next } = await maybeRefresh(tokens);
   if (!fresh) {
+    const expMs = peekJwtExpMs(next.diToken);
     await prisma.connection.update({
       where: { id: connection.id },
       data: {
         accessTokenEnc: encryptToken(next.diToken, env),
         refreshTokenEnc: next.diRefreshToken ? encryptToken(next.diRefreshToken, env) : null,
-        tokenExpiresAt: null, // refreshed below right after — claims re-checked cheaply
+        tokenExpiresAt: expMs === null ? null : new Date(expMs),
         status: 'ACTIVE',
       },
     });
