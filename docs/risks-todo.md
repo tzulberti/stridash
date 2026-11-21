@@ -664,7 +664,7 @@ lands.
       not.
 - [x] **T8. `activity_sources` unique constraint.** A direct duplicate insert
       of `(connection_id, source_activity_id)` raises `P2002`.
-- [ ] **T9. Migration cleanup of duplicate provenance rows.** On a seeded DB
+- [x] **T9. Migration cleanup of duplicate provenance rows.** On a seeded DB
       that already contains duplicate `(connection_id, source_activity_id)`
       rows, apply the migrations up to `20261118120000`, then apply the new
       migration and assert the oldest activity keeps the source and the unique
@@ -677,7 +677,11 @@ boundaries, type + user isolation, NULL ↔ non-NULL enrichment, closest
 candidate selection, and the provider-source `P2002`). T6/T7 drive the
 exported Garmin/iGPSPORT ingest helpers with a fake transaction, asserting the
 created scalars, gear/device attribution, series provider + sample count, and
-that `onMatch` fills only empty gear/device slots.
+that `onMatch` fills only empty gear/device slots. T9 uses a separate throwaway
+database, applies the migrations before `20261118120000`, seeds three
+duplicate provenance rows, then applies that migration and verifies the oldest
+activity keeps the source, the unique index exists, and a duplicate insert
+raises `23505`.
 
 ### Recent changes — auth
 
