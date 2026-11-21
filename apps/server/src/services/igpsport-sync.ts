@@ -378,7 +378,7 @@ interface StreamArray {
  * Dedup lives in the shared `ingestActivity` service: provider-source identity
  * first, then a tolerance match (same type, start ±60 s, distance ±100 m).
  */
-async function upsertActivity(
+export async function upsertActivity(
   connection: ConnectionLike,
   rideId: string,
   activity: ActivityInput,

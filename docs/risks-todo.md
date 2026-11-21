@@ -653,12 +653,12 @@ lands.
 - [x] **T5. Closest candidate wins.** With two matching candidates inside the
       window, the closest start is chosen; equal starts fall through to the
       closest distance. Covers the sort/tie-break branch.
-- [ ] **T6. `onMatch` gear/device fill.** Drive the shared service with an
+- [x] **T6. `onMatch` gear/device fill.** Drive the shared service with an
       `onMatch` handler (or a mocked Garmin/iGPSPORT sync) and assert it fills
       only empty slots and never overwrites a value another provider or the
       user already set. The Garmin/iGPSPORT callbacks moved in the refactor
       and currently have no test.
-- [ ] **T7. Garmin/iGPSPORT create payload + series.** Mocked sync-service
+- [x] **T7. Garmin/iGPSPORT create payload + series.** Mocked sync-service
       tests asserting the created scalars and the `activity_data_points` row
       after the refactor. Zwift has orchestration tests; Garmin/iGPSPORT do
       not.
@@ -674,7 +674,10 @@ lands.
 **Landed 2026-11-21:** T1–T5 and T8 now have integration coverage in
 `activity ingest dedupe` (parallel tolerance/NULL races, both tolerance
 boundaries, type + user isolation, NULL ↔ non-NULL enrichment, closest
-candidate selection, and the provider-source `P2002`).
+candidate selection, and the provider-source `P2002`). T6/T7 drive the
+exported Garmin/iGPSPORT ingest helpers with a fake transaction, asserting the
+created scalars, gear/device attribution, series provider + sample count, and
+that `onMatch` fills only empty gear/device slots.
 
 ### Recent changes — auth
 

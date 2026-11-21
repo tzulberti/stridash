@@ -569,7 +569,7 @@ export async function resyncGarminActivity(
   );
 }
 
-async function upsertActivity(
+export async function upsertActivity(
   connection: ConnectionLike,
   garminId: string,
   activity: ActivityInput,
