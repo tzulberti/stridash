@@ -276,8 +276,12 @@ wholesale, and the real exposure is S4. Expo pulls high-severity transitives.
       Expo dev-chain noise explicitly).
 - [x] Plan the zod 4 migration (`valibot`/`standard-schema` alternative is fine,
       but keep one validation lib).
-- [x] Revisit mobile Expo major upgrade separately — deferred until Expo ships
-      patched `glob`/`minimatch`; the audit allow-list covers those entries.
+- [x] Revisit mobile Expo major upgrade separately — **closed 2026-11-21**:
+      the latest published Expo is 58.0.26 and it is already installed;
+      `npx expo install --fix` aligned the SDK 58 package ranges (including
+      `expo-web-browser` 58.1.0) and `npx expo install --check` reports up to
+      date. `glob`/`minimatch` now report moderate only (below the gate); no
+      newer Expo major exists to move to.
 
 **Landed 2026-11-19:** `zod` is now 4.6.7 (one validation library; env,
 auth, data and connection schemas unchanged and all tests pass).
@@ -285,8 +289,10 @@ auth, data and connection schemas unchanged and all tests pass).
 high/critical advisories unless `scripts/audit-allowlist.json` has a justified
 entry; the known Expo CLI `glob`/`minimatch` findings are explicitly listed.
 CI runs the gate before the static checks. `--omit=dev` now reports no
-high/critical findings (six moderate Expo/hono entries remain below the gate).
-The mobile Expo major upgrade stays a separate follow-up.
+high/critical findings apart from the Prisma CLI chain below (moderate
+Expo/hono entries remain below the gate). The mobile Expo SDK 58 package
+alignment landed 2026-11-21; it was not a major-version move because 58.0.26 is
+the latest published release.
 
 **2026-11-20:** the registry later flagged Prisma’s CLI chain
 (`effect` ← `@prisma/config` ← `prisma`) as **high** (Effect ReDoS). Prisma
@@ -735,7 +741,7 @@ npm run typecheck                       # all workspaces
 npx vitest run --project unit           # apps/server, 91 tests
 npm test -w @stridash/web               # 42 tests
 npx vitest run --project integration    # apps/server, 62 tests (needs Docker)
-npm audit --omit=dev                    # zod high + expo transitives
+npm audit --omit=dev                    # Prisma CLI highs are allow-listed
 ```
 
 Probes that confirmed findings (recreate as real regression tests):
