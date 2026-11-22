@@ -40,6 +40,8 @@ maintainability. Check the box when the fix (and its test) has landed.
 >
 > **Status 2026-11-22:** C8 landed — the production Docker image, static web
 > serving, Compose stack, and Caddy TLS example are in place and smoke-tested.
+> D7 also landed: the account export now streams a complete JSON object,
+> including per-sample series, with bounded memory.
 
 ---
 
@@ -494,9 +496,9 @@ absent.
 
 ## P2 — correctness & maintainability
 
-### [ ] D7. Export is assembled fully in memory — **Low/Medium**
+### [x] D7. Export is assembled fully in memory — **Low/Medium**
 
-**Where:** `routes/data.ts:192-262`.
+**Where:** `services/account-export.ts` (previously `routes/data.ts`).
 
 **Problem:** loads every activity (with raw JSON), measurement, sleep, wellness,
 gear, device row, then `JSON.stringify`s. Fine for one year; OOM risk for
@@ -505,6 +507,16 @@ JSON dump").
 
 **Fix:** stream NDJSON (one row per line, headers per entity) or paginate with
 a resume token; decide whether streams are in scope.
+
+**Landed 2026-11-22:** `/api/export` keeps the existing downloadable
+single-JSON-object contract, but writes it through a Web `ReadableStream` and
+cursor-paginates every array (200 entities, 100 activities, 10 series per
+page). Peak memory is one page instead of the whole account. Format
+`stridash-export/2` adds `activityDataPoints` (the per-sample series, flat and
+keyed by `activityId`) plus account `preferences` and `chartChannels`; token
+columns, password hashes and refresh tokens are never selected. Integration
+tests assert the new payload and export 205 measurements to cross the page
+boundary.
 
 ### [x] D8. `tokenExpiresAt` is not persisted after a Garmin refresh — **Low**
 
@@ -570,8 +582,8 @@ No root `eslint.config.*` exists, so the CI step named "ESLint" runs
       none exist yet. Mark as target-state or implement.
 - [ ] README status says "M1 in progress" while M2.1/M3/M4 are done; license
       says TBD while `package.json` says AGPL-3.0.
-- [ ] Roadmap M6 lists data export as pending although `/api/export` exists
-      (partial: no streams). Sync-now (M5) also exists.
+- [x] Roadmap M6 now separates the completed streamed JSON dump from pending
+      CSV export; sync-now (M5) also exists.
 - [ ] Add this file to the docs index/roadmap so it does not drift.
 
 ### [ ] C7. No background sync — **Feature gap (roadmap)**

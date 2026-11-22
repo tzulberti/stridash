@@ -1535,7 +1535,7 @@ describe('account export + delete', () => {
         scopes: [],
       },
     });
-    await prisma.activity.create({
+    const exportActivity = await prisma.activity.create({
       data: {
         userId: alice.id,
         headline: 'exportable run',
@@ -1551,22 +1551,65 @@ describe('account export + delete', () => {
         },
       },
     });
+    await prisma.activityDataPoint.create({
+      data: {
+        activityId: exportActivity.id,
+        provider: 'GARMIN',
+        sampleCount: 2,
+        series: { timeMs: [0, 1000], hrBpm: [100, 110] },
+        raw: { stream: 'raw-is-exported' },
+      },
+    });
 
     const res = await app.request('/api/export', authed(aliceToken));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-disposition')).toContain('attachment');
+    expect(res.headers.get('content-type')).toContain('application/json');
     const dump = (await json(res)) as Record<string, unknown>;
-    expect(dump.format).toBe('stridash-export/1');
+    expect(dump.format).toBe('stridash-export/2');
     expect((dump.account as Record<string, unknown>).email).toBe('alice@test.stridash');
+    expect(dump.preferences).toEqual({ units: 'km', theme: 'dark', language: 'en' });
+    expect(dump.chartChannels).toEqual(expect.any(Object));
     const acts = dump.activities as Array<Record<string, unknown>>;
     const exported = acts.find((a) => a.headline === 'exportable run')!;
     expect((exported.sources as Array<Record<string, unknown>>)[0].sourceActivityId).toBe('exp-1');
+    const series = dump.activityDataPoints as Array<Record<string, unknown>>;
+    const exportedSeries = series.find((s) => s.activityId === exportActivity.id)!;
+    expect(exportedSeries.series).toEqual({ timeMs: [0, 1000], hrBpm: [100, 110] });
+    expect((exportedSeries.raw as Record<string, unknown>).stream).toBe('raw-is-exported');
     const raw = JSON.stringify(dump);
     expect(raw).not.toContain('secret-access');
     expect(raw).not.toContain('secret-refresh');
     // the exporter's own account sees nothing of alice's
     const mine = await app.request('/api/export', authed(token));
-    expect(((await json(mine)) as { activities: unknown[] }).activities).toHaveLength(0);
+    const mineDump = (await json(mine)) as {
+      activities: unknown[];
+      chartChannels: Record<string, unknown>;
+    };
+    expect(mineDump.activities).toHaveLength(0);
+    expect(mineDump.chartChannels).toEqual({});
+  });
+
+  it('streams every page instead of truncating at one page', async () => {
+    const alice = await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } });
+    const before = await prisma.measurement.count({ where: { userId: alice.id } });
+    await prisma.measurement.createMany({
+      data: Array.from({ length: 205 }, (_, i) => ({
+        userId: alice.id,
+        provider: 'MANUAL' as const,
+        kind: 'WEIGH_IN' as const,
+        measuredAt: new Date(Date.UTC(2030, 0, 1, 0, i)),
+        weightKg: (70 + i / 100).toFixed(2),
+        notes: `export-page-${i}`,
+      })),
+    });
+
+    const res = await app.request('/api/export', authed(aliceToken));
+    expect(res.status).toBe(200);
+    const dump = (await json(res)) as Record<string, unknown>;
+    const measurements = dump.measurements as Array<Record<string, unknown>>;
+    expect(measurements).toHaveLength(before + 205);
+    expect(measurements.some((m) => m.notes === 'export-page-204')).toBe(true);
   });
 
   it('hard-deletes the account and cascades everything; the token dies after', async () => {

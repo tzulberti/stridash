@@ -5,9 +5,11 @@ import { prisma } from '../db.js';
 import { requireUserId } from '../auth.js';
 import type { Env } from '../env.js';
 import { safeErrorForLog } from '../redact.js';
+import { exportFilename, exportWebStream } from '../services/account-export.js';
 import { resyncGarminActivity } from '../services/garmin-sync.js';
 import { resyncIgpSportActivity } from '../services/igpsport-sync.js';
 import { resyncZwiftActivity } from '../services/zwift-sync.js';
+import { serializeRow } from '../serialize.js';
 import { uuidParam } from '../params.js';
 
 const listQuerySchema = z.object({
@@ -58,24 +60,6 @@ const feedActivitySelect = {
   createdAt: true,
   updatedAt: true,
 } as const satisfies Prisma.ActivitySelect;
-
-/** Serialization helper: Prisma Decimals→number, Dates→ISO strings. */
-function serializeRow(row: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(row).map(([k, v]) => {
-      if (v instanceof Date) return [k, v.toISOString()];
-      if (
-        typeof v === 'object' &&
-        v !== null &&
-        'toFixed' in v &&
-        typeof (v as any).toFixed === 'function'
-      ) {
-        return [k, Number(v)]; // Prisma Decimal
-      }
-      return [k, v];
-    }),
-  );
-}
 
 export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   const routes = new Hono<{ Variables: { userId: string } }>();
@@ -228,78 +212,16 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
 
   /** Full JSON dump of everything this user's account holds ("raw payload is
    * the authority" — activities carry their raw/detail payloads as-received).
-   * Per-sample series (activity_data_points, ~1 row per activity) are NOT
-   * included: they dominate the payload (100k+ samples/year). Everything
-   * else — scalars, raw payloads, provenance, measurements, sleep, wellness,
-   * gear — is in here. */
-  routes.get('/export', async (c) => {
-    const userId = c.get('userId');
-    const [
-      user,
-      connections,
-      activities,
-      measurements,
-      sleepSessions,
-      dailyWellness,
-      gear,
-      devices,
-    ] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: { email: true, displayName: true, createdAt: true },
-      }),
-      prisma.connection.findMany({
-        where: { userId },
-        // tokens are NEVER exported — they're credentials, not data
-        select: {
-          provider: true,
-          providerUserId: true,
-          status: true,
-          createdAt: true,
-          lastSyncedAt: true,
-        },
-      }),
-      prisma.activity.findMany({
-        where: { userId },
-        orderBy: { startTime: 'asc' },
-        include: {
-          sources: {
-            select: { connectionId: true, sourceActivityId: true, sourceUpdatedAt: true },
-          },
-        },
-      }),
-      prisma.measurement.findMany({ where: { userId }, orderBy: { measuredAt: 'asc' } }),
-      prisma.sleepSession.findMany({ where: { userId }, orderBy: { dateKey: 'asc' } }),
-      prisma.dailyWellness.findMany({ where: { userId }, orderBy: { dateKey: 'asc' } }),
-      prisma.gear.findMany({
-        where: { userId },
-        include: { components: { orderBy: { createdAt: 'asc' } } },
-      }),
-      prisma.device.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
-    ]);
-
-    const dump = {
-      exportedAt: new Date().toISOString(),
-      format: 'stridash-export/1',
-      note: 'Per-sample activity series (the FIT "stream" rows) are not part of this dump; every activity carries its scalars, raw provider payloads and provenance. Tokens/secrets are never exported.',
-      account: user,
-      connections,
-      // serializeRow: Prisma Decimals → JSON numbers, Dates → ISO strings
-      activities: activities.map((a) => ({ ...serializeRow(a), sources: a.sources })),
-      measurements: measurements.map(serializeRow),
-      sleepSessions: sleepSessions.map(serializeRow),
-      dailyWellness: dailyWellness.map(serializeRow),
-      gear: gear.map((g) => ({
-        ...serializeRow(g),
-        components: g.components.map(serializeRow),
-      })),
-      devices: devices.map(serializeRow),
-    };
-    const filename = `stridash-export-${new Date().toISOString().slice(0, 10)}.json`;
-    return new Response(JSON.stringify(dump, null, 1), {
+   * The response is streamed row-by-row via cursor pagination, including the
+   * per-sample `activityDataPoints` series; peak memory is one page, not the
+   * account's whole history. Tokens/secrets are never selected. */
+  routes.get('/export', (c) => {
+    return new Response(exportWebStream(c.get('userId')), {
       headers: {
-        'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${exportFilename()}"`,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
       },
     });
   });

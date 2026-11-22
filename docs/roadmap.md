@@ -177,7 +177,9 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 ## M6 — Extras ☐
 
 - [ ] Manual entry: weight / BP quick-add from the app
-- [ ] Data export (CSV / full JSON dump of your data — user owns it)
+- [x] Full JSON account export — streamed, includes per-sample activity series
+      (2026-11-22)
+- [ ] CSV export (user owns their data)
 - [ ] Direct BLE pairing to the Omron scale on mobile (bypass cloud)
 - [x] Production Docker Compose: single API + web image, Postgres volume,
       Caddy TLS, migrations on startup
