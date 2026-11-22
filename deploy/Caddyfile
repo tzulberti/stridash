@@ -1,0 +1,13 @@
+# Caddy obtains and renews the certificate automatically. To receive ACME
+# expiry notices, add a global `email you@example.com` block above this site.
+{$STRIDASH_DOMAIN} {
+	encode zstd gzip
+
+	# The app serves both the SPA and /api/*; Caddy only terminates TLS.
+	reverse_proxy app:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

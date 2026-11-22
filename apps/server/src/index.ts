@@ -1,7 +1,10 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { bodyLimit } from 'hono/body-limit';
-import { pathToFileURL } from 'node:url';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadEnv, type Env } from './env.js';
 import { UnauthorizedError } from './auth.js';
 import { safeErrorForLog } from './redact.js';
@@ -13,6 +16,36 @@ import { drainSyncQueue, recoverStaleSyncLocks } from './services/sync-queue.js'
 
 /** Nothing in the API accepts a body anywhere near this — it is a DoS guard. */
 const MAX_BODY_BYTES = 1024 * 1024;
+
+/**
+ * The production image copies the Vite build here. In dev (and when the web
+ * app is deployed separately) the directory is absent, so the API runs alone.
+ */
+const DEFAULT_WEB_DIST = fileURLToPath(new URL('../../web/dist/', import.meta.url));
+
+/** Keep the static build's headers in sync with apps/web/src/lib/security-headers.ts. */
+const WEB_SECURITY_HEADERS = {
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self'",
+    "connect-src 'self'",
+  ].join('; '),
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+} as const;
+
+function isApiPath(pathname: string): boolean {
+  return pathname === '/api' || pathname.startsWith('/api/');
+}
 
 // App-level context typing
 type AppContext = {
@@ -27,6 +60,8 @@ type TypedHono = Hono<AppContext>;
  */
 export function createApp(env: Env): TypedHono {
   const app = new Hono<AppContext>();
+  const webDist = env.STRIDASH_WEB_DIST ? path.resolve(env.STRIDASH_WEB_DIST) : DEFAULT_WEB_DIST;
+  const webIndex = path.join(webDist, 'index.html');
 
   // ─── Cross-cutting guards ──────────────────────────────────────────────────
 
@@ -64,6 +99,33 @@ export function createApp(env: Env): TypedHono {
   api.route('/', dataRoutes(env));
 
   app.route('/api', api);
+
+  // ─── Web dashboard (single-image production deployment) ───────────────────
+
+  if (existsSync(webIndex)) {
+    app.use('*', async (c, next) => {
+      await next();
+      if (isApiPath(c.req.path)) return;
+      for (const [name, value] of Object.entries(WEB_SECURITY_HEADERS)) c.header(name, value);
+      // Vite fingerprints every asset filename. Missing assets must not be
+      // cached as immutable just because their URL looks fingerprinted.
+      const immutable = c.res.status === 200 && c.req.path.startsWith('/assets/');
+      c.header('Cache-Control', immutable ? 'public, max-age=31536000, immutable' : 'no-cache');
+    });
+
+    app.use('*', async (c, next) => {
+      if (isApiPath(c.req.path)) return next();
+      return serveStatic({ root: webDist })(c, next);
+    });
+
+    // SPA fallback: client-side routes all resolve to index.html. API paths
+    // and missing fingerprinted assets deliberately fall through to Hono's
+    // normal 404 instead of returning HTML with a JavaScript content type.
+    app.get('*', async (c, next) => {
+      if (isApiPath(c.req.path) || c.req.path.startsWith('/assets/')) return next();
+      return serveStatic({ path: webIndex })(c, next);
+    });
+  }
 
   // ─── Errors ────────────────────────────────────────────────────────────────
 

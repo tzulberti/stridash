@@ -37,6 +37,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > accepted** (documented and separately rate-limited); email verification is
 > the trigger to close it fully. D2's operator merge script still needs to be
 > run against deployments that already hold pre-fix duplicate activities.
+>
+> **Status 2026-11-22:** C8 landed — the production Docker image, static web
+> serving, Compose stack, and Caddy TLS example are in place and smoke-tested.
 
 ---
 
@@ -578,11 +581,22 @@ press. This is the structural fix behind S7: a scheduler also enables token
 refresh, retry/backoff and "new ride" notifications. Keep it out of the
 request path.
 
-### [ ] C8. No deployment artifact — **Ops**
+### [x] C8. No deployment artifact — **Ops**
 
 Compose only runs Postgres. There is no server Dockerfile, no graceful
 shutdown (`prisma.$disconnect`), no static serving for the web build, and no
 reverse-proxy/TLS example. Needed before anyone can self-host.
+
+**Landed 2026-11-22:** `Dockerfile` builds a non-root Node image from the
+server + types + web workspaces, copies the generated Prisma client and Vite
+build, and serves both `/api/*` and the SPA with the web security headers.
+`deploy/docker-entrypoint.sh` applies `prisma migrate deploy` before startup;
+the API already drains the sync queue and calls `prisma.$disconnect()` on
+SIGINT/SIGTERM. `docker-compose.prod.yml` adds Postgres without a host port,
+the app on an internal network, and Caddy for automatic HTTPS/HSTS. A
+`deploy/.env.example` and the deployment guide cover the required secrets and
+upgrade path. Static serving has unit coverage; a Postgres-backed image smoke
+run verified migrations, health, SPA/assets, and the SIGTERM drain.
 
 ### [ ] C9. `serializeRow` uses a `'toFixed' in v` heuristic — **Low**
 

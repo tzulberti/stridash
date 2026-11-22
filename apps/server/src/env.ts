@@ -57,6 +57,11 @@ const envSchema = z
       }, 'STRIDASH_ENC_OLD_KEYS must be a JSON object of keyId → key (keys ≥32 chars)'),
     PORT: z.coerce.number().int().positive().default(3000),
     STRIDASH_VERSION: z.string().default('0.1.0-dev'),
+    /**
+     * Built dashboard directory. Defaults to `apps/web/dist`; set it when the
+     * web build is mounted or copied elsewhere.
+     */
+    STRIDASH_WEB_DIST: z.string().optional(),
 
     // ─── Auth rate limiting (see rate-limit.ts) ───────────────────────────────
     /** Requests per IP across /api/auth/* within one window (default 30/15 min). */

@@ -1,0 +1,63 @@
+# Keep the production project/volumes separate from the local dev compose
+# stack, which also uses a `pgdata18` volume and a `db` service.
+name: stridash-prod
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-stridash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-stridash}
+    volumes:
+      - pgdata18:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-stridash} -d ${POSTGRES_DB:-stridash}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Deliberately no host port: only the app container can reach Postgres.
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # The server drains in-flight sync work for up to 30s on SIGTERM. Docker's
+    # default 10s stop timeout would SIGKILL it mid-sync.
+    stop_grace_period: 40s
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./deploy/.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stridash}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@db:5432/${POSTGRES_DB:-stridash}?schema=public
+      PORT: 3000
+      # Caddy overwrites X-Forwarded-For before the request reaches the app.
+      STRIDASH_TRUST_PROXY: 'true'
+    expose:
+      - '3000'
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      STRIDASH_DOMAIN: ${STRIDASH_DOMAIN:?set STRIDASH_DOMAIN in deploy/.env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata18:
+  caddy_data:
+  caddy_config:

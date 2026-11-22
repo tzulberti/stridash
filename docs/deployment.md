@@ -4,6 +4,56 @@ Stridash handles provider account credentials (Garmin/Zwift/Omron tokens and
 the iGPSPORT password, which that API requires reversibly). Treat the server
 and its database as sensitive infrastructure.
 
+## Docker Compose (recommended for self-hosting)
+
+`docker-compose.prod.yml` runs three services:
+
+- `db` — Postgres with a named volume; no host port.
+- `app` — the multi-stage `Dockerfile`: a single Node image that serves both
+  `/api/*` and the built Vite dashboard, and runs `prisma migrate deploy` on
+  startup.
+- `caddy` — automatic HTTPS, HSTS and the reverse proxy. Only Caddy publishes
+  ports 80/443.
+
+Prerequisites: Docker Engine with Compose v2, a DNS `A`/`AAAA` record pointing
+at the host, and inbound 80/443 (Caddy needs 80 for the ACME challenge).
+
+```bash
+cp deploy/.env.example deploy/.env
+chmod 600 deploy/.env
+# edit deploy/.env: domain, POSTGRES_PASSWORD, JWT/encryption keys
+docker compose --env-file deploy/.env -f docker-compose.prod.yml up -d --build
+
+docker compose --env-file deploy/.env -f docker-compose.prod.yml ps
+curl https://your.domain.example/api/health
+```
+
+Generate the two required application secrets (and the database password)
+with `openssl rand -hex 32`. Caddy obtains the certificate automatically; to
+receive ACME expiry notices, add a global `email you@example.com` block to
+`deploy/Caddyfile`. The compose file sets `STRIDASH_TRUST_PROXY=true` because
+Caddy overwrites `X-Forwarded-For`; the `app` port is not published, so
+nothing reaches Node over plain HTTP.
+
+Data lives in the `pgdata18` volume and Caddy's certificate state in
+`caddy_data` / `caddy_config`. `docker compose ... down` keeps them;
+`down -v` deletes them. The Compose project is named `stridash-prod`, so its
+volumes and containers do not collide with the local dev `pgdata18` stack.
+Back up Postgres before upgrades and before running the activity-merge cleanup
+below.
+
+To upgrade:
+
+```bash
+git pull
+docker compose --env-file deploy/.env -f docker-compose.prod.yml up -d --build
+```
+
+The app applies pending migrations before starting. Run **one app replica**:
+the sync queue is deliberately single-node (see below). If the dashboard is
+served separately, point `STRIDASH_WEB_DIST` at its build directory; when the
+directory is absent the server runs the API only.
+
 ## TLS is mandatory
 
 The API must never be exposed over plain HTTP. Run it behind a TLS-terminating
@@ -54,11 +104,13 @@ server {
 - The mobile app's `http://localhost:3000` default is for local development
   only. Point `EXPO_PUBLIC_API_URL` at the HTTPS host before testing from a
   phone.
+
 ## Web dashboard headers
 
-`npm run build -w @stridash/web` emits `dist/_headers` with the CSP and
-hardening headers. Netlify and Cloudflare Pages read that file automatically;
-for nginx, serve `dist` and repeat the same headers:
+The production app image serves `apps/web/dist` itself and sets the same CSP
+and hardening headers in `apps/server/src/index.ts`. `npm run build -w
+@stridash/web` also emits `dist/_headers` for Netlify/Cloudflare Pages; if you
+serve the build with nginx, repeat the same headers:
 
 ```nginx
 root /srv/stridash/apps/web/dist;

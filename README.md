@@ -118,6 +118,19 @@ Server configuration lives in `apps/server/.env` (copy from
 rotation procedure. The Expo app targets the API via `EXPO_PUBLIC_API_URL` —
 set it to your machine's LAN IP to test from a phone.
 
+For a self-hosted production deployment, the included Compose stack builds one
+API + web image and runs it behind Caddy with automatic HTTPS:
+
+```bash
+cp deploy/.env.example deploy/.env
+# edit domain, Postgres password, JWT/encryption secrets
+docker compose --env-file deploy/.env -f docker-compose.prod.yml up -d --build
+```
+
+The app applies migrations on startup and only Caddy publishes ports 80/443;
+see [`docs/deployment.md`](docs/deployment.md) for backups, upgrades, and key
+rotation.
+
 ## License notes
 
 To be decided at the first tagged release. Constraint to keep in mind: the

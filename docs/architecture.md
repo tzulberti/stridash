@@ -77,11 +77,14 @@ schema lands, after which Prisma generates it.
    with two `activity_sources`.
 4. Apps show it in the unified feed; `raw` keeps both originals.
 
-## Deployment story (target)
+## Deployment story
 
-- Single Docker image for `apps/server` + Postgres for self-hosters.
-- Apps: web build served by the server (or any static host); Expo EAS for
-  store builds later.
+- Self-hosters use `docker-compose.prod.yml`: one Node image for the API and
+  the built web dashboard, Postgres with a named volume, and Caddy for
+  automatic TLS. The app container runs migrations and then serves both
+  `/api/*` and the SPA.
+- The web build can also be hosted separately (Netlify/Cloudflare/nginx); the
+  Expo app remains a separate target for store builds later.
 - All third-party sync happens server-side, so a phone left off for two weeks
   loses nothing.
 

@@ -179,6 +179,8 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [ ] Manual entry: weight / BP quick-add from the app
 - [ ] Data export (CSV / full JSON dump of your data — user owns it)
 - [ ] Direct BLE pairing to the Omron scale on mobile (bypass cloud)
+- [x] Production Docker Compose: single API + web image, Postgres volume,
+      Caddy TLS, migrations on startup
 - [ ] Multi-user hardening, push notifications ("new ride synced")
 - [ ] Garadget-style webhooks/poll for near-real-time sync where APIs allow
 - [ ] Write `docs/provider-tos-risk.md` — the per-provider terms-of-service

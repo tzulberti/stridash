@@ -11,9 +11,11 @@
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "crypto:reencrypt": "tsx --env-file=.env src/scripts/reencrypt-tokens.ts",
     "start": "tsx --env-file=.env src/index.ts",
+    "start:prod": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "data:merge-activities": "tsx --env-file=.env src/scripts/merge-duplicate-activities.ts"
