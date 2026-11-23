@@ -610,11 +610,16 @@ the app on an internal network, and Caddy for automatic HTTPS/HSTS. A
 upgrade path. Static serving has unit coverage; a Postgres-backed image smoke
 run verified migrations, health, SPA/assets, and the SIGTERM drain.
 
-### [ ] C9. `serializeRow` uses a `'toFixed' in v` heuristic — **Low**
+### [x] C9. `serializeRow` uses a `'toFixed' in v` heuristic — **Low**
 
-`routes/data.ts:20-32` guesses Prisma `Decimal` by duck typing; any object with
+`serialize.ts` guesses Prisma `Decimal` by duck typing; any object with
 `toFixed` becomes a number. Prefer `Prisma.Decimal.isDecimal(v)` or an explicit
 column mapping.
+
+**Landed 2026-11-23:** the shared serializer now uses
+`Prisma.Decimal.isDecimal(v)` and `toNumber()`. Unit tests cover Decimal/Date
+conversion and assert an unrelated object with a `toFixed` method is preserved
+unchanged.
 
 ### [ ] C10. OpenAPI is advertised but absent — **Feature gap**
 
