@@ -40,12 +40,6 @@ export type PrefTheme = 'dark' | 'light';
 export type PrefLanguage =
   'en' | 'es' | 'pt' | 'fr' | 'de' | 'it' | 'nl' | 'ru' | 'ja' | 'ko' | 'zh' | 'hi';
 
-export interface UserPreferences {
-  units: PrefUnit;
-  theme: PrefTheme;
-  language: PrefLanguage;
-}
-
 /** Stream channels chartable on the activity page (keys of the series
  * payload; latDeg/lngDeg feed the map, not charts). */
 export type ChartChannelKey =

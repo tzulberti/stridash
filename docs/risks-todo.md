@@ -557,10 +557,15 @@ planned UI redesign.
 small drifts. Extract a shared `services/activity-ingest.ts`; then D1/D2 are
 one change, not three.
 
-### [ ] C3. Duplicate `UserPreferences` declaration — **Trivial**
+### [x] C3. Duplicate `UserPreferences` declaration — **Trivial**
 
-`packages/types/src/index.ts:43` and `:76`. TypeScript merges them, so it
-compiles, but one is dead. Merge into one interface (include `chartChannels`).
+`packages/types/src/index.ts` declared `UserPreferences` twice. TypeScript
+merged them, so it compiled, but one was dead. Merge into one interface
+(include `chartChannels`).
+
+**Landed 2026-11-23:** the dead declaration is gone; the single interface
+keeps `units`, `theme`, `language` and the required per-provider
+`chartChannels` map. Workspace typecheck passes.
 
 ### [x] C4. `db.ts` bypasses validated env — **Low**
 
