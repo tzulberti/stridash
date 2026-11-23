@@ -562,11 +562,17 @@ one change, not three.
 `packages/types/src/index.ts:43` and `:76`. TypeScript merges them, so it
 compiles, but one is dead. Merge into one interface (include `chartChannels`).
 
-### [ ] C4. `db.ts` bypasses validated env — **Low**
+### [x] C4. `db.ts` bypasses validated env — **Low**
 
-`apps/server/src/db.ts:12` reads `process.env.DATABASE_URL` directly, so an
-invalid/missing URL fails at the first query instead of at startup. Import the
+`apps/server/src/db.ts` read `process.env.DATABASE_URL` directly, so an
+invalid/missing URL failed at the first query instead of at startup. Import the
 validated `env` (or a `loadEnv()` result) and fail fast.
+
+**Landed 2026-11-23:** `env.ts` exposes `loadDatabaseUrl()`, which validates
+the `DATABASE_URL` slice before the Prisma singleton is constructed. It is
+intentionally narrower than `loadEnv()` so DB-only command-line scripts do not
+need unrelated auth/encryption secrets. Unit tests cover valid, missing and
+non-postgres URLs.
 
 ### [ ] C5. Lint only covers mobile — **Low**
 

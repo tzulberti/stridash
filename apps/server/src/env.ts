@@ -5,9 +5,17 @@ import { z } from 'zod';
  * time. Provider API credentials are NOT here: they are per-user OAuth /
  * account credentials stored encrypted in the `connections` table.
  */
+const databaseUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => /^postgres(?:ql)?:\/\//.test(value), {
+    message: 'Must be a postgres:// or postgresql:// URL',
+  });
+const databaseEnvSchema = z.object({ DATABASE_URL: databaseUrlSchema });
+
 const envSchema = z
   .object({
-    DATABASE_URL: z.string().url().startsWith('postgresql://'),
+    DATABASE_URL: databaseUrlSchema,
     STRIDASH_JWT_SECRET: z
       .string()
       .min(32, 'JWT secret must be ≥32 chars (use `openssl rand -hex 32`)'),
@@ -109,15 +117,28 @@ const envSchema = z
 
 export type Env = z.infer<typeof envSchema>;
 
+function formatEnvIssues(error: z.ZodError): string {
+  const issues = error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');
+  return `Invalid environment configuration:\n${issues}\nSee apps/server/.env.example`;
+}
+
 export function loadEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
 
-  if (!parsed.success) {
-    const issues = parsed.error.issues
-      .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
-      .join('\n');
-    throw new Error(`Invalid environment configuration:\n${issues}\nSee apps/server/.env.example`);
-  }
+  if (!parsed.success) throw new Error(formatEnvIssues(parsed.error));
 
   return parsed.data;
+}
+
+/**
+ * Validate just the database URL before the Prisma singleton is created. The
+ * full env needs auth/encryption secrets that command-line DB scripts do not
+ * necessarily use; this still fails at startup instead of the first query.
+ */
+export function loadDatabaseUrl(): string {
+  const parsed = databaseEnvSchema.safeParse(process.env);
+
+  if (!parsed.success) throw new Error(formatEnvIssues(parsed.error));
+
+  return parsed.data.DATABASE_URL;
 }
