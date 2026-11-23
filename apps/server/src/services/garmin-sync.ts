@@ -7,11 +7,9 @@
  */
 
 import { prisma } from '../db.js';
-import { encryptToken, decryptToken } from '../crypto.js';
 import { Prisma } from '../generated/prisma/client.js';
-import { GarminError, type DiTokens } from '../providers/garmin/sso.js';
+import { GarminError } from '../providers/garmin/sso.js';
 import {
-  maybeRefresh,
   listActivities,
   downloadFit,
   listGear,

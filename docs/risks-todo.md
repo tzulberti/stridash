@@ -42,6 +42,11 @@ maintainability. Check the box when the fix (and its test) has landed.
 > serving, Compose stack, and Caddy TLS example are in place and smoke-tested.
 > D7 also landed: the account export now streams a complete JSON object,
 > including per-sample series, with bounded memory.
+>
+> **Status 2026-11-23:** C9 (Prisma Decimal detection), C4 (validated
+> `DATABASE_URL` before Prisma starts), C3 (single `UserPreferences` type) and
+> C5 (root TypeScript ESLint for server/web/types) landed with tests/config
+> updates.
 
 ---
 
@@ -579,12 +584,19 @@ intentionally narrower than `loadEnv()` so DB-only command-line scripts do not
 need unrelated auth/encryption secrets. Unit tests cover valid, missing and
 non-postgres URLs.
 
-### [ ] C5. Lint only covers mobile — **Low**
+### [x] C5. Lint only covers mobile — **Low**
 
-No root `eslint.config.*` exists, so the CI step named "ESLint" runs
-`expo lint` only; server/web are unlinted. Add a root flat config (TS +
+No root `eslint.config.*` existed, so the CI step named "ESLint" ran
+`expo lint` only; server/web were unlinted. Add a root flat config (TS +
 `@typescript-eslint`, no-floating-promises is worth it) and wire the
 `lint` scripts for server/web.
+
+**Landed 2026-11-23:** `eslint.config.mjs` lints server, web and shared types
+with `typescript-eslint`; `no-floating-promises` is an error and
+`no-misused-promises` ignores React event attributes (where async handlers are
+normal). Server/web/types have `lint` scripts, and `tsconfig.eslint.json`
+files include tests/configs in the typed program. `npm run lint` passes with
+only mobile's two pre-existing `import/no-duplicates` warnings.
 
 ### [ ] C6. Docs contradict the code — **Low**
 

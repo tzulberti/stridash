@@ -17,6 +17,7 @@
     "start": "tsx --env-file=.env src/index.ts",
     "start:prod": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "test": "vitest run",
     "data:merge-activities": "tsx --env-file=.env src/scripts/merge-duplicate-activities.ts"
   },

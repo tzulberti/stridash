@@ -7,7 +7,6 @@
 import type { FitDevice, FitRecord, FitSession } from './normalize.js';
 
 // CJS module: load through interop
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 type FitFileParserModule = new (opts: Record<string, unknown>) => {
   parse: (buf: Buffer, cb: (err: unknown, data: any) => void) => void;
 };

@@ -437,7 +437,6 @@ describe('activities list', () => {
       startTime: Date,
       distanceM: number,
       provider: string,
-      connectionId: string,
     ) =>
       prisma.activity.create({
         data: {
@@ -465,7 +464,6 @@ describe('activities list', () => {
       new Date('2026-11-01T07:00:00Z'),
       5_100,
       'GARMIN',
-      garminConnId,
     );
     runId = run.id;
     await prisma.activitySource.create({
@@ -483,7 +481,6 @@ describe('activities list', () => {
       new Date('2026-11-05T18:00:00Z'),
       22_400,
       'ZWIFT',
-      zwiftConnId,
     );
     virtualId = virtual.id;
     await prisma.activitySource.create({
@@ -1387,7 +1384,6 @@ describe('connections', () => {
 describe('gear', () => {
   let shoesId = '';
   let bikeId = '';
-  let runGearId = '';
 
   beforeAll(async () => {
     const alice = await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } });
@@ -1411,11 +1407,7 @@ describe('gear', () => {
     });
     bikeId = bike.id;
 
-    const run = await prisma.activity.findUniqueOrThrow({ where: { id: runId } });
-    await prisma.activity.update({ where: { id: run.id }, data: { gearId: shoesId } });
-    // silent: run distance 5100 m on 2026-11-01
-    void run;
-    runGearId = shoesId;
+    await prisma.activity.update({ where: { id: runId }, data: { gearId: shoesId } });
   });
 
   it('lists gear with computed usage from linked activities', async () => {

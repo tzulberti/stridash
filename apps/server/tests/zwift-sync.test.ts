@@ -217,7 +217,7 @@ describe('syncZwiftConnection — page scan', () => {
 
   it('caps the scan at 10 pages even when every page is fresh', async () => {
     prisma.activitySource.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-    listActivities.mockImplementation(async (start: unknown) =>
+    listActivities.mockImplementation(async (_start: unknown) =>
       Array.from({ length: 20 }, () => row()),
     );
 

@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src", "scripts", "prisma", "prisma.config.ts", "tests", "vitest.config.ts"],
+  "exclude": ["src/generated"]
+}
