@@ -12,7 +12,7 @@
  (Zwift/      │  │   ├─ Garmin adapter     │   │            │
   iGPSPORT)   │  │   ├─ Strava adapter     └───┴── REST ────►│
               │  │   └─ Omron adapter                        │
-              │  ├─ Scheduler (cron jobs, token refresh)    │
+              │  ├─ Scheduler (planned — see risks C7)      │
               │  └─ Prisma ──► PostgreSQL                   │
               └─────────────────────────────────────────────┘
 ```
@@ -26,7 +26,8 @@ logical parts:
 
 1. **REST API** (Hono). Serves auth, activities, measurements, connections,
    and sync triggers. Apps are dumb clients — they never hold provider
-   credentials. API doc via OpenAPI (Hono middleware generates the spec).
+   credentials. A generated OpenAPI spec is planned but not wired yet (see
+   `docs/risks-todo.md` C10).
 2. **Sync engine.** One adapter per provider, each implementing a common
    interface:
    - `listNew(since: Date)` — incremental pull, keyed on the connection's
@@ -36,9 +37,11 @@ logical parts:
      first, then a tolerance match (same type, start ±60 s, distance ±100 m)
    - `refreshToken()` where the provider uses OAuth (Strava)
    or handles session-scrape auth (Garmin, Omron — unofficial APIs).
-3. **Scheduler.** Interval/cron jobs: sync all active connections on a
-   staggered schedule, refresh expiring tokens, retry errored connections with
-   backoff. Every run writes a `SyncLog`.
+3. **Scheduler (planned).** The queue/worker is in place for manual syncs,
+   but there is no cron/interval scheduler yet (see `docs/risks-todo.md` C7).
+   The target is to sync active connections on a staggered schedule, refresh
+   expiring tokens, and retry errored connections with backoff. Every run
+   already writes a `SyncLog`.
 
 Auth for the *app* itself: email+password issuing short-lived JWT access
 tokens + rotating refresh tokens. Provider tokens are stored encrypted
@@ -48,17 +51,21 @@ versioned `v2:<keyId>:<salt>:…` format so keys can be rotated and re-encrypted
 See [`docs/deployment.md`](deployment.md) for the rotation procedure and TLS
 requirements.
 
-### `apps/mobile` / `apps/web` — Expo app
+### `apps/web` — Vite dashboard
 
-One Expo project rendered on all targets:
+The browser dashboard is a separate Vite + React + TypeScript app (not
+`react-native-web`). It is dashboard-first: trends, activities, connections and
+gear. No BLE; browser BLE doesn't exist on iOS Safari and cloud sync makes it
+unnecessary on web.
 
-- **Android / iOS:** native — full features, incl. future direct-BLE scale
-  pairing (`react-native-ble-plx`).
-- **Web (`react-native-web`):** dashboard-first — trends, activities,
-  connection management. No BLE; browser BLE doesn't exist on iOS Safari and
-  cloud sync makes it unnecessary on web.
+### `apps/mobile` — Expo app
 
-Shared API layer and generated OpenAPI client keeps both targets in lockstep.
+Android and iOS use Expo Router / React Native. The target is full feature
+parity with web except device-level features, including future direct-BLE
+scale pairing (`react-native-ble-plx`).
+
+Both clients talk to the same REST API and share types from
+`packages/types`; there is no generated OpenAPI client yet.
 
 ### `packages/types`
 
@@ -69,13 +76,13 @@ schema lands, after which Prisma generates it.
 
 ## Data flow example — a Zwift ride
 
-1. Zwift auto-shares to Strava (Zwift's feature; we don't talk to Zwift
-   directly — no official API).
-2. Server's Strava adapter pulls new activities past the watermark.
-3. `normalize` maps it to a `VIRTUAL_RIDE` activity; Garmin may deliver the
-   same ride — the dedup keys in `data-model.md` collapse them into one row
-   with two `activity_sources`.
-4. Apps show it in the unified feed; `raw` keeps both originals.
+1. A Zwift ride arrives through the direct Zwift adapter (unofficial API);
+   the same ride may also arrive from Garmin or Strava.
+2. Each server adapter pulls new activities past its connection watermark.
+3. `normalize` maps them to a `VIRTUAL_RIDE` activity; the dedup keys in
+   `data-model.md` collapse duplicate deliveries into one row with multiple
+   `activity_sources`.
+4. Clients show it in the unified feed; `raw` keeps the provider originals.
 
 ## Deployment story
 
@@ -92,8 +99,8 @@ schema lands, after which Prisma generates it.
 
 - Provider credentials + app refresh tokens: DB-encrypted, never logged
   (logging uses only IDs).
-- Rate limiting on auth and sync-trigger endpoints (unofficial APIs punish
-  bursty traffic — staggering is per-connection).
+- Rate limiting on auth and connection-create endpoints; sync triggers are
+  claimed and queued per connection (unofficial APIs punish bursty traffic).
 - The Garmin and Omron syncs emulate users on web platforms; treat those
   codepaths as the most fragile part of the system. `sync_logs` +
   feature-detect tests guard us.

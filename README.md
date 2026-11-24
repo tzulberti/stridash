@@ -10,9 +10,9 @@ activities, weight, body composition, blood pressure, and more.
 
 | | |
 |---|---|
-| **Status** | 🔨 M1 (monorepo skeleton) in progress — see the [Roadmap](docs/roadmap.md) |
-| **Platforms** | Android · iOS · Web (single codebase) |
-| **License** | TBD — see [License notes](#license-notes) |
+| **Status** | Server integrations + web dashboard landed; M6 extras in progress — see the [Roadmap](docs/roadmap.md) |
+| **Platforms** | Android · iOS (Expo) · Web dashboard (Vite + React) |
+| **License** | AGPL-3.0-or-later — see [License notes](#license-notes) |
 
 ## How it works
 
@@ -24,8 +24,9 @@ activities, weight, body composition, blood pressure, and more.
                                  └────────────┬─────────────┘
                                               │ REST API
                                  ┌────────────┴─────────────┐
-                                 │  Stridash app (Expo/RN)  │
-                                 │  Android · iOS · Web     │
+                                 │  Stridash clients        │
+                                 │  Web dashboard · Expo    │
+                                 │  Android · iOS           │
                                  └──────────────────────────┘
 ```
 
@@ -47,7 +48,8 @@ Key design principles:
 
 | Layer | Technology |
 |---|---|
-| Apps (Android / iOS / Web) | Expo + React Native + `react-native-web` — TypeScript |
+| Web dashboard | Vite + React + TypeScript |
+| Mobile apps (Android / iOS) | Expo + React Native — TypeScript |
 | Backend API | Node.js + Hono — TypeScript |
 | Database | PostgreSQL + Prisma |
 | Monorepo | npm workspaces |
@@ -56,8 +58,8 @@ Key design principles:
 stridash/
 ├── apps/
 │   ├── mobile/        # Expo app (iOS, Android)
-│   ├── web/           # Web dashboard (react-native-web)
-│   └── server/        # Hono API + sync services + background jobs
+│   ├── web/           # Web dashboard (Vite + React)
+│   └── server/        # Hono API + sync services + manual-sync queue
 ├── packages/
 │   └── types/         # Shared API/domain types (single source of truth)
 └── docs/
@@ -67,12 +69,20 @@ stridash/
 
 See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 
-1. **M1 – Monorepo skeleton** — workspaces, shared types, server boilerplate
-2. **M2 – Strava integration** — OAuth + activity sync (this also brings in Zwift and iGPSPORT rides)
-3. **M3 – Garmin Connect integration** — activities, weight, body composition, blood pressure
-4. **M4 – Omron scale integration** — weight + body composition time series (Omron Connect cloud API)
-5. **M5 – App dashboard** — weight/body-composition trend charts, activity list, connections screen
-6. **M6 – Extras** — direct BLE scale support on mobile, data export, multi-user hardening
+1. ✅ **M1 – Monorepo skeleton** — workspaces, shared types, server boilerplate
+2. ☐ **M2 – Strava integration** — OAuth + activity sync (direct iGPSPORT/Zwift adapters already ship)
+3. ▶ **M3 – Garmin Connect integration** — server-side activities, wellness, gear and sleep built; weight/BP ingest remains
+4. ✅ **M4 – Omron scale integration** — weight + body composition time series (server side)
+5. ▶ **M5 – App dashboard** — the web dashboard is live; onboarding/manual entry/mobile UI remain
+6. ☐ **M6 – Extras** — direct BLE scale support on mobile, CSV export, multi-user hardening
+
+## Docs
+
+- [Architecture](docs/architecture.md) — components, data flow and deployment shape
+- [Data model](docs/data-model.md) — PostgreSQL/Prisma schema and dedup rules
+- [Deployment](docs/deployment.md) — production Compose, TLS and key rotation
+- [Risks & TODO](docs/risks-todo.md) — open security/correctness/maintainability work
+- [Roadmap](docs/roadmap.md) — milestones and known feature gaps
 
 ## Development
 
@@ -85,11 +95,11 @@ npm run db:up                       # start local Postgres on port 5433
 npm run db:migrate                  # apply Prisma migrations
 npm run dev:server                  # API on http://localhost:3000
 
-npm run dev:mobile                  # Expo app: Android / iOS / web
-#   press w in the Expo terminal for web, or:
-npm run dev:web
+npm run dev:mobile                  # Expo app: Android / iOS
+npm run dev:web                     # Vite dashboard on http://localhost:5173
 
 npm run typecheck                   # typecheck all workspaces
+npm run lint                        # ESLint: server, web, shared types, mobile
 npm test                            # all tests: unit + integration + web
 npm run test:ci                     # same, with the integration Postgres reused
 npm run audit:ci                    # fail on high/critical production-dep CVEs
@@ -133,10 +143,8 @@ rotation.
 
 ## License notes
 
-To be decided at the first tagged release. Constraint to keep in mind: the
+Stridash is licensed under **AGPL-3.0-or-later** (see `package.json`). The
 Omron integration was written after observing the protocol that the official
 Omron Connect app speaks, with [omramin](https://github.com/bugficks/omramin)
 (GPLv2) consulted for **protocol facts only — no omramin code is used** (the
 TypeScript implementation is independent, see [`docs/omron.md`](docs/omron.md)).
-Given the self-hosted/server nature of the product, **AGPL-3.0** remains the
-likely choice.

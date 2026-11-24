@@ -47,6 +47,10 @@ maintainability. Check the box when the fix (and its test) has landed.
 > `DATABASE_URL` before Prisma starts), C3 (single `UserPreferences` type) and
 > C5 (root TypeScript ESLint for server/web/types) landed with tests/config
 > updates.
+>
+> **Status 2026-11-24:** D9 batched the Omron measurement upsert (one lookup +
+> `createMany` per device page) and C6 reconciled README/architecture/roadmap
+> with the shipped clients, queue, export and lint setup.
 
 ---
 
@@ -607,16 +611,20 @@ normal). Server/web/types have `lint` scripts, and `tsconfig.eslint.json`
 files include tests/configs in the typed program. `npm run lint` passes with
 only mobile's two pre-existing `import/no-duplicates` warnings.
 
-### [ ] C6. Docs contradict the code — **Low**
+### [x] C6. Docs contradict the code — **Low**
 
-- [ ] `docs/architecture.md`: claims a scheduler, rotating refresh tokens,
-      rate limiting on auth/sync, generated OpenAPI, and a single RN-web app —
-      none exist yet. Mark as target-state or implement.
-- [ ] README status says "M1 in progress" while M2.1/M3/M4 are done; license
-      says TBD while `package.json` says AGPL-3.0.
-- [x] Roadmap M6 now separates the completed streamed JSON dump from pending
-      CSV export; sync-now (M5) also exists.
-- [ ] Add this file to the docs index/roadmap so it does not drift.
+- [x] `docs/architecture.md` now marks the scheduler and generated OpenAPI as
+      planned, describes the separate Vite web dashboard and Expo mobile app,
+      and no longer claims `react-native-web` powers web.
+- [x] README status reflects the shipped server integrations/web dashboard;
+      the license is AGPL-3.0-or-later, matching `package.json`.
+- [x] Roadmap M6 separates the completed streamed JSON dump from pending CSV
+      export; sync-now (M5) also exists.
+- [x] This file is linked from the README docs index.
+
+**Landed 2026-11-24:** README, architecture and roadmap were reconciled with
+the implemented clients, queue, export and lint setup; the remaining target
+state (scheduler, OpenAPI) is explicitly labelled and tracked as C7/C10.
 
 ### [ ] C7. No background sync — **Feature gap (roadmap)**
 

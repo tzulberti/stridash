@@ -3,16 +3,18 @@
 Milestones are ordered so that each one is independently useful and
 demoable. Status: ☐ planned · 🔨 in progress · ✅ done
 
-## M1 — Monorepo skeleton 🔨
+## M1 — Monorepo skeleton ✅
 
 - [x] npm workspaces layout (`apps/*`, `packages/*`)
-- [x] Shared TypeScript config; Prettier configured (ESLint: `expo lint` runs in mobile; root-level ESLint still pending)
+- [x] Shared TypeScript config; Prettier configured; root ESLint covers
+      server, web, shared types and mobile
 - [x] `packages/types`: domain + API types from the [data model](data-model.md)
 - [x] `apps/server`: Hono boilerplate, health endpoint, Prisma schema matching
       the data model, migrations, auth groundwork (register/login/refresh)
 - [x] `apps/mobile`: Expo app boots on Android/iOS/web, renders API health
       from the local server
-- [x] CI: typecheck on push/PR (lint + tests to follow with first test suites)
+- [x] CI: format, lint, audit, typecheck, unit/web and integration tests on
+      push/PR
 - [x] Docker compose for local Postgres (port 5433)
 
 ## M2 — Strava integration ☐
