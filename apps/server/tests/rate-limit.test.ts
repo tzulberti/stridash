@@ -1,5 +1,6 @@
+import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
-import { FixedWindowLimiter } from '../src/rate-limit.js';
+import { clientKey, FixedWindowLimiter } from '../src/rate-limit.js';
 
 describe('FixedWindowLimiter', () => {
   it('allows requests up to the limit and blocks the next one', () => {
@@ -63,5 +64,19 @@ describe('FixedWindowLimiter', () => {
     expect(() => new FixedWindowLimiter(0, 1_000)).toThrow();
     expect(() => new FixedWindowLimiter(1, 0)).toThrow();
     expect(() => new FixedWindowLimiter(1.5, 1_000)).toThrow();
+  });
+});
+
+describe('clientKey', () => {
+  const keyFrom = async (trustProxy: boolean, forwarded: string): Promise<string> => {
+    const app = new Hono();
+    app.get('/', (c) => c.json({ key: clientKey(c, trustProxy) }));
+    const res = await app.request('/', { headers: { 'x-forwarded-for': forwarded } });
+    return ((await res.json()) as { key: string }).key;
+  };
+
+  it('uses the first X-Forwarded-For hop only when the proxy is trusted', async () => {
+    expect(await keyFrom(true, '203.0.113.9, 10.0.0.1')).toBe('203.0.113.9');
+    expect(await keyFrom(false, '203.0.113.9')).toBe('unknown');
   });
 });

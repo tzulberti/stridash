@@ -50,8 +50,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 >
 > **Status 2026-11-24:** D9 batched the Omron measurement upsert (one lookup +
 > `createMany` per device page), C6 reconciled README/architecture/roadmap
-> with the shipped clients, queue, export and lint setup, and C2 moved the
-> provider series upsert into one shared helper.
+> with the shipped clients, queue, export and lint setup, C2 moved the
+> provider series upsert into one shared helper, and T10–T15 closed the auth
+> and body-bound test gaps.
 
 ---
 
@@ -764,24 +765,30 @@ raises `23505`.
 
 ### Recent changes — auth
 
-- [ ] **T10. Per-email limiter bucket + proxy key.** Trip the per-email limit
+- [x] **T10. Per-email limiter bucket + proxy key.** Trip the per-email limit
       (not just per-IP) and assert 429 + `Retry-After`. Also unit-test
       `clientKey` with `STRIDASH_TRUST_PROXY` on/off
       (`X-Forwarded-For` honored only when true).
-- [ ] **T11. Refresh expiry and concurrent rotation.** (a) Set `expiresAt` in
+- [x] **T11. Refresh expiry and concurrent rotation.** (a) Set `expiresAt` in
       the past and assert 401 + no new token; (b) fire two refreshes with the
       same token concurrently and assert exactly one succeeds, the loser gets
       401, and the family is not spuriously revoked.
-- [ ] **T12. Refresh tokens are hashed at rest.** After login/refresh, the raw
+- [x] **T12. Refresh tokens are hashed at rest.** After login/refresh, the raw
       `sdrt_…` value must not appear in `refresh_tokens` — only its SHA-256
       hash.
-- [ ] **T13. Register response hash leak.** Repeat the S1 assertion on
+- [x] **T13. Register response hash leak.** Repeat the S1 assertion on
       `/api/auth/register`, not only `/api/auth/login`.
-- [ ] **T14. Logout idempotency.** Logout with an unknown or already-revoked
+- [x] **T14. Logout idempotency.** Logout with an unknown or already-revoked
       token returns 200 and does not create or revoke anything unexpected.
-- [ ] **T15. Body cap and field bounds on the wider surface.** A >1 MiB body
+- [x] **T15. Body cap and field bounds on the wider surface.** A >1 MiB body
       on a non-auth route returns 413; over-max email / password /
       display-name / provider fields return 400.
+
+**Landed 2026-11-24:** T10–T15 now have integration coverage for the per-email
+bucket across different IPs (with trusted `X-Forwarded-For`), `clientKey`
+on/off, expired refresh tokens, concurrent rotation without family revoke,
+hashed-at-rest refresh tokens, register response leakage, idempotent logout,
+and the non-auth 413 / field-bound 400 cases.
 
 ### Tooling
 

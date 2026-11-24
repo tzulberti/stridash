@@ -20,6 +20,7 @@ vi.mock('../../src/services/igpsport-sync.js', () => ({
 import { createApp } from '../../src/index.js';
 import { prisma } from '../../src/db.js';
 import { encryptToken } from '../../src/crypto.js';
+import { hashRefreshToken } from '../../src/auth.js';
 import { ingestActivity } from '../../src/services/activity-ingest.js';
 import { recoverStaleSyncLocks, SYNC_STALE_MS } from '../../src/services/sync-queue.js';
 import { upsertStableConnection } from '../../src/services/connection-identity.js';
@@ -203,6 +204,82 @@ describe('auth', () => {
     expect(bad.status).toBe(401);
   });
 
+  it('stores only the refresh-token hash (T12)', async () => {
+    const login = await json(
+      await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'alice@test.stridash', password: 'integration-pass-1' }),
+      }),
+    );
+    const raw = login.refreshToken as string;
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { email: 'alice@test.stridash' },
+      select: { id: true },
+    });
+
+    const rows = await prisma.refreshToken.findMany({ where: { userId: user.id } });
+    expect(rows.some((row) => row.tokenHash === hashRefreshToken(raw))).toBe(true);
+    expect(JSON.stringify(rows)).not.toContain(raw);
+  });
+
+  it('rejects an expired refresh token without minting a replacement (T11a)', async () => {
+    const login = await json(
+      await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'alice@test.stridash', password: 'integration-pass-1' }),
+      }),
+    );
+    const raw = login.refreshToken as string;
+    const row = await prisma.refreshToken.findUniqueOrThrow({
+      where: { tokenHash: hashRefreshToken(raw) },
+    });
+    await prisma.refreshToken.update({
+      where: { id: row.id },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    const res = await app.request('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: raw }),
+    });
+    expect(res.status).toBe(401);
+    expect(await prisma.refreshToken.count({ where: { familyId: row.familyId } })).toBe(1);
+  });
+
+  it('allows exactly one concurrent refresh of the same token (T11b)', async () => {
+    const login = await json(
+      await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'alice@test.stridash', password: 'integration-pass-1' }),
+      }),
+    );
+    const raw = login.refreshToken as string;
+    const attempt = () =>
+      app.request('/api/auth/refresh', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ refreshToken: raw }),
+      });
+
+    const [first, second] = await Promise.all([attempt(), attempt()]);
+    expect([first.status, second.status].sort()).toEqual([200, 401]);
+
+    // A concurrent loser must not be mistaken for a replay and revoke the
+    // family the winner just rotated into.
+    const winner = first.status === 200 ? first : second;
+    const tokens = await json(winner);
+    const follow = await app.request('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: tokens.refreshToken }),
+    });
+    expect(follow.status).toBe(200);
+  });
+
   it('never returns the password hash (S1)', async () => {
     const login = await json(
       await app.request('/api/auth/login', {
@@ -215,6 +292,24 @@ describe('auth', () => {
     expect(JSON.stringify(login)).not.toContain('secretHash');
     expect(JSON.stringify(login)).not.toContain('authIdentities');
     expect(login.user).toMatchObject({ email: 'alice@test.stridash' });
+  });
+
+  it('never returns the password hash on register (S1/T13)', async () => {
+    const reg = await json(
+      await app.request('/api/auth/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: `register-leak-${randomUUID()}@test.stridash`,
+          password: 'integration-pass-1',
+          displayName: 'Register Leak',
+        }),
+      }),
+    );
+
+    expect(JSON.stringify(reg)).not.toContain('secretHash');
+    expect(JSON.stringify(reg)).not.toContain('authIdentities');
+    expect(reg.user).toMatchObject({ displayName: 'Register Leak' });
   });
 
   it('rotates refresh tokens and revokes the family on replay (S3)', async () => {
@@ -276,6 +371,20 @@ describe('auth', () => {
       body: JSON.stringify({ refreshToken: login.refreshToken }),
     });
     expect(refresh.status).toBe(401);
+
+    // Logout is idempotent and an unknown token is not an oracle.
+    const again = await app.request('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: login.refreshToken }),
+    });
+    expect(again.status).toBe(200);
+    const unknown = await app.request('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: 'sdrt_unknown-token' }),
+    });
+    expect(unknown.status).toBe(200);
   });
 
   it('rejects refresh tokens of a deleted account (S3)', async () => {
@@ -356,6 +465,28 @@ describe('auth', () => {
     expect(blocked.headers.get('retry-after')).toBeTruthy();
   });
 
+  it('caps password guesses per email even across IPs (T10)', async () => {
+    const limited = createApp({
+      ...env,
+      STRIDASH_AUTH_RATE_LIMIT: 1000,
+      STRIDASH_LOGIN_RATE_LIMIT: 2,
+      STRIDASH_TRUST_PROXY: true,
+    });
+    const email = `limiter-${randomUUID()}@test.stridash`;
+    const attempt = (ip: string) =>
+      limited.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+        body: JSON.stringify({ email, password: 'wrong-pass-1' }),
+      });
+
+    expect((await attempt('203.0.113.1')).status).toBe(401);
+    expect((await attempt('203.0.113.2')).status).toBe(401);
+    const blocked = await attempt('203.0.113.3');
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('retry-after')).toBeTruthy();
+  });
+
   it('rejects malformed ids and cursors with 400 (D5)', async () => {
     expect((await app.request('/api/activities/not-a-uuid', authed(aliceToken))).status).toBe(400);
     expect((await app.request('/api/activities?cursor=abc', authed(aliceToken))).status).toBe(400);
@@ -386,6 +517,50 @@ describe('auth', () => {
       }),
     });
     expect(res.status).toBe(413);
+  });
+
+  it('caps bodies and bounds on the wider surface (T15)', async () => {
+    // The body cap runs before auth/routing, so even an unauthenticated API
+    // request is rejected without parsing megabytes of JSON.
+    const huge = await app.request('/api/connections', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'OMRON', identifier: 'x'.repeat(2 * 1024 * 1024) }),
+    });
+    expect(huge.status).toBe(413);
+
+    const register = (body: Record<string, unknown>) =>
+      app.request('/api/auth/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const valid = { password: 'integration-pass-1', displayName: 'Bounds' };
+    expect((await register({ ...valid, email: `${'a'.repeat(250)}@x.test` })).status).toBe(400);
+    expect(
+      (
+        await register({
+          ...valid,
+          email: `bounds-${randomUUID()}@test.stridash`,
+          password: 'x'.repeat(1025),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await register({
+          ...valid,
+          email: `bounds-${randomUUID()}@test.stridash`,
+          displayName: 'x'.repeat(81),
+        })
+      ).status,
+    ).toBe(400);
+
+    const provider = await app.request('/api/connections', {
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify({ provider: 'OMRON', identifier: 'x'.repeat(321), password: 'y' }),
+    });
+    expect(provider.status).toBe(400);
   });
 
   it('guards the authenticated surface', async () => {
