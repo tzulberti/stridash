@@ -31,6 +31,34 @@ describe('redactProviderDetail', () => {
       null,
     ]);
   });
+
+  it('matches token keys case-insensitively and walks nested arrays', () => {
+    const out = redactProviderDetail({
+      ACCESS_TOKEN: JWT,
+      list: [{ Password: 'correct-horse-battery-staple' }],
+    }) as Record<string, unknown>;
+
+    expect(JSON.stringify(out)).not.toContain(JWT);
+    expect(JSON.stringify(out)).not.toContain('correct-horse-battery-staple');
+    expect(String(out.ACCESS_TOKEN)).toContain('…');
+  });
+
+  it('redacts short strings and preserves non-string token values', () => {
+    expect(redactProviderDetail({ token: 'short' })).toEqual({ token: '…' });
+    expect(redactProviderDetail({ token: 42 })).toEqual({ token: 42 });
+    expect(redactProviderDetail({ token: { nested: JWT } })).toEqual({
+      token: { nested: expect.stringContaining('…') },
+    });
+  });
+
+  it('stops at the depth limit without echoing the payload', () => {
+    let deep: Record<string, unknown> = { access_token: JWT };
+    for (let i = 0; i < 8; i++) deep = { nested: deep };
+
+    const serialized = JSON.stringify(redactProviderDetail(deep));
+    expect(serialized).not.toContain(JWT);
+    expect(serialized).toContain('[max depth]');
+  });
 });
 
 describe('redactText', () => {

@@ -51,8 +51,8 @@ maintainability. Check the box when the fix (and its test) has landed.
 > **Status 2026-11-24:** D9 batched the Omron measurement upsert (one lookup +
 > `createMany` per device page), C6 reconciled README/architecture/roadmap
 > with the shipped clients, queue, export and lint setup, C2 moved the
-> provider series upsert into one shared helper, and T10–T15 closed the auth
-> and body-bound test gaps.
+> provider series upsert into one shared helper, T10–T15 closed the auth
+> and body-bound test gaps, and T22 extended redaction/depth-limit coverage.
 
 ---
 
@@ -831,10 +831,16 @@ directional.
 - [ ] **T21. Mobile tests.** The mobile app has no test runner or test files.
       Add vitest (or jest) for pure helpers first — theme, formatting, API
       client — then React Native Testing Library for the key screens.
-- [ ] **T22. Redaction/privacy tests.** `redact.ts` is 40.7%. Cover
+- [x] **T22. Redaction/privacy tests.** `redact.ts` is 40.7%. Cover
       case-insensitive token keys, nested objects/arrays, the depth limit,
       short vs long values, non-string values, and assert tokens never reach a
       sync log or client error response.
+
+**Landed 2026-11-24:** tests cover case-insensitive keys, nested arrays,
+short/long and non-string token values, and the recursion limit. The depth
+limit now returns `[max depth]` instead of echoing the unredacted subtree;
+sync/error response call sites already route through `safeErrorForLog` /
+`redactProviderDetail`.
 
 ## Reproduction notes
 

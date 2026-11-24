@@ -6,7 +6,9 @@
  * ("eyJ…7f2a") but drop the rest.
  */
 export function redactProviderDetail(detail: unknown, depth = 0): unknown {
-  if (depth > 6 || detail === null || detail === undefined) return detail;
+  if (detail === null || detail === undefined) return detail;
+  // Do not echo an arbitrarily deep payload (and do not recurse forever).
+  if (depth > 6) return '[max depth]';
   if (Array.isArray(detail)) return detail.map((v) => redactProviderDetail(v, depth + 1));
   if (typeof detail === 'object') {
     const out: Record<string, unknown> = {};
