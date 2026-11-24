@@ -249,6 +249,10 @@ async function ensureSession(
   return client;
 }
 
+function measurementKey(kind: string, measuredAt: Date): string {
+  return `${kind}\u0000${measuredAt.toISOString()}`;
+}
+
 async function syncDevice(
   client: OmronConnectV1,
   device: OmronDevice,
@@ -257,31 +261,51 @@ async function syncDevice(
   fromMs: number,
 ): Promise<{ pulled: number; created: number; updated: number }> {
   const samples = await client.getMeasureSamples(device, fromMs);
-  let created = 0;
-  let updated = 0;
+
+  // Normalize and deduplicate the page first. A device can repeat a sample in
+  // one response; createMany would otherwise hit the unique key on the batch.
+  const rows = new Map<string, ReturnType<typeof toMeasurementRowNonNullable>>();
   for (const sample of samples) {
     const row = normalizeSample(sample, device, connectionId);
     if (!row) continue;
     const data = toMeasurementRowNonNullable(userId, row);
-    const existing = await prisma.measurement.findUnique({
-      where: {
-        userId_provider_kind_measuredAt: {
-          userId,
-          provider: 'OMRON',
-          kind: row.kind,
-          measuredAt: row.measuredAt,
-        },
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      // unique-key fields are fixed by the lookup itself — not updatable
-      await prisma.measurement.update({ where: { id: existing.id }, data: toUpdatePayload(data) });
-      updated++;
-    } else {
-      await prisma.measurement.create({ data });
-      created++;
+    rows.set(measurementKey(data.kind, data.measuredAt), data);
+  }
+  if (rows.size === 0) return { pulled: samples.length, created: 0, updated: 0 };
+
+  // One lookup for the whole page instead of a findUnique per sample. The
+  // (user, provider, kind, measuredAt) unique key is the dedup identity.
+  const values = [...rows.values()];
+  const existing = await prisma.measurement.findMany({
+    where: {
+      userId,
+      provider: 'OMRON',
+      kind: { in: [...new Set(values.map((row) => row.kind))] },
+      measuredAt: { in: [...new Set(values.map((row) => row.measuredAt))] },
+    },
+    select: { id: true, kind: true, measuredAt: true },
+  });
+  const existingByKey = new Map(
+    existing.map((row) => [measurementKey(row.kind, row.measuredAt), row.id]),
+  );
+
+  let updated = 0;
+  const toCreate: typeof values = [];
+  for (const [key, data] of rows) {
+    const id = existingByKey.get(key);
+    if (!id) {
+      toCreate.push(data);
+      continue;
     }
+    // unique-key fields are fixed by the lookup itself — not updatable
+    await prisma.measurement.update({ where: { id }, data: toUpdatePayload(data) });
+    updated++;
+  }
+
+  let created = 0;
+  if (toCreate.length > 0) {
+    const result = await prisma.measurement.createMany({ data: toCreate, skipDuplicates: true });
+    created = result.count;
   }
   return { pulled: samples.length, created, updated };
 }

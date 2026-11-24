@@ -537,17 +537,26 @@ refreshed "below right after", but nothing follows).
 `peekJwtExpMs(next.diToken)` as `tokenExpiresAt` and still stores `null` when
 the refreshed token has no `exp` claim. Unit tests cover both branches.
 
-### [ ] D9. Sync loops are N+1; `activity_sources` lacks a connection index — **Low/Medium**
+### [x] D9. Sync loops are N+1; `activity_sources` lacks a connection index — **Low/Medium**
 
-**Where:** `services/omron-sync.ts:264` (per-sample `findUnique` +
-update/create), `schema.prisma:417-427` (no `@@index([connectionId])`).
+**Where:** `services/omron-sync.ts` (per-sample `findUnique` + update/create),
+`schema.prisma` (ActivitySource indexes).
 
-**Problem:** every sync does a per-sample DB round-trip and a seq scan to build
+**Problem:** every sync did a per-sample DB round-trip and a seq scan to build
 the "known ids" set. Fine today, painful with years of data.
 
 **Fix:** batch by unique key (`createMany` + one `findMany`), add the index
 (and `@@index([connectionId, sourceActivityId])` if not covered by the D1
 unique).
+
+**Landed 2026-11-23:** `syncDevice` normalizes and deduplicates the device page
+in memory, then does one `findMany` for the page's measure keys and one
+`createMany({ skipDuplicates: true })` for new rows. Only rows that actually
+exist in the 1-day overlap window take an individual update. A unit test
+asserts one lookup, one createMany, and the duplicate-in-response case. The D1
+unique index on `(connection_id, source_activity_id)` already has
+`connection_id` as its leading column, so an extra connection index would be
+redundant.
 
 ### [ ] C1. `apps/web/src/App.tsx` is ~4,000 lines — **Maintainability**
 
