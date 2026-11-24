@@ -1308,6 +1308,31 @@ describe('connections', () => {
     expect(res.status).toBe(404);
   });
 
+  it('scopes sync, status and delete to the owning user (T18)', async () => {
+    expect(
+      (
+        await app.request(`/api/connections/${garminConnId}/sync`, {
+          method: 'POST',
+          ...authed(bobToken, { method: 'POST' }),
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await app.request(`/api/connections/${garminConnId}/syncs`, authed(bobToken))).status,
+    ).toBe(404);
+    expect(
+      (
+        await app.request(`/api/connections/${garminConnId}`, {
+          method: 'DELETE',
+          ...authed(bobToken, { method: 'DELETE' }),
+        })
+      ).status,
+    ).toBe(404);
+
+    const stillThere = await prisma.connection.findUniqueOrThrow({ where: { id: garminConnId } });
+    expect(stillThere.status).toBe('ACTIVE');
+  });
+
   it('rejects sync on a non-ACTIVE connection with 409 before calling the provider', async () => {
     const aliceId = (
       await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } })

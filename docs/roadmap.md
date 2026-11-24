@@ -186,6 +186,8 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [x] Production Docker Compose: single API + web image, Postgres volume,
       Caddy TLS, migrations on startup
 - [ ] Multi-user hardening, push notifications ("new ride synced")
+- [ ] Generated OpenAPI spec + client (from the existing zod route schemas;
+      benefits the web/mobile clients and the M7 MCP server)
 - [ ] Garadget-style webhooks/poll for near-real-time sync where APIs allow
 - [ ] Write `docs/provider-tos-risk.md` — the per-provider terms-of-service
       risk profile audited 2026-11: **Zwift** §5.a explicitly prohibits

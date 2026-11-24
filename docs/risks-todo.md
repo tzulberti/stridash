@@ -52,7 +52,8 @@ maintainability. Check the box when the fix (and its test) has landed.
 > `createMany` per device page), C6 reconciled README/architecture/roadmap
 > with the shipped clients, queue, export and lint setup, C2 moved the
 > provider series upsert into one shared helper, T10–T15 closed the auth
-> and body-bound test gaps, and T22 extended redaction/depth-limit coverage.
+> and body-bound test gaps, T22 extended redaction/depth-limit coverage, and
+> T18 gained connection ownership/lifecycle coverage.
 
 ---
 
@@ -670,11 +671,15 @@ column mapping.
 conversion and assert an unrelated object with a `toFixed` method is preserved
 unchanged.
 
-### [ ] C10. OpenAPI is advertised but absent — **Feature gap**
+### [x] C10. OpenAPI is advertised but absent — **Feature gap**
 
-`docs/architecture.md` says Hono middleware generates the spec. Either add
+`docs/architecture.md` said Hono middleware generates the spec. Either add
 `@hono/zod-openapi` (schemas already exist) or remove the claim; the mobile app
 and future MCP server both benefit from a generated client.
+
+**Landed 2026-11-24:** the false claim is gone — architecture now says the spec
+is planned. The actual generator/client remains a feature item in the roadmap
+(M6), so the risk of advertising a non-existent API doc is resolved.
 
 ---
 
@@ -817,6 +822,12 @@ directional.
       auth/ownership, connect/disconnect, each provider's sync trigger,
       provider error → `PARTIAL` vs `ERROR`, duplicate/concurrent sync handling
       (S7), unknown ids, and response shapes.
+
+**Progress 2026-11-24:** integration coverage now includes cross-user
+sync/status/delete 404s, token-free list responses, non-ACTIVE 409,
+concurrent-sync locking, create throttling, worker `ERROR` vs unknown-failure
+handling, stale-lock recovery, and soft-revoke. Provider-specific connect
+flows and a `PARTIAL` result case remain.
 - [ ] **T19. Provider client error paths.** Garmin SSO (9.3%), cookie jar
       (18.4%), Garmin API (26.2%), Zwift (24.7%), iGPSPORT (29.5%), Omron
       (34.6%): token refresh/rotation, 401/429/5xx, timeouts, malformed
