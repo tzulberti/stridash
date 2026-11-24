@@ -26,6 +26,7 @@ import { parseFitFile } from '../providers/igpsport/fit.js';
 import { safeErrorForLog } from '../redact.js';
 import { upsertDevice } from './devices.js';
 import { ingestActivity } from './activity-ingest.js';
+import { upsertActivitySeries } from './activity-series.js';
 import type { Env } from '../env.js';
 
 interface ConnectionLike {
@@ -401,23 +402,7 @@ export async function upsertActivity(
           select: { id: true },
         });
 
-        if (series) {
-          await tx.activityDataPoint.upsert({
-            where: {
-              activityId_provider: { activityId: created.id, provider: 'IGPSPORT' },
-            },
-            create: {
-              activityId: created.id,
-              provider: 'IGPSPORT',
-              sampleCount: (series.timeMs as number[]).length,
-              series: series as unknown as Prisma.InputJsonValue,
-            },
-            update: {
-              sampleCount: (series.timeMs as number[]).length,
-              series: series as unknown as Prisma.InputJsonValue,
-            },
-          });
-        }
+        if (series) await upsertActivitySeries(created.id, 'IGPSPORT', series, tx);
         return created;
       },
       // register the recording device if nobody else claimed it
@@ -486,21 +471,7 @@ async function updateIgpSportActivity(
       data: { sourceUpdatedAt: new Date() },
     });
 
-    if (series) {
-      await tx.activityDataPoint.upsert({
-        where: { activityId_provider: { activityId, provider: 'IGPSPORT' } },
-        create: {
-          activityId,
-          provider: 'IGPSPORT',
-          sampleCount: (series.timeMs as number[]).length,
-          series: series as unknown as Prisma.InputJsonValue,
-        },
-        update: {
-          sampleCount: (series.timeMs as number[]).length,
-          series: series as unknown as Prisma.InputJsonValue,
-        },
-      });
-    }
+    if (series) await upsertActivitySeries(activityId, 'IGPSPORT', series, tx);
   });
 }
 

@@ -31,6 +31,7 @@ import {
 } from '../providers/zwift/normalize.js';
 import { safeErrorForLog } from '../redact.js';
 import { ingestActivity } from './activity-ingest.js';
+import { upsertActivitySeries } from './activity-series.js';
 import type { ActivityInput } from '../providers/igpsport/normalize.js';
 import type { Env } from '../env.js';
 
@@ -98,29 +99,6 @@ async function zwiftRefreshWithPersist(env: Env, connection: ConnectionLike, ref
   return tokens;
 }
 
-/** Persist (or replace) an activity's ZWIFT series row. `db` lets callers use
- * the surrounding ingest transaction (a separate client would deadlock on the
- * uncommitted activity FK). */
-async function storeSeries(
-  activityId: string,
-  series: ZwiftSeries,
-  db: Prisma.TransactionClient | typeof prisma = prisma,
-): Promise<void> {
-  await db.activityDataPoint.upsert({
-    where: { activityId_provider: { activityId, provider: 'ZWIFT' } },
-    create: {
-      activityId,
-      provider: 'ZWIFT',
-      sampleCount: series.timeMs.length,
-      series: series as unknown as Prisma.InputJsonValue,
-    },
-    update: {
-      sampleCount: series.timeMs.length,
-      series: series as unknown as Prisma.InputJsonValue,
-    },
-  });
-}
-
 /** Ingest one activity row (+ series + source registration). Dedup lives in
  * the shared activity-ingest service: provider-source identity first, then a
  * cross-provider tolerance match. */
@@ -174,7 +152,7 @@ async function upsertZwiftActivity(
           select: { id: true },
         });
 
-        if (series) await storeSeries(created.id, series, tx);
+        if (series) await upsertActivitySeries(created.id, 'ZWIFT', series, tx);
         return created;
       },
     },
@@ -235,7 +213,7 @@ async function reingestEditedZwiftActivity(
     const url = detail.fitnessData?.fullDataUrl;
     if (url) {
       const series = toZwiftSeries(await client.getFitnessData(url));
-      if (series) await storeSeries(activityId, series);
+      if (series) await upsertActivitySeries(activityId, 'ZWIFT', series, prisma);
     }
   } catch (err) {
     console.error(`[zwift] edit series rebuild for ${externalId} failed:`, err);
@@ -429,7 +407,7 @@ export async function syncZwiftConnection(
           if (url) {
             const series = toZwiftSeries(await client.getFitnessData(url));
             if (series) {
-              await storeSeries(s.activityId, series);
+              await upsertActivitySeries(s.activityId, 'ZWIFT', series, prisma);
               healed = true;
             }
           }

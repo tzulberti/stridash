@@ -32,6 +32,7 @@ import { parseFitFile } from '../providers/igpsport/fit.js';
 import { safeErrorForLog } from '../redact.js';
 import { upsertDevice } from './devices.js';
 import { ingestActivity as ingestActivityRow } from './activity-ingest.js';
+import { upsertActivitySeries } from './activity-series.js';
 import type { FitRecord, FitSession } from '../providers/igpsport/normalize.js';
 import type { ActivityInput } from '../providers/garmin/normalize.js';
 import {
@@ -487,19 +488,7 @@ async function reingestActivity(
       },
     });
     if (parsed?.series) {
-      await tx.activityDataPoint.upsert({
-        where: { activityId_provider: { activityId, provider: 'GARMIN' } },
-        create: {
-          activityId,
-          provider: 'GARMIN',
-          sampleCount: parsed.series.timeMs.length,
-          series: parsed.series as unknown as Prisma.InputJsonValue,
-        },
-        update: {
-          sampleCount: parsed.series.timeMs.length,
-          series: parsed.series as unknown as Prisma.InputJsonValue,
-        },
-      });
+      await upsertActivitySeries(activityId, 'GARMIN', parsed.series, tx);
     }
     // store the provider's edit timestamp — the "unchanged?" comparison
     // for every future pass (this is what the column was designed for)
@@ -591,21 +580,7 @@ export async function upsertActivity(
           select: { id: true },
         });
 
-        if (series) {
-          await tx.activityDataPoint.upsert({
-            where: { activityId_provider: { activityId: created.id, provider: 'GARMIN' } },
-            create: {
-              activityId: created.id,
-              provider: 'GARMIN',
-              sampleCount: series.timeMs.length,
-              series: series as unknown as Prisma.InputJsonValue,
-            },
-            update: {
-              sampleCount: series.timeMs.length,
-              series: series as unknown as Prisma.InputJsonValue,
-            },
-          });
-        }
+        if (series) await upsertActivitySeries(created.id, 'GARMIN', series, tx);
         return created;
       },
       // provider-sourced fills fill empty slots — never override a value

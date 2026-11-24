@@ -49,8 +49,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > updates.
 >
 > **Status 2026-11-24:** D9 batched the Omron measurement upsert (one lookup +
-> `createMany` per device page) and C6 reconciled README/architecture/roadmap
-> with the shipped clients, queue, export and lint setup.
+> `createMany` per device page), C6 reconciled README/architecture/roadmap
+> with the shipped clients, queue, export and lint setup, and C2 moved the
+> provider series upsert into one shared helper.
 
 ---
 
@@ -574,6 +575,13 @@ planned UI redesign.
 `upsertActivity`, series store, device backfill and edit-detection pass, with
 small drifts. Extract a shared `services/activity-ingest.ts`; then D1/D2 are
 one change, not three.
+
+**Progress 2026-11-24:** identity/dedup already lives in
+`services/activity-ingest.ts`, and the five copied series upserts now go
+through `services/activity-series.ts` (with a unit test). Provider-specific
+scalar mapping, device-fill and edit-detection passes remain separate; they
+carry different payload fields and timestamps, so they should only be merged
+when a shared shape is genuinely stable.
 
 ### [x] C3. Duplicate `UserPreferences` declaration — **Trivial**
 
