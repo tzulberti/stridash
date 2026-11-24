@@ -16,6 +16,9 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:ci": "STRIDASH_TEST_REUSE=1 npm test",
+    "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "coverage:gate": "node scripts/coverage-gate.mjs",
+    "coverage:update": "node scripts/coverage-gate.mjs --update",
     "audit:ci": "node scripts/audit-gate.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -29,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@vitest/coverage-v8": "^3.2.7",
     "eslint": "^9.18.0",
     "globals": "^17.14.0",
     "prettier": "^3.4.2",

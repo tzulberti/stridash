@@ -25,5 +25,14 @@ export default defineConfig({
         },
       },
     ],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'json-summary'],
+      reportsDirectory: 'coverage',
+      // Generated Prisma client is checked out by `prisma generate`, not source
+      // we maintain or test. Excluding it keeps the baseline about our code.
+      include: ['src/**/*.ts'],
+      exclude: ['src/generated/**'],
+    },
   },
 });

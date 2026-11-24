@@ -80,3 +80,27 @@ jobs:
       - name: Integration tests
         run: npx vitest run --project integration
         working-directory: apps/server
+
+  # ── 4. coverage — full server + web suites, then compare with the baseline ─
+  coverage:
+    name: coverage gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Prisma generate
+        run: npm run prisma:generate -w @stridash/server
+        env:
+          DATABASE_URL: 'postgresql://placeholder:placeholder@localhost:5432/placeholder'
+      # Runs both app workspaces with `--coverage`; server coverage includes
+      # the integration project, so testcontainers/Docker must be available.
+      - name: Coverage
+        run: npm run test:coverage
+      # Fails on a regression against scripts/coverage-baseline.json, not on an
+      # arbitrary fixed percentage target.
+      - name: Coverage gate
+        run: npm run coverage:gate

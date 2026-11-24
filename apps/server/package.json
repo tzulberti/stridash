@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "data:merge-activities": "tsx --env-file=.env src/scripts/merge-duplicate-activities.ts"
   },
   "dependencies": {

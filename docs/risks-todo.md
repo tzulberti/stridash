@@ -52,8 +52,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > `createMany` per device page), C6 reconciled README/architecture/roadmap
 > with the shipped clients, queue, export and lint setup, C2 moved the
 > provider series upsert into one shared helper, T10–T15 closed the auth
-> and body-bound test gaps, T22 extended redaction/depth-limit coverage, and
-> T18 gained connection ownership/lifecycle coverage.
+> and body-bound test gaps, T22 extended redaction/depth-limit coverage, T18
+> gained connection ownership/lifecycle coverage, and T16 added coverage
+> reporting plus a baseline regression gate.
 
 ---
 
@@ -797,19 +798,27 @@ and the non-auth 413 / field-bound 400 cases.
 
 ### Tooling
 
-- [ ] **T16. Coverage reporting and gate.** Add `@vitest/coverage-v8` plus a
+- [x] **T16. Coverage reporting and gate.** Add `@vitest/coverage-v8` plus a
       `test:coverage` script for server and web, exclude generated Prisma and
       i18n data from the reported totals, record a baseline, and add a CI gate
       that fails on regression (not a fixed high threshold). No reporter or
       gate exists today.
 
-### Whole-codebase (measured 2026-11-18)
+**Landed 2026-11-24:** both workspaces report V8 coverage (`text-summary` +
+`json-summary`), excluding `apps/server/src/generated/**` and the web i18n
+translation payloads. `scripts/coverage-gate.mjs` compares the totals with
+`scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
+the baseline deliberately with `npm run coverage:update`. Current baseline:
+server 54.11% lines/statements, 56.22% functions, 81.18% branches; web 6.33%
+lines/statements, 85.29% functions, 93.02% branches (App.tsx is still the
+untested bulk — tracked by C1/T20).
 
-Measured with `vitest run --coverage` over the server unit + integration suites
-and the web suite. Hand-written server `src/` is 42.1% lines / 41.1% functions;
-branch percentages are inflated by files whose functions never execute, and the
-raw totals include generated Prisma and i18n data — treat the numbers as
-directional.
+### Whole-codebase (baseline 2026-11-24)
+
+`npm run coverage:gate` now measures the server unit + integration suites and
+the web suite with generated Prisma and translation data excluded. Totals are
+recorded in `scripts/coverage-baseline.json`; the per-file figures below come
+from the earlier 2026-11-18 audit and are indicative only.
 
 - [ ] **T17. Sync-service orchestration (Garmin, iGPSPORT, Omron, wellness).**
       Mock provider HTTP clients and assert the full loop: list/pagination and
