@@ -54,8 +54,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > provider series upsert into one shared helper, T10–T15 closed the auth
 > and body-bound test gaps, T22 extended redaction/depth-limit coverage, T18
 > gained connection ownership/lifecycle coverage, T16 added coverage
-> reporting plus a baseline regression gate, and T19 covered the provider
-> client/error boundaries (except the live SSO/MFA flow).
+> reporting plus a baseline regression gate, T19 covered the provider
+> client/error boundaries (except the live SSO/MFA flow), and C1/T20 started
+> the web split by extracting `lib/api.ts` with tests.
 
 ---
 
@@ -573,6 +574,10 @@ Routing, API client, every page, charts, and i18n wiring in one component.
 Split into `routes/`, `components/`, `hooks/`, `lib/api.ts` **before** the
 planned UI redesign.
 
+**Progress 2026-11-25:** the browser API client and token-refresh logic moved
+to `apps/web/src/lib/api.ts` (9 unit tests); `App.tsx` is now ~3,900 lines.
+The route/page/chart monolith remains.
+
 ### [ ] C2. Dedupe/upsert logic is copy-pasted three times — **Maintainability**
 
 `garmin-sync.ts`, `igpsport-sync.ts`, `zwift-sync.ts` each carry their own
@@ -810,8 +815,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 61.55% lines/statements, 75.47% functions, 80.71% branches; web 6.33%
-lines/statements, 85.29% functions, 93.02% branches (App.tsx is still the
+server 61.55% lines/statements, 75.47% functions, 80.71% branches; web 8.05%
+lines/statements, 84.61% functions, 92.07% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-25)
@@ -854,12 +859,15 @@ DI token exchange/refresh (client-id rotation, 429, missing tokens). The full
 multi-step SSO login/MFA flow is still live-verified rather than mocked, and
 explicit timeout assertions are not yet practical with the fetch mocks.
 
-- [ ] **T20. Web UI/component tests.** `App.tsx` is 3,206 lines at 0%;
+- [ ] **T20. Web UI/component tests.** `App.tsx` is 3,904 lines at 0%;
       `main.tsx` is also 0%. Add a DOM test harness (React Testing Library +
       jsdom/happy-dom), extract testable components/hooks from the monolith
       (see C1), and cover auth, activity list/detail, settings, and
-      loading/error/empty states. The 51.5% web total is almost all i18n
-      dictionaries.
+      loading/error/empty states.
+
+**Progress 2026-11-25:** `lib/api.ts` now has 9 unit tests for auth headers,
+query/body encoding, 401 refresh/replay, dead/transient refresh handling and
+concurrent refresh deduplication. Component/DOM coverage is still zero.
 - [ ] **T21. Mobile tests.** The mobile app has no test runner or test files.
       Add vitest (or jest) for pure helpers first — theme, formatting, API
       client — then React Native Testing Library for the key screens.
