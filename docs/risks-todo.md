@@ -53,8 +53,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > with the shipped clients, queue, export and lint setup, C2 moved the
 > provider series upsert into one shared helper, T10–T15 closed the auth
 > and body-bound test gaps, T22 extended redaction/depth-limit coverage, T18
-> gained connection ownership/lifecycle coverage, and T16 added coverage
-> reporting plus a baseline regression gate.
+> gained connection ownership/lifecycle coverage, T16 added coverage
+> reporting plus a baseline regression gate, and T19 covered the provider
+> client/error boundaries (except the live SSO/MFA flow).
 
 ---
 
@@ -809,11 +810,11 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 54.11% lines/statements, 56.22% functions, 81.18% branches; web 6.33%
+server 61.55% lines/statements, 75.47% functions, 80.71% branches; web 6.33%
 lines/statements, 85.29% functions, 93.02% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
-### Whole-codebase (baseline 2026-11-24)
+### Whole-codebase (baseline 2026-11-25)
 
 `npm run coverage:gate` now measures the server unit + integration suites and
 the web suite with generated Prisma and translation data excluded. Totals are
@@ -837,11 +838,22 @@ sync/status/delete 404s, token-free list responses, non-ACTIVE 409,
 concurrent-sync locking, create throttling, worker `ERROR` vs unknown-failure
 handling, stale-lock recovery, and soft-revoke. Provider-specific connect
 flows and a `PARTIAL` result case remain.
+
 - [ ] **T19. Provider client error paths.** Garmin SSO (9.3%), cookie jar
       (18.4%), Garmin API (26.2%), Zwift (24.7%), iGPSPORT (29.5%), Omron
       (34.6%): token refresh/rotation, 401/429/5xx, timeouts, malformed
       payloads, cookie persistence, and region fallback. This is the network
       boundary and the least-covered executable code.
+
+**Progress 2026-11-25:** added mocked-fetch coverage for Zwift
+(password/refresh grants, token rotation, 401/403/5xx, network failure, stream
+URLs), iGPSPORT (login/envelope/FIT validation, JWT claims, region rejection),
+Omron (login/refresh, gzip sniffing, invalid JSON, pagination/filtering,
+region lookup), Garmin API (malformed lists/detail, FIT download), and Garmin
+DI token exchange/refresh (client-id rotation, 429, missing tokens). The full
+multi-step SSO login/MFA flow is still live-verified rather than mocked, and
+explicit timeout assertions are not yet practical with the fetch mocks.
+
 - [ ] **T20. Web UI/component tests.** `App.tsx` is 3,206 lines at 0%;
       `main.tsx` is also 0%. Add a DOM test harness (React Testing Library +
       jsdom/happy-dom), extract testable components/hooks from the monolith
