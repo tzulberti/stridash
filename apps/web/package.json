@@ -20,9 +20,11 @@
     "vite": "^7.3.7"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.5.0",
+    "jsdom": "^31.0.1",
     "typescript": "^5.7.3",
     "vite": "^7.3.7"
   }
