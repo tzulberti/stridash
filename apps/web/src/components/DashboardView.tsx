@@ -5,6 +5,7 @@ import { TYPE_EMOJI, fmtDate, fmtKm, fmtMin, fmtSpeed } from '../lib/format';
 import { Card } from './Card';
 import { DatePicker } from './DatePicker';
 import { LineChart } from './LineChart';
+import { ManualEntry } from './ManualEntry';
 
 export interface SleepRow {
   dateKey: string;
@@ -127,6 +128,8 @@ const asStr = (v: unknown, suffix = ''): string | null => (has(v) ? `${String(v)
 
 export function DashboardView(props: {
   header: ReactNode;
+  token: string;
+  onMeasurementSaved: () => void;
   error: string | null;
   activePreset: number | null | undefined;
   applyPreset: (d: number | null) => void;
@@ -161,6 +164,8 @@ export function DashboardView(props: {
 }) {
   const {
     header,
+    token,
+    onMeasurementSaved,
     error,
     activePreset,
     applyPreset,
@@ -271,6 +276,8 @@ export function DashboardView(props: {
         <Card label={t('dash.activities')} value={activitiesIn.length} />
         <Card label={t('dash.weighIns')} value={measurementsIn.length} />
       </div>
+
+      <ManualEntry token={token} onSaved={onMeasurementSaved} />
 
       <section>
         <h2>{t('dash.bodyComp')}</h2>

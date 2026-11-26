@@ -97,6 +97,7 @@ function mockApi() {
     if (path === '/sleeps') return { items: opts?.query?.to ? [] : [sleepRow] };
     if (path === '/wellness') return { items: opts?.query?.to ? [] : [wellnessRow] };
     if (path === '/auth/login') return { accessToken: 'at', refreshToken: 'rt' };
+    if (path === '/auth/register') return { accessToken: 'at', refreshToken: 'rt' };
     return {};
   });
 }
@@ -159,6 +160,33 @@ describe('App auth flow', () => {
     expect(await screen.findByText(/bad credentials/)).toBeTruthy();
     expect(saveTokens).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
+  });
+
+  it('registers a new account and lands on the connections onboarding page', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Need an account? Create one' }));
+
+    fireEvent.change(screen.getByPlaceholderText('display name'), {
+      target: { value: 'Alice' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('email'), {
+      target: { value: 'new@example.com' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('password'), {
+      target: { value: 'long-enough-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Register' }));
+
+    await waitFor(() => expect(saveTokens).toHaveBeenCalledWith('at', 'rt', true));
+    expect(apiMock).toHaveBeenCalledWith('/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'new@example.com',
+        password: 'long-enough-password',
+        displayName: 'Alice',
+      },
+    });
+    expect(await screen.findByRole('heading', { name: 'Connections' })).toBeTruthy();
   });
 
   it('boots from a stored token, loads the dashboard and signs out', async () => {

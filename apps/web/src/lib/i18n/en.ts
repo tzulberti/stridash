@@ -301,6 +301,20 @@ export const en = {
   'dp.nextMonth': 'next month',
   'dp.clear': 'clear',
   'dp.today': 'today',
+  'manual.heading': 'Log a measurement',
+  'manual.weight': 'Weight',
+  'manual.bodyFat': 'Body fat',
+  'manual.bloodPressure': 'Blood pressure',
+  'manual.systolic': 'Systolic',
+  'manual.diastolic': 'Diastolic',
+  'manual.pulse': 'Pulse',
+  'manual.save': 'Save',
+  'manual.saved': 'Measurement saved',
+  'auth.createAccount': 'Create account',
+  'auth.displayName': 'display name',
+  'auth.register': 'Register',
+  'auth.haveAccount': 'Already have an account? Sign in',
+  'auth.needAccount': 'Need an account? Create one',
 } as const;
 
 export type MsgKey = keyof typeof en;

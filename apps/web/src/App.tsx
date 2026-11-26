@@ -67,6 +67,8 @@ export default function App() {
   const [token, setToken] = useState<string | null>(() => readToken());
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   const onUnauthorized = useCallback(() => {
     clearTokens();
@@ -179,6 +181,22 @@ export default function App() {
       });
       saveTokens(r.accessToken, r.refreshToken, rememberMe);
       setToken(r.accessToken);
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  async function register(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    setError(null);
+    try {
+      const r = await api<{ accessToken: string; refreshToken: string }>('/auth/register', {
+        method: 'POST',
+        body: { email, password, displayName: displayName.trim() },
+      });
+      saveTokens(r.accessToken, r.refreshToken, rememberMe);
+      setToken(r.accessToken);
+      openConnections(); // onboarding: connect a provider, then sync
     } catch (err) {
       setError(String(err));
     }
@@ -379,20 +397,38 @@ export default function App() {
   if (!token) {
     return (
       <main className="login-page">
-        <form onSubmit={login} className="login-card">
+        <form
+          onSubmit={authMode === 'register' ? (e) => void register(e) : (e) => void login(e)}
+          className="login-card"
+        >
           <h1>🦾 Stridash</h1>
           <p>{t('auth.tagline')}</p>
+          {authMode === 'register' && (
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={t('auth.displayName')}
+              autoComplete="name"
+              required
+              maxLength={80}
+            />
+          )}
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             type="email"
             placeholder={t('auth.email')}
+            autoComplete="email"
+            required
           />
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             type="password"
             placeholder={t('auth.password')}
+            autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
+            required
+            minLength={authMode === 'register' ? 8 : undefined}
           />
           <label className="remember-me">
             <input
@@ -403,7 +439,17 @@ export default function App() {
             <span>{t('auth.remember')}</span>
           </label>
           <button className="btn" type="submit">
-            {t('auth.signIn')}
+            {authMode === 'register' ? t('auth.register') : t('auth.signIn')}
+          </button>
+          <button
+            className="btn ghost small"
+            type="button"
+            onClick={() => {
+              setAuthMode(authMode === 'register' ? 'login' : 'register');
+              setError(null);
+            }}
+          >
+            {authMode === 'register' ? t('auth.haveAccount') : t('auth.needAccount')}
           </button>
           {error && <p className="error">{error}</p>}
         </form>
@@ -535,6 +581,10 @@ export default function App() {
   return (
     <DashboardView
       header={header}
+      token={token}
+      onMeasurementSaved={() => {
+        void load(token);
+      }}
       error={error}
       activePreset={activePreset}
       applyPreset={applyPreset}

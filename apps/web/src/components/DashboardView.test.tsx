@@ -76,6 +76,8 @@ const activities = [
 
 const baseProps = {
   header: <header>Dashboard header</header>,
+  token: 'tok',
+  onMeasurementSaved: vi.fn(),
   error: null as string | null,
   activePreset: 7 as number | null | undefined,
   applyPreset: vi.fn(),
@@ -127,6 +129,7 @@ beforeEach(() => {
     baseProps.setFeedType,
     baseProps.setFeedProv,
     baseProps.openActivity,
+    baseProps.onMeasurementSaved,
   ]) {
     fn.mockReset();
   }
