@@ -65,7 +65,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > route gap with provider connect/MFA tests, sync-claim races and a PARTIAL
 > history case (`routes/connections.ts` 96.5%, `sync-queue.ts` 99.2%). C7
 > added the interval background-sync scheduler with per-connection claiming
-> and timer shutdown.
+> and timer shutdown. T19 completed the mocked Garmin login/MFA state machine
+> (mobile/widget/portal chain, credential stop, MFA completion, rate-limit and
+> timeout paths).
 
 ---
 
@@ -834,7 +836,7 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 81.92% lines/statements, 85.81% functions, 80.63% branches; web 13.82%
+server 87% lines/statements, 90.28% functions, 79.7% branches; web 13.82%
 lines/statements, 94.44% functions, 88.64% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
@@ -880,20 +882,22 @@ sync/status/delete 404s, token-free list responses, non-ACTIVE 409,
 concurrent-sync locking, create throttling, worker `ERROR` vs unknown-failure
 handling, stale-lock recovery, and soft-revoke.
 
-- [ ] **T19. Provider client error paths.** Garmin SSO (9.3%), cookie jar
+- [x] **T19. Provider client error paths.** Garmin SSO (9.3%), cookie jar
       (18.4%), Garmin API (26.2%), Zwift (24.7%), iGPSPORT (29.5%), Omron
       (34.6%): token refresh/rotation, 401/429/5xx, timeouts, malformed
       payloads, cookie persistence, and region fallback. This is the network
       boundary and the least-covered executable code.
 
-**Progress 2026-11-25:** added mocked-fetch coverage for Zwift
+**Landed 2026-11-27:** added mocked-fetch coverage for Zwift
 (password/refresh grants, token rotation, 401/403/5xx, network failure, stream
 URLs), iGPSPORT (login/envelope/FIT validation, JWT claims, region rejection),
 Omron (login/refresh, gzip sniffing, invalid JSON, pagination/filtering,
 region lookup), Garmin API (malformed lists/detail, FIT download), and Garmin
 DI token exchange/refresh (client-id rotation, 429, missing tokens). The full
-multi-step SSO login/MFA flow is still live-verified rather than mocked, and
-explicit timeout assertions are not yet practical with the fetch mocks.
+Garmin SSO state machine is now mocked too: mobile login, widget/portal
+fallback, credential stop, rate-limit exhaustion, MFA park/complete for JSON
+and widget flows, and fetch/timeout rejection. Real Garmin/Cloudflare behavior
+still needs a live-account smoke test; the suite pins the protocol branches.
 
 - [ ] **T20. Web UI/component tests.** `App.tsx` is 3,644 lines at 0%;
       `main.tsx` is also 0%. Add a DOM test harness (React Testing Library +

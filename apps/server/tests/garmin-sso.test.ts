@@ -1,17 +1,21 @@
 /**
- * Garmin SSO pure-function helpers: widget MFA var parsing, page title.
- * (Flow logic is covered live during real-account E2E; Google-style HTML
- * fixtures below come from the widget pages documented in python-garminconnect.)
+ * Garmin SSO helpers plus mocked full login/MFA chains (mobile, widget,
+ * portal). Real Garmin/Cloudflare behavior is still verified live with a real
+ * account; these fixtures pin the protocol/state-machine branches.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  completeMfa,
   DI_TOKEN_URL,
   exchangeServiceTicket,
   GarminError,
+  garminSsoLogin,
+  isMfaContext,
   parseWidgetMfaVars,
   pageTitle,
   peekJwtExpMs,
   refreshDiToken,
+  type MfaContext,
 } from '../src/providers/garmin/sso.js';
 
 describe('parseWidgetMfaVars', () => {
@@ -141,5 +145,172 @@ describe('Garmin DI token exchange', () => {
       kind: 'CONNECTION',
       message: expect.stringContaining('no access_token'),
     });
+  });
+});
+
+// ─── Full login/MFA state machine (mocked fetch) ─────────────────────────────
+
+describe('Garmin SSO login chain', () => {
+  const fetchMock = vi.fn();
+  const json = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  const html = (body: string, status = 200): Response =>
+    new Response(body, { status, headers: { 'content-type': 'text/html' } });
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('logs in through the mobile JSON flow and posts the credentials', async () => {
+    fetchMock
+      .mockResolvedValueOnce(html('<html>sign in</html>'))
+      .mockResolvedValueOnce(
+        json({ responseStatus: { type: 'SUCCESSFUL' }, serviceTicketId: 'ST-mobile' }),
+      );
+
+    const outcome = await garminSsoLogin('rider@example.com', 'secret', { delayMs: 0 });
+
+    expect(isMfaContext(outcome)).toBe(false);
+    expect(outcome).toMatchObject({ ticket: 'ST-mobile' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [url, init] = fetchMock.mock.calls[1]!;
+    expect(String(url)).toContain('/mobile/api/login');
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      username: 'rider@example.com',
+      password: 'secret',
+      rememberMe: true,
+    });
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('parks MFA_REQUIRED and completes the JSON verification', async () => {
+    fetchMock.mockResolvedValueOnce(html('<html>sign in</html>')).mockResolvedValueOnce(
+      json({
+        responseStatus: { type: 'MFA_REQUIRED' },
+        customerMfaInfo: { mfaLastMethodUsed: 'email' },
+      }),
+    );
+
+    const pending = await garminSsoLogin('rider@example.com', 'secret', { delayMs: 0 });
+    expect(isMfaContext(pending)).toBe(true);
+    const ctx = pending as MfaContext;
+    expect(ctx).toMatchObject({ flow: 'mobile', method: 'email' });
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(
+      json({ responseStatus: { type: 'SUCCESSFUL' }, serviceTicketId: 'ST-mfa' }),
+    );
+
+    await expect(completeMfa(ctx, '123456')).resolves.toMatchObject({ ticket: 'ST-mfa' });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain('/mobile/api/mfa/verifyCode');
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      mfaMethod: 'email',
+      mfaVerificationCode: '123456',
+    });
+  });
+
+  it('stops the strategy chain on invalid credentials', async () => {
+    fetchMock
+      .mockResolvedValueOnce(html('<html>sign in</html>'))
+      .mockResolvedValueOnce(json({ responseStatus: { type: 'INVALID_USERNAME_PASSWORD' } }));
+
+    await expect(
+      garminSsoLogin('rider@example.com', 'wrong', { delayMs: 0 }),
+    ).rejects.toMatchObject({
+      kind: 'CREDENTIALS',
+      message: 'Invalid username or password',
+    });
+    // no widget/portal attempts after a definitive credential rejection
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls through mobile and widget to the portal flow', async () => {
+    fetchMock
+      // mobile: page OK, login → 500 (connection error)
+      .mockResolvedValueOnce(html('<html>mobile</html>'))
+      .mockResolvedValueOnce(json({}, 500))
+      // widget: embed OK, signin page with CSRF, form POST → unexpected title
+      .mockResolvedValueOnce(html('<html>embed</html>'))
+      .mockResolvedValueOnce(html('<input name="_csrf" value="csrf-1">'))
+      .mockResolvedValueOnce(html('<html><title>Error</title></html>'))
+      // portal: page OK, login → SUCCESSFUL
+      .mockResolvedValueOnce(html('<html>portal</html>'))
+      .mockResolvedValueOnce(
+        json({ responseStatus: { type: 'SUCCESSFUL' }, serviceTicketId: 'ST-portal' }),
+      );
+
+    const outcome = await garminSsoLogin('rider@example.com', 'secret', { delayMs: 0 });
+
+    expect(outcome).toMatchObject({ ticket: 'ST-portal' });
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(String(fetchMock.mock.calls[6]![0])).toContain('/portal/api/login');
+  });
+
+  it('completes widget-flow MFA from the HTML form response', async () => {
+    const ctx: MfaContext = {
+      flow: 'widget',
+      cookies: [],
+      params: { id: 'gauth-widget' },
+      method: 'email',
+      widgetCsrf: 'csrf-2',
+      serviceUrl: 'https://sso.garmin.com/sso/embed',
+      postHeaders: {},
+    };
+    fetchMock.mockResolvedValueOnce(
+      html('<html><title>Success</title><a href="x?ticket=ST-widget&state=1">ok</a></html>'),
+    );
+
+    await expect(completeMfa(ctx, '654321')).resolves.toMatchObject({ ticket: 'ST-widget' });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain('/sso/verifyMFA/loginEnterMfaCode');
+    expect(String(init.body)).toContain('mfa-code=654321');
+    expect(String(init.body)).toContain('_csrf=csrf-2');
+  });
+
+  it('rejects a widget MFA context without a CSRF token', async () => {
+    const ctx: MfaContext = {
+      flow: 'widget',
+      cookies: [],
+      params: {},
+      method: 'email',
+      serviceUrl: 'https://sso.garmin.com/sso/embed',
+      postHeaders: {},
+    };
+
+    await expect(completeMfa(ctx, '1')).rejects.toMatchObject({ kind: 'MFA_REQUIRED' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces fetch timeouts as a connection failure after exhausting the chain', async () => {
+    fetchMock.mockRejectedValue(new DOMException('timeout', 'TimeoutError'));
+
+    await expect(
+      garminSsoLogin('rider@example.com', 'secret', { delayMs: 0 }),
+    ).rejects.toMatchObject({
+      kind: 'CONNECTION',
+      message: expect.stringContaining('failed'),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('reports RATE_LIMITED only when every strategy is blocked', async () => {
+    fetchMock.mockResolvedValue(html('blocked', 429));
+
+    await expect(
+      garminSsoLogin('rider@example.com', 'secret', { delayMs: 0 }),
+    ).rejects.toMatchObject({
+      kind: 'RATE_LIMITED',
+      message: expect.stringContaining('All login strategies'),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
