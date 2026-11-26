@@ -17,17 +17,19 @@ demoable. Status: ☐ planned · 🔨 in progress · ✅ done
       push/PR
 - [x] Docker compose for local Postgres (port 5433)
 
-## M2 — Strava integration ☐
+## M2 — Strava integration 🔨 (server side built; live-account smoke test pending)
 
 *(This is first integration-wise because it's an official API — the honest way
 to prove the plumbing — and it silently delivers two other sources: Zwift and
 iGPSPORT both push to Strava.)*
 
-- [ ] Strava OAuth connect flow (app → server redirect, token exchange)
-- [ ] Encrypted token storage + auto refresh
-- [ ] Incremental activity pull with watermarking and dedup upsert
-- [ ] Gear mapping from Strava
-- [ ] `sync_logs` entries + basic backfill support (`--days N` style)
+- [x] Strava OAuth connect flow (app → server redirect, token exchange)
+- [x] Encrypted token storage + auto refresh
+- [x] Incremental activity pull with watermarking and dedup upsert
+- [x] Gear mapping from Strava
+- [x] `sync_logs` entries + basic backfill support
+      (`STRIDASH_STRAVA_BACKFILL_DAYS`, default 365)
+- [ ] Live-account smoke test (needs a real Strava API application)
 
 ## M2.1 — iGPSPORT direct integration ✅ (server side)
 

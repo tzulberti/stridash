@@ -80,6 +80,11 @@ maintainability. Check the box when the fix (and its test) has landed.
 > the shared identity/series services; T21 has the mobile runner + API-helper
 > tests (screen tests move with the M5 UI). The only remaining operator task
 > is running the D2 duplicate-merge script against existing deployments.
+>
+> **Status 2026-11-27 (M2):** Strava integration built — OAuth authorize/callback,
+> encrypted rotating tokens, incremental activity/detail/streams sync, gear
+> attribution and sync logs. Live-account smoke test still needs a real Strava
+> API application; see `docs/strava.md`.
 
 ---
 
@@ -864,8 +869,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 87% lines/statements, 90.28% functions, 79.7% branches; web 88.75%
-lines/statements, 74.44% functions, 80.23% branches (App.tsx is still the
+server 87.81% lines/statements, 91.42% functions, 80.02% branches; web 88.79%
+lines/statements, 74.34% functions, 80.33% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)

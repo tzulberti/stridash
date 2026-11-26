@@ -57,7 +57,7 @@ One row per (user, external account). Provider-agnostic by design.
 |---|---|---|
 | `id` | `uuid` (v7) PK | |
 | `user_id` | `uuid` (v7) FK → users | |
-| `provider` | enum | `STRAVA` \| `GARMIN` \| `OMRON` \| `MANUAL` |
+| `provider` | enum | `STRAVA` \| `GARMIN` \| `ZWIFT` \| `IGPSPORT` \| `OMRON` \| `MANUAL` |
 | `provider_user_id` | text | the ID at the provider (Strava athlete id, …) |
 | `status` | enum | `PENDING` \| `ACTIVE` \| `ERROR` \| `REVOKED` |
 | `access_token_enc` | text | encrypted at rest (AES-256-GCM, key from env) |

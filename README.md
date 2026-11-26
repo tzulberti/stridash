@@ -71,7 +71,7 @@ stridash/
 See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 
 1. ✅ **M1 – Monorepo skeleton** — workspaces, shared types, server boilerplate
-2. ☐ **M2 – Strava integration** — OAuth + activity sync (direct iGPSPORT/Zwift adapters already ship)
+2. 🔨 **M2 – Strava integration** — OAuth, encrypted tokens, incremental sync and gear are built; live-account smoke test pending
 3. ▶ **M3 – Garmin Connect integration** — server-side activities, wellness, gear and sleep built; weight/BP ingest remains
 4. ✅ **M4 – Omron scale integration** — weight + body composition time series (server side)
 5. ▶ **M5 – App dashboard** — the web dashboard is live; onboarding/manual entry/mobile UI remain
@@ -82,6 +82,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 - [Architecture](docs/architecture.md) — components, data flow and deployment shape
 - [Data model](docs/data-model.md) — PostgreSQL/Prisma schema and dedup rules
 - [Deployment](docs/deployment.md) — production Compose, TLS and key rotation
+- [Strava](docs/strava.md) — OAuth setup, scopes and sync behaviour
 - [Risks & TODO](docs/risks-todo.md) — open security/correctness/maintainability work
 - [Roadmap](docs/roadmap.md) — milestones and known feature gaps
 
