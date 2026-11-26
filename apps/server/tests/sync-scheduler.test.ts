@@ -69,7 +69,7 @@ describe('runSyncSchedulerTick', () => {
     };
     expect(query.where).toMatchObject({
       status: 'ACTIVE',
-      provider: { in: ['GARMIN', 'IGPSPORT', 'OMRON', 'ZWIFT'] },
+      provider: { in: ['GARMIN', 'IGPSPORT', 'OMRON', 'STRAVA', 'ZWIFT'] },
       OR: [
         { lastSyncedAt: null },
         { lastSyncedAt: { lt: new Date(now - env.STRIDASH_SYNC_INTERVAL_MS) } },

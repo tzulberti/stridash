@@ -41,6 +41,7 @@ const env: Env = {
   STRIDASH_REGISTER_RATE_LIMIT: 1000,
   STRIDASH_SYNC_INTERVAL_MS: 0,
   STRIDASH_SYNC_BATCH_SIZE: 10,
+  STRIDASH_STRAVA_BACKFILL_DAYS: 365,
   STRIDASH_LOGIN_RATE_LIMIT: 1000,
   STRIDASH_CONNECTION_RATE_LIMIT: 1000,
   STRIDASH_CONNECTION_RATE_WINDOW_MS: 60_000,
@@ -1283,6 +1284,16 @@ describe('chart preferences', () => {
 // ─── Connections: lifecycle + sync contract ──────────────────────────────────
 
 describe('connections', () => {
+  it('mounts the Strava OAuth routes', async () => {
+    expect((await app.request('/api/strava/authorize')).status).toBe(401);
+    const authorize = await app.request('/api/strava/authorize', authed(aliceToken));
+    expect(authorize.status).toBe(503); // integration env has no Strava app creds
+
+    const callback = await app.request('/api/strava/callback?code=c&state=bad');
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get('location')).toContain('/connections?strava=error');
+  });
+
   it('lists connections without ever leaking tokens', async () => {
     const res = await app.request('/api/connections', authed(aliceToken));
     expect(res.status).toBe(200);

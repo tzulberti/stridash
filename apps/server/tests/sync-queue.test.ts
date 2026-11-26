@@ -22,6 +22,7 @@ const { prisma, syncs } = vi.hoisted(() => {
     zwift: vi.fn(),
     igpsport: vi.fn(),
     omron: vi.fn(),
+    strava: vi.fn(),
   };
   return { prisma, syncs };
 });
@@ -32,6 +33,7 @@ vi.mock('../src/services/garmin-wellness.js', () => ({ syncGarminWellness: syncs
 vi.mock('../src/services/zwift-sync.js', () => ({ syncZwiftConnection: syncs.zwift }));
 vi.mock('../src/services/igpsport-sync.js', () => ({ syncIgpSportConnection: syncs.igpsport }));
 vi.mock('../src/services/omron-sync.js', () => ({ syncOmronConnection: syncs.omron }));
+vi.mock('../src/services/strava-sync.js', () => ({ syncStravaConnection: syncs.strava }));
 
 import {
   drainSyncQueue,
@@ -42,6 +44,7 @@ import { GarminError } from '../src/providers/garmin/sso.js';
 import { IgpSportError } from '../src/providers/igpsport/client.js';
 import { OmronConnectError } from '../src/providers/omron/client.js';
 import { ZwiftError } from '../src/providers/zwift/client.js';
+import { StravaError } from '../src/providers/strava/client.js';
 import type { Env } from '../src/env.js';
 
 const env = { STRIDASH_ENC_KEY: 'x'.repeat(32) } as unknown as Env;
@@ -66,6 +69,7 @@ beforeEach(() => {
   syncs.zwift.mockReset();
   syncs.igpsport.mockReset();
   syncs.omron.mockReset();
+  syncs.strava.mockReset();
 
   prisma.connection.updateMany.mockResolvedValue({ count: 1 });
   prisma.syncLog.updateMany.mockResolvedValue({ count: 0 });
@@ -74,6 +78,7 @@ beforeEach(() => {
   syncs.zwift.mockResolvedValue({ status: 'OK' });
   syncs.igpsport.mockResolvedValue({ status: 'OK' });
   syncs.omron.mockResolvedValue({ status: 'OK' });
+  syncs.strava.mockResolvedValue({ status: 'OK' });
 });
 
 // ─── Dispatch ────────────────────────────────────────────────────────────────
@@ -82,6 +87,7 @@ describe('enqueueConnectionSync — dispatch', () => {
   it.each([
     ['ZWIFT', syncs.zwift],
     ['IGPSPORT', syncs.igpsport],
+    ['STRAVA', syncs.strava],
     ['OMRON', syncs.omron],
   ])('runs the %s service and releases the lock', async (provider, service) => {
     const conn = connection(provider);
@@ -216,6 +222,7 @@ describe('enqueueConnectionSync — results and failures', () => {
     ['OMRON 401', new OmronConnectError('bad login', 401)],
     ['IGPSPORT 403', new IgpSportError('forbidden', 403)],
     ['ZWIFT credentials', new ZwiftError('CREDENTIALS', 'bad grant')],
+    ['STRAVA credentials', new StravaError('CREDENTIALS', 'bad grant')],
     ['GARMIN credentials', new GarminError('CREDENTIALS', 'bad password')],
   ])('a %s failure marks the connection ERROR', async (_label, error) => {
     const conn = connection('OMRON');

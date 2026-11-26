@@ -632,7 +632,8 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
       connection.provider !== 'OMRON' &&
       connection.provider !== 'IGPSPORT' &&
       connection.provider !== 'GARMIN' &&
-      connection.provider !== 'ZWIFT'
+      connection.provider !== 'ZWIFT' &&
+      connection.provider !== 'STRAVA'
     ) {
       return c.json({ error: 'Provider does not support sync yet' }, 501);
     }

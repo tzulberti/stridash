@@ -678,7 +678,7 @@ describe('POST /connections/:id/sync and history', () => {
     prisma.connection.findFirst.mockResolvedValueOnce({
       id: randomUUID(),
       userId: 'user-1',
-      provider: 'STRAVA',
+      provider: 'MANUAL',
       status: 'ACTIVE',
     });
     const res = await post(`/connections/${randomUUID()}/sync`, {});

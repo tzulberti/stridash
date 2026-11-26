@@ -4,10 +4,12 @@ import { OmronConnectError } from '../providers/omron/client.js';
 import { IgpSportError } from '../providers/igpsport/client.js';
 import { GarminError } from '../providers/garmin/sso.js';
 import { ZwiftError } from '../providers/zwift/client.js';
+import { StravaError } from '../providers/strava/client.js';
 import { syncGarminConnection } from './garmin-sync.js';
 import { syncGarminWellness } from './garmin-wellness.js';
 import { syncIgpSportConnection } from './igpsport-sync.js';
 import { syncOmronConnection } from './omron-sync.js';
+import { syncStravaConnection } from './strava-sync.js';
 import { syncZwiftConnection } from './zwift-sync.js';
 import type { Env } from '../env.js';
 
@@ -126,6 +128,10 @@ async function runJob(env: Env, job: QueuedSync): Promise<void> {
       await syncIgpSportConnection(env, connection);
       return;
     }
+    if (connection.provider === 'STRAVA') {
+      await syncStravaConnection(env, connection);
+      return;
+    }
     if (connection.provider === 'OMRON') {
       await syncOmronConnection(env, connection);
     }
@@ -144,12 +150,14 @@ async function recordFailure(connectionId: string, err: unknown): Promise<void> 
     err instanceof OmronConnectError ||
     err instanceof IgpSportError ||
     err instanceof ZwiftError ||
+    err instanceof StravaError ||
     err instanceof GarminError
   ) {
     const httpStatus = err instanceof GarminError ? undefined : err.status;
     const credentialsRejected =
       (err instanceof GarminError && err.kind === 'CREDENTIALS') ||
       (err instanceof ZwiftError && err.kind === 'CREDENTIALS') ||
+      (err instanceof StravaError && err.kind === 'CREDENTIALS') ||
       httpStatus === 401 ||
       httpStatus === 403;
 

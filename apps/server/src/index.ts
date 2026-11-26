@@ -11,6 +11,7 @@ import { safeErrorForLog } from './redact.js';
 import { prisma } from './db.js';
 import { authRoutes } from './routes/auth.js';
 import { connectionRoutes } from './routes/connections.js';
+import { stravaRoutes } from './routes/strava.js';
 import { dataRoutes } from './routes/data.js';
 import { drainSyncQueue, recoverStaleSyncLocks } from './services/sync-queue.js';
 import { startSyncScheduler } from './services/sync-scheduler.js';
@@ -92,6 +93,7 @@ export function createApp(env: Env): TypedHono {
   );
 
   app.route('/api/auth', authRoutes(env));
+  app.route('/api/strava', stravaRoutes(env));
 
   // ─── Authenticated ─────────────────────────────────────────────────────────
 

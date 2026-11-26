@@ -18,7 +18,7 @@ import type { Env } from '../env.js';
 import { safeErrorForLog } from '../redact.js';
 import { enqueueConnectionSync, releaseSyncLock, SYNC_STALE_MS } from './sync-queue.js';
 
-const SCHEDULED_PROVIDERS = ['GARMIN', 'IGPSPORT', 'OMRON', 'ZWIFT'] as const;
+const SCHEDULED_PROVIDERS = ['GARMIN', 'IGPSPORT', 'OMRON', 'STRAVA', 'ZWIFT'] as const;
 
 /** Poll at most once a minute; the due cutoff is the actual sync interval. */
 const MAX_POLL_MS = 60_000;

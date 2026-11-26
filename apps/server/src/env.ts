@@ -107,6 +107,20 @@ const envSchema = z
       .default(15 * 60 * 1000),
     /** Max connections claimed per scheduler tick (default 10). */
     STRIDASH_SYNC_BATCH_SIZE: z.coerce.number().int().positive().default(10),
+
+    // ─── Strava OAuth app ─────────────────────────────────────────────────────
+    /** Strava API application credentials (https://www.strava.com/settings/api). */
+    STRIDASH_STRAVA_CLIENT_ID: z.string().min(1).optional(),
+    STRIDASH_STRAVA_CLIENT_SECRET: z.string().min(1).optional(),
+    /**
+     * Must exactly match the callback URL configured in the Strava app.
+     * Defaults to `${STRIDASH_PUBLIC_URL}/api/strava/callback` at request time.
+     */
+    STRIDASH_STRAVA_REDIRECT_URI: z.string().url().optional(),
+    /** First-sync history window; later syncs use the lastSyncedAt watermark. */
+    STRIDASH_STRAVA_BACKFILL_DAYS: z.coerce.number().int().positive().default(365),
+    /** Public origin for OAuth/browser redirects (e.g. https://stridash.example). */
+    STRIDASH_PUBLIC_URL: z.string().url().optional(),
     /**
      * Trust `X-Forwarded-For` for the client IP. Only enable when the server
      * sits behind a reverse proxy that overwrites the header — otherwise a
