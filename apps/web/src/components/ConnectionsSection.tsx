@@ -16,6 +16,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   IGPSPORT: 'iGPSPORT',
   GARMIN: 'Garmin',
   ZWIFT: 'Zwift',
+  STRAVA: 'Strava',
 };
 type ProviderKey = 'omron' | 'igpsport' | 'garmin' | 'zwift';
 
@@ -32,8 +33,18 @@ export function ConnectionsSection(props: {
   syncConnection: (id: string) => Promise<{ ok: boolean; text: string }>;
   reload: () => void;
   onBack: () => void;
+  /** OAuth navigation is injectable so DOM tests never touch jsdom's Location. */
+  navigate?: (url: string) => void;
 }) {
-  const { conn, token, syncingId, syncConnection, reload, onBack } = props;
+  const {
+    conn,
+    token,
+    syncingId,
+    syncConnection,
+    reload,
+    onBack,
+    navigate = (url: string) => window.location.assign(url),
+  } = props;
   // add-connection form
   const [provider, setProvider] = useState<ProviderKey>('omron');
   const [identifier, setIdentifier] = useState('');
@@ -41,6 +52,9 @@ export function ConnectionsSection(props: {
   const [country, setCountry] = useState('AR');
   const [connectBusy, setConnectBusy] = useState(false);
   const [connectMsg, setConnectMsg] = useState<string | null>(null);
+  const [stravaBusy, setStravaBusy] = useState(false);
+  // OAuth returns to /connections?strava=…; show a one-line result banner.
+  const oauthResult = new URLSearchParams(window.location.search).get('strava');
   // garmin second factor: the connect call answers 202 when the code step is due
   const [mfa, setMfa] = useState<{ id: string; method: string } | null>(null);
   const [mfaCode, setMfaCode] = useState('');
@@ -97,6 +111,19 @@ export function ConnectionsSection(props: {
     }
   }
 
+  async function connectStrava(): Promise<void> {
+    setStravaBusy(true);
+    setConnectMsg(null);
+    try {
+      const res = await api<{ url: string }>('/strava/authorize', { token });
+      if (!res.url) throw new Error('Strava authorization URL missing');
+      navigate(res.url);
+    } catch (err) {
+      setConnectMsg(String(err).replace(/^Error: /, ''));
+      setStravaBusy(false);
+    }
+  }
+
   async function verifyMfa(): Promise<void> {
     if (!mfa) return;
     setConnectBusy(true);
@@ -131,6 +158,11 @@ export function ConnectionsSection(props: {
 
       <h2>{t('conn.heading')}</h2>
       <p className="page-hint">{t('conn.hint')}</p>
+      {oauthResult === 'connected' ? (
+        <p className="conn-msg">{t('conn.connected', { provider: 'Strava' })}</p>
+      ) : oauthResult ? (
+        <p className="conn-msg err">{t('conn.syncFailedCheck')}</p>
+      ) : null}
 
       <div className="conn-list">
         {conn.map((c) => {
@@ -211,6 +243,17 @@ export function ConnectionsSection(props: {
       </div>
 
       <h2>{t('conn.addHeading')}</h2>
+      <div className="strava-connect">
+        <button
+          type="button"
+          className="btn"
+          onClick={() => void connectStrava()}
+          disabled={stravaBusy}
+        >
+          Strava · {stravaBusy ? t('conn.connecting') : t('conn.connect')}
+        </button>
+        <span className="muted">OAuth</span>
+      </div>
       <form
         className="conn-form"
         onSubmit={(e) => {

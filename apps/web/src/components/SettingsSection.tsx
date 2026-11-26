@@ -9,6 +9,7 @@ const CHART_CONFIG_PROVIDERS: Array<{ provider: ChartProvider; name: string }> =
   { provider: 'GARMIN', name: 'Garmin' },
   { provider: 'ZWIFT', name: 'Zwift' },
   { provider: 'IGPSPORT', name: 'iGPSPORT' },
+  { provider: 'STRAVA', name: 'Strava' },
 ];
 
 export function SettingsSection(props: {

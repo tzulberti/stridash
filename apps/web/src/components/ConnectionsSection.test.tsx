@@ -37,6 +37,7 @@ const baseProps = {
   syncConnection: vi.fn(),
   reload: vi.fn(),
   onBack: vi.fn(),
+  navigate: vi.fn(),
 };
 
 function renderSection(over: Partial<typeof baseProps> = {}) {
@@ -49,6 +50,7 @@ beforeEach(() => {
   baseProps.syncConnection.mockResolvedValue({ ok: true, text: 'queued' });
   baseProps.reload.mockReset();
   baseProps.onBack.mockReset();
+  baseProps.navigate.mockReset();
   apiMock.mockReset();
   apiMock.mockResolvedValue({});
 });
@@ -165,6 +167,32 @@ describe('ConnectionsSection', () => {
         body: { provider: 'GARMIN', email: 'rider@example.com', password: 'secret' },
       }),
     );
+  });
+
+  it('starts the Strava OAuth flow and redirects to the consent URL', async () => {
+    apiMock.mockResolvedValueOnce({ url: 'https://www.strava.com/oauth/authorize?state=s' });
+    renderSection();
+
+    fireEvent.click(screen.getByRole('button', { name: /Strava/ }));
+
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/strava/authorize', { token: 'tok' }),
+    );
+    expect(baseProps.navigate).toHaveBeenCalledWith(
+      'https://www.strava.com/oauth/authorize?state=s',
+    );
+  });
+
+  it('shows the OAuth callback banner', () => {
+    window.history.replaceState(null, '', '/connections?strava=connected');
+    renderSection();
+    expect(screen.getByText(/Strava connected/)).toBeTruthy();
+    cleanup();
+
+    window.history.replaceState(null, '', '/connections?strava=denied');
+    renderSection();
+    expect(screen.getByText(/sync failed/)).toBeTruthy();
+    window.history.replaceState(null, '', '/');
   });
 
   it('parks Garmin MFA and verifies the code', async () => {

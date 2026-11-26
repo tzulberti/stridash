@@ -90,7 +90,9 @@ describe('SettingsSection', () => {
     renderSettings();
     await screen.findByText('alice@example.com');
 
-    fireEvent.click(screen.getByText('Respiration').closest('label')!.querySelector('input')!);
+    fireEvent.click(
+      screen.getAllByText('Respiration')[0]!.closest('label')!.querySelector('input')!,
+    );
 
     expect(baseProps.onChartChannelsChange).toHaveBeenCalledTimes(1);
     const [provider, channels] = baseProps.onChartChannelsChange.mock.calls[0] as [
