@@ -1,9 +1,9 @@
 {
   "server": {
-    "lines": 61.55,
-    "statements": 61.55,
-    "functions": 75.47,
-    "branches": 80.71
+    "lines": 75.96,
+    "statements": 75.96,
+    "functions": 84.07,
+    "branches": 78.84
   },
   "web": {
     "lines": 13.82,

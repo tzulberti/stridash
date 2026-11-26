@@ -57,6 +57,11 @@ maintainability. Check the box when the fix (and its test) has landed.
 > reporting plus a baseline regression gate, T19 covered the provider
 > client/error boundaries (except the live SSO/MFA flow), and C1/T20 started
 > the web split by extracting `lib/api.ts` and `lib/chart.ts` with tests.
+>
+> **Status 2026-11-26:** T17 added orchestration tests for Garmin,
+> iGPSPORT, Omron and Garmin wellness sync (page scans, known-source and
+> stale-page skips, FIT fallback, gear/device backfill, edit detection,
+> login/error paths, sleep/daily upserts).
 
 ---
 
@@ -816,24 +821,33 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 61.55% lines/statements, 75.47% functions, 80.71% branches; web 13.82%
+server 75.96% lines/statements, 84.07% functions, 78.84% branches; web 13.82%
 lines/statements, 94.44% functions, 88.64% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
-### Whole-codebase (baseline 2026-11-25)
+### Whole-codebase (baseline 2026-11-26)
 
 `npm run coverage:gate` now measures the server unit + integration suites and
 the web suite with generated Prisma and translation data excluded. Totals are
 recorded in `scripts/coverage-baseline.json`; the per-file figures below come
 from the earlier 2026-11-18 audit and are indicative only.
 
-- [ ] **T17. Sync-service orchestration (Garmin, iGPSPORT, Omron, wellness).**
+- [x] **T17. Sync-service orchestration (Garmin, iGPSPORT, Omron, wellness).**
       Mock provider HTTP clients and assert the full loop: list/pagination and
       watermark, known-source skip, FIT/detail fetch failure → `PARTIAL`,
       series persistence, gear/device fill, and `SyncLog` counts/status.
-      Current: `igpsport-sync.ts` 0%, `garmin-sync.ts` 2.1%,
-      `garmin-wellness.ts` 1.7%, `omron-sync.ts` 10.5%,
-      `garmin-tokens.ts` 10.5%.
+      Current: `igpsport-sync.ts` 71.9%, `garmin-sync.ts` 86.1%,
+      `garmin-wellness.ts` 95.5%, `omron-sync.ts` 92.7%,
+      `garmin-tokens.ts` 81.1%.
+
+**Landed 2026-11-26:** added mocked-Prisma/API tests for the Garmin and
+iGPSPORT sync loops (pagination, known-id and stale-page stopping, FIT
+fallback to list/detail rows, PARTIAL vs ERROR classification, gear/device
+backfill, Garmin edit detection, iGPSPORT re-login/device backfill), Garmin
+wellness (sleep/daily chunks, detail enrichment, malformed rows, partial
+failures) and Omron (device filtering, per-device PARTIAL, revoked/region and
+listing failures).
+
 - [ ] **T18. Connection/sync routes.** Cover `routes/connections.ts` (26.1%):
       auth/ownership, connect/disconnect, each provider's sync trigger,
       provider error → `PARTIAL` vs `ERROR`, duplicate/concurrent sync handling

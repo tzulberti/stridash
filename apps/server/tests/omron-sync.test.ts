@@ -47,6 +47,7 @@ vi.mock('../src/providers/omron/client.js', async (importOriginal) => {
 });
 
 import { syncOmronConnection } from '../src/services/omron-sync.js';
+import { OmronConnectError } from '../src/providers/omron/client.js';
 
 const env = {
   STRIDASH_ENC_KEY: 'x'.repeat(32),
@@ -77,6 +78,14 @@ function sample(iso: string, weightKg: number) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getDevices.mockReset();
+  getMeasureSamples.mockReset();
+  prisma.syncLog.create.mockResolvedValue({ id: 'log-1' });
+  prisma.syncLog.update.mockResolvedValue({});
+  prisma.connection.update.mockResolvedValue({});
+  prisma.measurement.createMany.mockImplementation(async (args: { data: unknown[] }) => ({
+    count: args.data.length,
+  }));
   getDevices.mockResolvedValue([device]);
   prisma.measurement.findMany.mockResolvedValue([]);
 });
@@ -109,5 +118,77 @@ describe('syncOmronConnection measurement batching', () => {
     });
     const createArgs = prisma.measurement.createMany.mock.calls[0]![0] as { data: unknown[] };
     expect(createArgs.data).toHaveLength(2);
+  });
+});
+
+describe('syncOmronConnection — failures and filtering', () => {
+  it('marks one failed device PARTIAL and still syncs the rest', async () => {
+    const bad = { ...device, deviceSerialID: 'bad-serial' };
+    getDevices.mockResolvedValue([bad, device]);
+    getMeasureSamples.mockImplementation(async (d: { deviceSerialID: string }) => {
+      if (d.deviceSerialID === 'bad-serial') throw new Error('device down');
+      return [sample('2026-11-04T07:00:00.000Z', 71)];
+    });
+
+    const result = await syncOmronConnection(env, connection);
+
+    expect(result).toMatchObject({
+      status: 'PARTIAL',
+      itemsPulled: 1,
+      itemsCreated: 1,
+    });
+    expect(result.devices).toEqual([
+      {
+        deviceModel: bad.deviceModel,
+        serial: bad.deviceSerialID,
+        category: bad.category,
+        samples: -1,
+      },
+      {
+        deviceModel: device.deviceModel,
+        serial: device.deviceSerialID,
+        category: device.category,
+        samples: 1,
+      },
+    ]);
+    expect(prisma.syncLog.update.mock.calls.at(-1)![0]).toMatchObject({
+      data: { status: 'PARTIAL', errorDetail: { note: 'one or more devices failed' } },
+    });
+  });
+
+  it('skips unsupported device categories without fetching samples', async () => {
+    getDevices.mockResolvedValue([{ ...device, category: '2' }]);
+
+    const result = await syncOmronConnection(env, connection);
+
+    expect(result).toMatchObject({ status: 'OK', itemsPulled: 0, devices: [] });
+    expect(getMeasureSamples).not.toHaveBeenCalled();
+  });
+
+  it('throws before creating a sync log when the connection is revoked', async () => {
+    await expect(
+      syncOmronConnection(env, { ...connection, status: 'REVOKED' }),
+    ).rejects.toBeInstanceOf(OmronConnectError);
+    expect(prisma.syncLog.create).not.toHaveBeenCalled();
+    expect(prisma.syncLog.update).not.toHaveBeenCalled();
+  });
+
+  it('throws when the connection has no country configured', async () => {
+    await expect(syncOmronConnection(env, { ...connection, config: {} })).rejects.toThrow(
+      'no Omron region',
+    );
+    expect(prisma.syncLog.create).not.toHaveBeenCalled();
+  });
+
+  it('marks the log ERROR and rethrows when device listing fails', async () => {
+    getDevices.mockRejectedValueOnce(new OmronConnectError('list down'));
+
+    await expect(syncOmronConnection(env, connection)).rejects.toThrow('list down');
+    const errorLog = prisma.syncLog.update.mock.calls[0]![0] as {
+      data: { status: string; errorDetail: { error: string } };
+    };
+    expect(errorLog.data.status).toBe('ERROR');
+    expect(errorLog.data.errorDetail.error).toContain('list down');
+    expect(prisma.connection.update).not.toHaveBeenCalled();
   });
 });
