@@ -67,12 +67,12 @@ maintainability. Check the box when the fix (and its test) has landed.
 > added the interval background-sync scheduler with per-connection claiming
 > and timer shutdown. T19 completed the mocked Garmin login/MFA state machine
 > (mobile/widget/portal chain, credential stop, MFA completion, rate-limit and
-> timeout paths). C1/T20 extracted `DatePicker`, `LineChart`, `CompareChart`,
-> the settings chart list/page, the connections page and the gear page into
-> components plus a shared chart-config module (Testing Library + jsdom, 42
-> component tests; web line coverage 13.8% → 52.3%, App.tsx down to ~2,004
-> lines). T21 added the mobile Vitest runner and tests for the extracted API
-> helper (`EXPO_PUBLIC_API_URL` handling + health fetch).
+> timeout paths). C1/T20 extracted the dashboard, activity detail, settings,
+> connections, gear and chart pieces into components, added a DOM harness and
+> covered auth/login; T20 is closed (60 component/DOM tests; web line coverage
+> 13.8% → 88.2%, App.tsx down to ~717 lines). T21 added the mobile Vitest
+> runner and tests for the extracted API helper (`EXPO_PUBLIC_API_URL`
+> handling + health fetch).
 
 ---
 
@@ -595,17 +595,13 @@ to `apps/web/src/lib/api.ts` (9 unit tests), and chart axis/zone/split math
 moved to `apps/web/src/lib/chart.ts` (15 unit tests); `App.tsx` is now ~3,640
 lines. The route/page/chart monolith remains.
 
-**Progress 2026-11-27:** extracted the self-contained calendar popover to
-`components/DatePicker.tsx` (7 DOM tests, 100% coverage), the SVG line chart
-to `components/LineChart.tsx` (5 tests, 97.9% lines), the two-series compare
-chart to `components/CompareChart.tsx` (4 tests, 100% lines), the settings
-chart list to `components/ChartConfigList.tsx` (5 tests), its catalog to
-`lib/chart-config.ts` (4 unit tests, 100%), the settings page to
-`components/SettingsSection.tsx` (7 tests), the connections page to
-`components/ConnectionsSection.tsx` (9 tests) and the gear page to
-`components/GearSection.tsx` (5 tests). `App.tsx` is ~2,004 lines; the
-dashboard/activity pages remain, but the web test harness now supports
-component tests.
+**Progress 2026-11-27:** extracted all pages/presentational chunks out of the
+monolith: `DashboardView`, `ActivityDetail`, `SettingsSection`,
+`ConnectionsSection`, `GearSection`, `DatePicker`, `LineChart`,
+`CompareChart`, `ChartConfigList` and `Card`, with the chart catalog/order in
+`lib/chart-config.ts`. `App.tsx` is ~717 lines (down from ~4,000) and still
+owns auth boot, the data load and route switching; a `routes/`/`hooks/` split
+remains for the planned redesign.
 
 ### [ ] C2. Dedupe/upsert logic is copy-pasted three times — **Maintainability**
 
@@ -853,8 +849,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 87% lines/statements, 90.28% functions, 79.7% branches; web 52.26%
-lines/statements, 94.07% functions, 88.01% branches (App.tsx is still the
+server 87% lines/statements, 90.28% functions, 79.7% branches; web 88.18%
+lines/statements, 72.44% functions, 80.01% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)
@@ -916,7 +912,7 @@ fallback, credential stop, rate-limit exhaustion, MFA park/complete for JSON
 and widget flows, and fetch/timeout rejection. Real Garmin/Cloudflare behavior
 still needs a live-account smoke test; the suite pins the protocol branches.
 
-- [ ] **T20. Web UI/component tests.** `App.tsx` is 3,644 lines at 0%;
+- [x] **T20. Web UI/component tests.** `App.tsx` is 3,644 lines at 0%;
       `main.tsx` is also 0%. Add a DOM test harness (React Testing Library +
       jsdom/happy-dom), extract testable components/hooks from the monolith
       (see C1), and cover auth, activity list/detail, settings, and
@@ -928,20 +924,14 @@ concurrent refresh deduplication; `lib/chart.ts` has 15 tests for tick
 formatting, zone thresholds, splits and window aggregates. Component/DOM
 coverage is still zero.
 
-**Progress 2026-11-27:** added Testing Library + jsdom to the web workspace
-and extracted five components: `DatePicker` (7 DOM tests: open, month
-navigation, selection, min/max disabling, clear/today, Escape and
-outside-click), `LineChart` (5 tests: empty state, axes, zoned paths, hover
-tooltip; 97.9% lines), `CompareChart` (4 tests: dual series, shared axes,
-distance mode, hover values), `ChartConfigList` (5 tests: provider capability
-filtering, toggles, drag reorder, stale config keys), `SettingsSection`
-(7 tests: account load, units/theme/language persistence, chart toggles,
-JSON export success/failure, two-step delete), `ConnectionsSection`
-(9 tests: cards/status, sync results, delete flow, provider-specific connect
-bodies, Garmin MFA, errors) and `GearSection` (5 tests: usage/thresholds,
-kind fallback, add/retire/delete, empty/error states). The chart
-catalog/order helper has 4 more unit tests at 100%. The dashboard and
-activity detail pages are still untested in the App monolith.
+**Landed 2026-11-27:** added Testing Library + jsdom and extracted the
+dashboard, activity detail, settings, connections, gear, calendar, charts,
+chart settings and card components. 60 DOM tests cover login/bootstrap/logout,
+dashboard cards/charts/feed and range/filter controls, activity detail +
+resync + compare, settings preferences/export/delete, provider connect/MFA,
+gear add/retire/delete and loading/error/empty states. Web line coverage is
+88.2%; `App.tsx` is ~717 lines. The full web suite (including pure helpers) is
+144 tests.
 
 - [ ] **T21. Mobile tests.** The mobile app has no test runner or test files.
       Add vitest (or jest) for pure helpers first — theme, formatting, API
