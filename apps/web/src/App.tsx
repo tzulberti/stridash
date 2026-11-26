@@ -13,7 +13,6 @@ import type {
   MeResponse,
   Device,
   ChartChannelConfig,
-  ChartChannelKey,
   ChartProvider,
 } from '@stridash/types';
 import { clearTokens, readToken, saveTokens, storedRefreshToken } from './lib/token-storage';
@@ -36,6 +35,8 @@ import {
 import { DatePicker } from './components/DatePicker';
 import { LineChart } from './components/LineChart';
 import { CompareChart } from './components/CompareChart';
+import { ChartConfigList } from './components/ChartConfigList';
+import { orderedChannels, PROVIDER_CHANNELS, SERIES_CHANNELS } from './lib/chart-config';
 import {
   fmtKm,
   fmtMin,
@@ -86,65 +87,6 @@ interface ActivitySeriesRow {
     staminaPct?: number[];
     temperatureC?: number[];
   };
-}
-
-/** labeled stream charts for the activity page, in canonical display order
- * (the user's per-provider Settings configuration overrides this order) */
-const SERIES_CHANNELS: Array<[string, MsgKey, string, string]> = [
-  ['speedMs', 'series.speed', '#30a46c', ' m/s'],
-  ['hrBpm', 'series.hr', '#e5484d', ' bpm'],
-  ['powerW', 'series.power', '#6e56cf', ' W'],
-  ['cadenceRpm', 'series.cadence', '#0091ff', ' rpm'],
-  ['altitudeM', 'series.altitude', '#b8860b', ' m'],
-  ['respirationRate', 'series.respiration', '#d6409f', ' br/min'],
-  ['staminaPct', 'series.stamina', '#d29922', ' %'],
-  ['stepLengthM', 'series.stepLength', '#80a9a0', ' m'],
-  ['verticalOscillationM', 'series.vertOscillation', '#9c6ade', ' m'],
-  ['stanceTimePct', 'series.groundContact', '#bf7f26', ' %'],
-  ['verticalRatioPct', 'series.vertRatio', '#bf7f26', ' %'],
-  ['temperatureC', 'series.temperature', '#f2994a', ' °C'],
-];
-
-/** channels each provider's series can actually carry — the Settings lists
- * offer only these per provider and the activity page's no-data hint only
- * mentions them (a provider missing here = the full catalog, e.g. a future
- * Strava). Garmin carries per-record temperature only with a paired Tempe
- * sensor, but the channel stays configurable for it. */
-const PROVIDER_CHANNELS: Partial<Record<ChartProvider, ChartChannelKey[]>> = {
-  GARMIN: [
-    'speedMs',
-    'hrBpm',
-    'powerW',
-    'cadenceRpm',
-    'altitudeM',
-    'respirationRate',
-    'staminaPct',
-    'stepLengthM',
-    'verticalOscillationM',
-    'stanceTimePct',
-    'verticalRatioPct',
-    'temperatureC',
-  ],
-  ZWIFT: ['speedMs', 'hrBpm', 'powerW', 'cadenceRpm', 'altitudeM'],
-  IGPSPORT: ['speedMs', 'hrBpm', 'powerW', 'cadenceRpm', 'altitudeM', 'temperatureC'],
-};
-
-/** SERIES_CHANNELS reordered + filtered by the provider's saved chart
- * configuration: configured channels follow their saved order and drop out
- * when hidden; channels the configuration doesn't know (catalog entries
- * shipped later) append after, still visible, in canonical order. */
-function orderedChannels(
-  provider: string | undefined,
-  cfg: Partial<Record<string, Array<{ key: string; visible: boolean }>>> | undefined,
-): Array<[string, MsgKey, string, string]> {
-  const list = provider ? cfg?.[provider] : undefined;
-  if (!list?.length) return SERIES_CHANNELS;
-  const pos = new Map(list.map((c, i) => [c.key, i]));
-  const vis = new Map(list.map((c) => [c.key, c.visible]));
-  return SERIES_CHANNELS.map((ch, i) => ({ ch, i, p: pos.get(ch[0]) }))
-    .sort((a, b) => (a.p ?? SERIES_CHANNELS.length + a.i) - (b.p ?? SERIES_CHANNELS.length + b.i))
-    .filter((e) => vis.get(e.ch[0]) ?? true)
-    .map((e) => e.ch);
 }
 
 function ActivityDetail({
@@ -1372,114 +1314,6 @@ const CHART_CONFIG_PROVIDERS: Array<{ provider: ChartProvider; name: string }> =
   { provider: 'ZWIFT', name: 'Zwift' },
   { provider: 'IGPSPORT', name: 'iGPSPORT' },
 ];
-
-/** One provider's chart list in the Settings tab: a checkbox per channel
- * (checked = chart shown) plus HTML5 drag & drop ordering. Fully controlled
- * — every toggle/move hands the whole list to onChange, which persists it
- * and updates the app state the activity page renders from. */
-function ChartConfigList({
-  provider,
-  name,
-  config,
-  onChange,
-}: {
-  provider: ChartProvider;
-  name: string;
-  config: ChartChannelConfig[] | undefined;
-  onChange: (provider: ChartProvider, channels: ChartChannelConfig[]) => void;
-}) {
-  // working list = the saved configuration extended with catalog channels it
-  // predates (appended, visible, canonical order); stored keys that no longer
-  // exist in the catalog (renamed since) are dropped rather than crashing.
-  // Only channels the provider can actually record are offered — the full
-  // catalog for providers without a capability entry.
-  const capable = new Set<string>(
-    (PROVIDER_CHANNELS[provider] ?? SERIES_CHANNELS.map(([key]) => key)) as string[],
-  );
-  const configured = new Set<string>((config ?? []).map((c) => c.key));
-  const items: ChartChannelConfig[] = [
-    ...(config ?? []).filter(
-      (c) => capable.has(c.key) && SERIES_CHANNELS.some(([key]) => key === c.key),
-    ),
-    ...SERIES_CHANNELS.filter(([key]) => capable.has(key) && !configured.has(key)).map(([key]) => ({
-      key: key as ChartChannelConfig['key'],
-      visible: true,
-    })),
-  ];
-
-  const [dragKey, setDragKey] = useState<string | null>(null);
-  const [overKey, setOverKey] = useState<string | null>(null);
-
-  /** array-move: the dragged row lands at the target's index (before it when
-   * dragging upward, after it when dragging downward) */
-  function moveTo(drag: string, target: string): void {
-    const from = items.findIndex((i) => i.key === drag);
-    const to = items.findIndex((i) => i.key === target);
-    if (from < 0 || to < 0 || from === to) return;
-    const next = [...items];
-    const moved = next.splice(from, 1)[0];
-    if (!moved) return;
-    next.splice(to, 0, moved);
-    onChange(provider, next);
-  }
-
-  return (
-    <div className="chart-cfg">
-      <h4>{name}</h4>
-      <ul className="chart-cfg-list">
-        {items.map((item) => {
-          const meta = SERIES_CHANNELS.find(([key]) => key === item.key)!;
-          const dragging = dragKey === item.key;
-          const dropping = overKey === item.key;
-          return (
-            <li
-              key={item.key}
-              draggable
-              onDragStart={(e) => {
-                setDragKey(item.key);
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', item.key);
-              }}
-              onDragOver={(e) => {
-                e.preventDefault(); // required for the drop to fire
-                if (dragKey && dragKey !== item.key) setOverKey(item.key);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (dragKey) moveTo(dragKey, item.key);
-                setOverKey(null);
-                setDragKey(null);
-              }}
-              onDragEnd={() => {
-                setDragKey(null);
-                setOverKey(null);
-              }}
-              className={`chart-cfg-row${dragging ? ' dragging' : ''}${dropping ? ' drop-target' : ''}`}
-            >
-              <span className="chart-cfg-handle" aria-hidden="true">
-                ≡
-              </span>
-              <label className="chart-cfg-label">
-                <input
-                  type="checkbox"
-                  checked={item.visible}
-                  onChange={() =>
-                    onChange(
-                      provider,
-                      items.map((i) => (i.key === item.key ? { ...i, visible: !i.visible } : i)),
-                    )
-                  }
-                />
-                {t(meta[1])}
-                <span className="muted">{meta[3].trim()}</span>
-              </label>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
 
 function SettingsSection(props: {
   token: string;

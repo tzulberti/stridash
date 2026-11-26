@@ -67,11 +67,12 @@ maintainability. Check the box when the fix (and its test) has landed.
 > added the interval background-sync scheduler with per-connection claiming
 > and timer shutdown. T19 completed the mocked Garmin login/MFA state machine
 > (mobile/widget/portal chain, credential stop, MFA completion, rate-limit and
-> timeout paths). C1/T20 extracted `DatePicker`, `LineChart` and
-> `CompareChart` into components and added the first DOM harness (Testing
-> Library + jsdom, 16 tests; web line coverage 13.8% → 29.0%, App.tsx down to
-> ~3,008 lines). T21 added the mobile Vitest runner and tests for the
-> extracted API helper (`EXPO_PUBLIC_API_URL` handling + health fetch).
+> timeout paths). C1/T20 extracted `DatePicker`, `LineChart`, `CompareChart`
+> and the settings chart list into components plus a shared chart-config
+> module (Testing Library + jsdom, 21 component tests; web line coverage
+> 13.8% → 32.7%, App.tsx down to ~2,842 lines). T21 added the mobile Vitest
+> runner and tests for the extracted API helper (`EXPO_PUBLIC_API_URL`
+> handling + health fetch).
 
 ---
 
@@ -596,10 +597,12 @@ lines. The route/page/chart monolith remains.
 
 **Progress 2026-11-27:** extracted the self-contained calendar popover to
 `components/DatePicker.tsx` (7 DOM tests, 100% coverage), the SVG line chart
-to `components/LineChart.tsx` (5 tests, 97.9% lines) and the two-series
-compare chart to `components/CompareChart.tsx` (4 tests, 100% lines).
-`App.tsx` is ~3,008 lines; the route/page monolith remains, but the web test
-harness now supports component tests.
+to `components/LineChart.tsx` (5 tests, 97.9% lines), the two-series compare
+chart to `components/CompareChart.tsx` (4 tests, 100% lines), and the settings
+chart list to `components/ChartConfigList.tsx` (5 tests) with its catalog in
+`lib/chart-config.ts` (4 unit tests, 100%). `App.tsx` is ~2,842 lines; the
+route/page monolith remains, but the web test harness now supports component
+tests.
 
 ### [ ] C2. Dedupe/upsert logic is copy-pasted three times — **Maintainability**
 
@@ -847,8 +850,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 87% lines/statements, 90.28% functions, 79.7% branches; web 29.02%
-lines/statements, 96.2% functions, 88.83% branches (App.tsx is still the
+server 87% lines/statements, 90.28% functions, 79.7% branches; web 32.72%
+lines/statements, 95.4% functions, 89.48% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)
@@ -923,12 +926,15 @@ formatting, zone thresholds, splits and window aggregates. Component/DOM
 coverage is still zero.
 
 **Progress 2026-11-27:** added Testing Library + jsdom to the web workspace
-and extracted three components: `DatePicker` (7 DOM tests: open, month
+and extracted four components: `DatePicker` (7 DOM tests: open, month
 navigation, selection, min/max disabling, clear/today, Escape and
 outside-click), `LineChart` (5 tests: empty state, axes, zoned paths, hover
-tooltip; 97.9% lines) and `CompareChart` (4 tests: dual series, shared axes,
-distance mode, hover values). Auth, activity list/detail, settings and
-loading/error/empty pages are still untested in the App monolith.
+tooltip; 97.9% lines), `CompareChart` (4 tests: dual series, shared axes,
+distance mode, hover values) and `ChartConfigList` (5 tests: provider
+capability filtering, toggles, drag reorder, stale config keys). The chart
+catalog/order helper has 4 more unit tests at 100%. Auth, activity
+list/detail, settings and loading/error/empty pages are still untested in the
+App monolith.
 
 - [ ] **T21. Mobile tests.** The mobile app has no test runner or test files.
       Add vitest (or jest) for pure helpers first — theme, formatting, API
