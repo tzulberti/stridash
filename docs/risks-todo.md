@@ -67,9 +67,10 @@ maintainability. Check the box when the fix (and its test) has landed.
 > added the interval background-sync scheduler with per-connection claiming
 > and timer shutdown. T19 completed the mocked Garmin login/MFA state machine
 > (mobile/widget/portal chain, credential stop, MFA completion, rate-limit and
-> timeout paths). C1/T20 extracted `DatePicker` and `LineChart` into components
-> and added the first DOM harness (Testing Library + jsdom, 12 tests; web line
-> coverage 18.4% → 23.9%).
+> timeout paths). C1/T20 extracted `DatePicker`, `LineChart` and
+> `CompareChart` into components and added the first DOM harness (Testing
+> Library + jsdom, 16 tests; web line coverage 13.8% → 29.0%, App.tsx down to
+> ~3,008 lines).
 
 ---
 
@@ -593,11 +594,11 @@ moved to `apps/web/src/lib/chart.ts` (15 unit tests); `App.tsx` is now ~3,640
 lines. The route/page/chart monolith remains.
 
 **Progress 2026-11-27:** extracted the self-contained calendar popover to
-`components/DatePicker.tsx` with 7 DOM tests (Testing Library + jsdom, 100%
-coverage), then the SVG line chart to `components/LineChart.tsx` with 5 tests
-(97.9% lines: empty state, axes, zoned paths, hover tooltip). `App.tsx` is
-~3,228 lines; the route/page/chart monolith remains, but the web test harness
-now supports component tests.
+`components/DatePicker.tsx` (7 DOM tests, 100% coverage), the SVG line chart
+to `components/LineChart.tsx` (5 tests, 97.9% lines) and the two-series
+compare chart to `components/CompareChart.tsx` (4 tests, 100% lines).
+`App.tsx` is ~3,008 lines; the route/page monolith remains, but the web test
+harness now supports component tests.
 
 ### [ ] C2. Dedupe/upsert logic is copy-pasted three times — **Maintainability**
 
@@ -845,8 +846,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 87% lines/statements, 90.28% functions, 79.7% branches; web 23.85%
-lines/statements, 95.89% functions, 88.77% branches (App.tsx is still the
+server 87% lines/statements, 90.28% functions, 79.7% branches; web 29.02%
+lines/statements, 96.2% functions, 88.83% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)
@@ -921,11 +922,12 @@ formatting, zone thresholds, splits and window aggregates. Component/DOM
 coverage is still zero.
 
 **Progress 2026-11-27:** added Testing Library + jsdom to the web workspace
-and extracted `components/DatePicker.tsx` (7 DOM tests: open, month
+and extracted three components: `DatePicker` (7 DOM tests: open, month
 navigation, selection, min/max disabling, clear/today, Escape and
-outside-click) and `components/LineChart.tsx` (5 tests: empty state, axes,
-zoned paths, hover tooltip; 97.9% lines). Auth, activity list/detail, settings
-and loading/error/empty pages are still untested in the App monolith.
+outside-click), `LineChart` (5 tests: empty state, axes, zoned paths, hover
+tooltip; 97.9% lines) and `CompareChart` (4 tests: dual series, shared axes,
+distance mode, hover values). Auth, activity list/detail, settings and
+loading/error/empty pages are still untested in the App monolith.
 
 - [ ] **T21. Mobile tests.** The mobile app has no test runner or test files.
       Add vitest (or jest) for pure helpers first — theme, formatting, API
