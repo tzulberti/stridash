@@ -7,6 +7,7 @@ import { ZwiftError } from '../providers/zwift/client.js';
 import { StravaError } from '../providers/strava/client.js';
 import { syncGarminConnection } from './garmin-sync.js';
 import { syncGarminWellness } from './garmin-wellness.js';
+import { syncGarminMeasurements } from './garmin-measurements.js';
 import { syncIgpSportConnection } from './igpsport-sync.js';
 import { syncOmronConnection } from './omron-sync.js';
 import { syncStravaConnection } from './strava-sync.js';
@@ -117,6 +118,11 @@ async function runJob(env: Env, job: QueuedSync): Promise<void> {
         await syncGarminWellness(env, connection);
       } catch (err) {
         console.error('[garmin] wellness sync failed:', safeErrorForLog(err));
+      }
+      try {
+        await syncGarminMeasurements(env, connection);
+      } catch (err) {
+        console.error('[garmin] measurements sync failed:', safeErrorForLog(err));
       }
       return;
     }

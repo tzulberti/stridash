@@ -138,6 +138,92 @@ export async function listDevices(bearer: string): Promise<GarminDeviceRow[]> {
     }));
 }
 
+// ─── Health: weight/body composition + blood pressure ───────────────────────
+
+/** One weigh-in / body-composition row from `/weight-service/weight/range`. */
+export interface GarminWeightRow {
+  samplePk?: number | string;
+  calendarDate?: string;
+  date?: number;
+  timestampGMT?: number;
+  /** grams in real Connect responses (the schema says kg) */
+  weight?: number;
+  bmi?: number;
+  bodyFat?: number;
+  bodyWater?: number;
+  boneMass?: number;
+  muscleMass?: number;
+  physiqueRating?: number;
+  visceralFat?: number;
+  metabolicAge?: number;
+  basalMet?: number;
+  sourceType?: string;
+  [key: string]: unknown;
+}
+
+export interface GarminWeightResponse {
+  dateWeightList?: GarminWeightRow[];
+  totalAverage?: GarminWeightRow;
+  [key: string]: unknown;
+}
+
+/** All weigh-ins in a date range (the web app's Weight page endpoint). */
+export async function getWeightRange(
+  bearer: string,
+  startDate: string,
+  endDate: string,
+): Promise<GarminWeightResponse> {
+  const { status, json } = await connectapiGet(
+    `/weight-service/weight/range/${startDate}/${endDate}?includeAll=true`,
+    bearer,
+  );
+  if (status === 404) return { dateWeightList: [] };
+  if (status < 200 || status >= 300) {
+    throw new GarminError('CONNECTION', `Garmin weight range failed (HTTP ${status})`);
+  }
+  return (typeof json === 'object' && json !== null ? json : {}) as GarminWeightResponse;
+}
+
+export interface GarminBloodPressureMeasurement {
+  version?: string;
+  systolic?: number;
+  diastolic?: number;
+  pulse?: number;
+  measurementTimestampLocal?: number | string;
+  measurementTimestampGMT?: number | string;
+  measurementTime?: number | string;
+  notes?: string;
+  [key: string]: unknown;
+}
+
+export interface GarminBloodPressureSummary {
+  calendarDate?: string;
+  measurements?: GarminBloodPressureMeasurement[];
+  [key: string]: unknown;
+}
+
+export interface GarminBloodPressureResponse {
+  measurementSummaries?: GarminBloodPressureSummary[];
+  [key: string]: unknown;
+}
+
+/** All blood-pressure readings in a date range. */
+export async function getBloodPressureRange(
+  bearer: string,
+  startDate: string,
+  endDate: string,
+): Promise<GarminBloodPressureResponse> {
+  const { status, json } = await connectapiGet(
+    `/bloodpressure-service/bloodpressure/${startDate}/${endDate}?includeAll=true`,
+    bearer,
+  );
+  if (status === 404) return { measurementSummaries: [] };
+  if (status < 200 || status >= 300) {
+    throw new GarminError('CONNECTION', `Garmin blood-pressure range failed (HTTP ${status})`);
+  }
+  return (typeof json === 'object' && json !== null ? json : {}) as GarminBloodPressureResponse;
+}
+
 /** The recording device for one activity, from the activity detail's
  * metadataDTO (verified live 2026-11-12: `deviceMetaDataDTO.deviceId` is the
  * numeric serial matching the device-registration rows and the FIT creator

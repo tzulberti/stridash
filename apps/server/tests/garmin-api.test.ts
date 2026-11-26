@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   downloadFit,
   getActivityDetail,
+  getBloodPressureRange,
   getProfile,
+  getWeightRange,
   listActivities,
   listDevices,
   listGear,
@@ -152,5 +154,48 @@ describe('Garmin API payloads', () => {
       kind: 'CONNECTION',
       message: 'FIT download for 123 returned HTTP 404',
     });
+  });
+});
+
+describe('Garmin health endpoints', () => {
+  it('fetches weight and blood-pressure ranges with includeAll', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes('/weight-service/')) {
+        return new Response(JSON.stringify({ dateWeightList: [{ weight: 82_500 }] }), {
+          status: 200,
+        });
+      }
+      return new Response(
+        JSON.stringify({ measurementSummaries: [{ measurements: [{ systolic: 120 }] }] }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getWeightRange('token', '2026-11-01', '2026-11-30')).resolves.toMatchObject({
+      dateWeightList: [{ weight: 82_500 }],
+    });
+    await expect(getBloodPressureRange('token', '2026-11-01', '2026-11-30')).resolves.toMatchObject(
+      { measurementSummaries: [{ measurements: [{ systolic: 120 }] }] },
+    );
+
+    expect(String(fetchMock.mock.calls[0]![0])).toContain(
+      '/weight-service/weight/range/2026-11-01/2026-11-30?includeAll=true',
+    );
+    expect(String(fetchMock.mock.calls[1]![0])).toContain(
+      '/bloodpressure-service/bloodpressure/2026-11-01/2026-11-30?includeAll=true',
+    );
+  });
+
+  it('treats 404 as empty and non-2xx as a connection error', async () => {
+    stubStatus(404);
+    await expect(getWeightRange('token', 'a', 'b')).resolves.toEqual({ dateWeightList: [] });
+    await expect(getBloodPressureRange('token', 'a', 'b')).resolves.toEqual({
+      measurementSummaries: [],
+    });
+
+    stubStatus(500);
+    await expect(getWeightRange('token', 'a', 'b')).rejects.toBeInstanceOf(GarminError);
+    await expect(getBloodPressureRange('token', 'a', 'b')).rejects.toBeInstanceOf(GarminError);
   });
 });

@@ -134,8 +134,9 @@ iGPSPORT/Zwift becomes one activity; provenance is registered in
 `activity_data_points` (`provider = "GARMIN"`).
 
 Scope today: **activities** (+ GPS/HR/power/cadence/altitude/temperature
-series). Weight/HRV/daily wellness endpoints exist for the Personal-API or
-garmin connect scraping but are not wired into the measurement pipeline yet.
+series), sleep/daily wellness, and weight/body-composition + blood-pressure
+measurements. Endpoint shapes for the health tier are pinned by tests; a
+live-account smoke test is still pending.
 
 ## API surface
 
@@ -269,6 +270,28 @@ Sync: `services/garmin-wellness.ts` runs after every Garmin activity sync
 (separate `WELLNESS` sync_logs row). Backfill starts at the oldest stored
 dateKey (first run: 2022-01-01; Garmin answers 0 rows before the first
 device sync). Recent 45 nights always get the rich dailySleepData pass.
+
+## Weight/body composition + blood pressure (2026-11)
+
+The same DI bearer answers the health tier (endpoints come from the Garmin
+Connect web app / python-garminconnect; a live-account smoke test is still
+pending):
+
+- `/weight-service/weight/range/{start}/{end}?includeAll=true` —
+  `dateWeightList`: `calendarDate`, `timestampGMT`/`date`, weight/body fat/
+  body water/muscle/bone mass/visceral fat/BMI/metabolic age. Connect returns
+  mass values in **grams**; the mapper accepts grams or kg and stores kg.
+- `/bloodpressure-service/bloodpressure/{start}/{end}?includeAll=true` —
+  `measurementSummaries[].measurements[]`: systolic, diastolic, optional
+  pulse, GMT/local timestamp, notes.
+
+`services/garmin-measurements.ts` runs after wellness (separate
+`MEASUREMENTS` sync_logs row). Each kind starts seven days before its newest
+stored row (idempotent upsert on `user + provider + kind + measuredAt`); the
+first run uses `STRIDASH_GARMIN_HEALTH_BACKFILL_DAYS` (default 365). A failed
+weight or BP endpoint degrades the run to `PARTIAL` without losing the other
+series; token failures mark the log `ERROR` and the sync worker flips the
+connection to reconnect.
 
 ## Gear (gear-service v2, verified live 2026-11)
 

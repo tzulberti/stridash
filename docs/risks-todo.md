@@ -85,6 +85,11 @@ maintainability. Check the box when the fix (and its test) has landed.
 > encrypted rotating tokens, incremental activity/detail/streams sync, gear
 > attribution and sync logs. Live-account smoke test still needs a real Strava
 > API application; see `docs/strava.md`.
+>
+> **Status 2026-11-27 (M3):** Garmin weight/body-composition and blood-pressure
+> ingest added (`services/garmin-measurements.ts`, separate MEASUREMENTS sync
+> log, 365-day first backfill / 7-day overlap). Live health-endpoint smoke test
+> remains.
 
 ---
 
@@ -869,7 +874,7 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 87.81% lines/statements, 91.42% functions, 80.02% branches; web 88.79%
+server 88.14% lines/statements, 91.89% functions, 80.25% branches; web 88.79%
 lines/statements, 74.34% functions, 80.33% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 

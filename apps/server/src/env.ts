@@ -119,6 +119,8 @@ const envSchema = z
     STRIDASH_STRAVA_REDIRECT_URI: z.string().url().optional(),
     /** First-sync history window; later syncs use the lastSyncedAt watermark. */
     STRIDASH_STRAVA_BACKFILL_DAYS: z.coerce.number().int().positive().default(365),
+    /** First weight/blood-pressure backfill window for Garmin health. */
+    STRIDASH_GARMIN_HEALTH_BACKFILL_DAYS: z.coerce.number().int().positive().default(365),
     /** Public origin for OAuth/browser redirects (e.g. https://stridash.example). */
     STRIDASH_PUBLIC_URL: z.string().url().optional(),
     /**

@@ -19,6 +19,7 @@ const { prisma, syncs } = vi.hoisted(() => {
   const syncs = {
     garmin: vi.fn(),
     wellness: vi.fn(),
+    measurements: vi.fn(),
     zwift: vi.fn(),
     igpsport: vi.fn(),
     omron: vi.fn(),
@@ -30,6 +31,9 @@ const { prisma, syncs } = vi.hoisted(() => {
 vi.mock('../src/db.js', () => ({ prisma }));
 vi.mock('../src/services/garmin-sync.js', () => ({ syncGarminConnection: syncs.garmin }));
 vi.mock('../src/services/garmin-wellness.js', () => ({ syncGarminWellness: syncs.wellness }));
+vi.mock('../src/services/garmin-measurements.js', () => ({
+  syncGarminMeasurements: syncs.measurements,
+}));
 vi.mock('../src/services/zwift-sync.js', () => ({ syncZwiftConnection: syncs.zwift }));
 vi.mock('../src/services/igpsport-sync.js', () => ({ syncIgpSportConnection: syncs.igpsport }));
 vi.mock('../src/services/omron-sync.js', () => ({ syncOmronConnection: syncs.omron }));
@@ -66,6 +70,7 @@ beforeEach(() => {
   prisma.syncLog.updateMany.mockReset();
   syncs.garmin.mockReset();
   syncs.wellness.mockReset();
+  syncs.measurements.mockReset();
   syncs.zwift.mockReset();
   syncs.igpsport.mockReset();
   syncs.omron.mockReset();
@@ -75,6 +80,7 @@ beforeEach(() => {
   prisma.syncLog.updateMany.mockResolvedValue({ count: 0 });
   syncs.garmin.mockResolvedValue({ status: 'OK' });
   syncs.wellness.mockResolvedValue({ status: 'OK' });
+  syncs.measurements.mockResolvedValue({ status: 'OK' });
   syncs.zwift.mockResolvedValue({ status: 'OK' });
   syncs.igpsport.mockResolvedValue({ status: 'OK' });
   syncs.omron.mockResolvedValue({ status: 'OK' });
@@ -112,6 +118,7 @@ describe('enqueueConnectionSync — dispatch', () => {
 
     expect(syncs.garmin).toHaveBeenCalledWith(env, conn);
     expect(syncs.wellness).toHaveBeenCalledWith(env, conn);
+    expect(syncs.measurements).toHaveBeenCalledWith(env, conn);
   });
 
   it('a wellness failure does not invalidate the activities run', async () => {
@@ -125,6 +132,7 @@ describe('enqueueConnectionSync — dispatch', () => {
     error.mockRestore();
 
     expect(syncs.garmin).toHaveBeenCalledTimes(1);
+    expect(syncs.measurements).toHaveBeenCalledTimes(1);
     expect(
       prisma.connection.updateMany.mock.calls.some(
         (call) => (call[0] as { data?: { status?: string } }).data?.status === 'ERROR',

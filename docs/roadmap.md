@@ -90,9 +90,11 @@ no refresh token (re-exchange on expiry). The auth half is a swap-in.)*
       wear-item components (`gear_components`, replace-by-usage computed
       from linked activities) with `/api/gear` + a web gear page —
       see `docs/garmin.md` "Gear"
-- [ ] Weight / body composition ingest (Garmin Index or any scale synced to
-      Garmin)
-- [ ] Blood pressure ingest
+- [x] Weight / body composition ingest (Garmin Index or any scale synced to
+      Garmin) — `services/garmin-measurements.ts`, grams→kg, 365-day first
+      backfill / 7-day overlap, MEASUREMENTS sync log
+- [x] Blood pressure ingest — same service, systolic/diastolic/pulse/notes
+- [ ] Live-account smoke test for the weight/BP endpoints
 - [x] Dedup merge of stored duplicates (2026-11-13 finding) — **ingest half
       landed 2026-11-18, merge pass 2026-11-20**: provider identity + tolerance
       matching (same type, start ±60 s, distance ±100 m) live in
