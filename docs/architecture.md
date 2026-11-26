@@ -37,11 +37,14 @@ logical parts:
      first, then a tolerance match (same type, start ±60 s, distance ±100 m)
    - `refreshToken()` where the provider uses OAuth (Strava)
    or handles session-scrape auth (Garmin, Omron — unofficial APIs).
-3. **Scheduler (planned).** The queue/worker is in place for manual syncs,
-   but there is no cron/interval scheduler yet (see `docs/risks-todo.md` C7).
-   The target is to sync active connections on a staggered schedule, refresh
-   expiring tokens, and retry errored connections with backoff. Every run
-   already writes a `SyncLog`.
+3. **Scheduler.** `services/sync-scheduler.ts` runs when
+   `STRIDASH_SYNC_INTERVAL_MS > 0` (default 15 minutes; `0` disables it).
+   Each tick claims up to `STRIDASH_SYNC_BATCH_SIZE` active, due connections
+   oldest-first and hands them to the same queue as manual syncs. The DB
+   `sync_started_at` lock keeps replicas from double-running a connection, and
+   stale claims are taken over after 15 minutes. Token refresh happens on use;
+   retry/backoff and "new ride" notifications remain roadmap work. Every run
+   writes a `SyncLog`.
 
 Auth for the *app* itself: email+password issuing short-lived JWT access
 tokens + rotating refresh tokens. Provider tokens are stored encrypted

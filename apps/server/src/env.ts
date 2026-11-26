@@ -96,6 +96,18 @@ const envSchema = z
       .positive()
       .default(15 * 60 * 1000),
     /**
+     * Background sync interval for active connections. Connections whose
+     * `lastSyncedAt` is older than this are queued automatically; `0` disables
+     * the scheduler (manual sync only). Default: 15 minutes.
+     */
+    STRIDASH_SYNC_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .default(15 * 60 * 1000),
+    /** Max connections claimed per scheduler tick (default 10). */
+    STRIDASH_SYNC_BATCH_SIZE: z.coerce.number().int().positive().default(10),
+    /**
      * Trust `X-Forwarded-For` for the client IP. Only enable when the server
      * sits behind a reverse proxy that overwrites the header — otherwise a
      * client can spoof it and bypass the limiter.

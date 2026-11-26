@@ -63,7 +63,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > stale-page skips, FIT fallback, gear/device backfill, edit detection,
 > login/error paths, sleep/daily upserts). T18 closed the connection/sync
 > route gap with provider connect/MFA tests, sync-claim races and a PARTIAL
-> history case (`routes/connections.ts` 96.5%, `sync-queue.ts` 99.2%).
+> history case (`routes/connections.ts` 96.5%, `sync-queue.ts` 99.2%). C7
+> added the interval background-sync scheduler with per-connection claiming
+> and timer shutdown.
 
 ---
 
@@ -649,14 +651,23 @@ only mobile's two pre-existing `import/no-duplicates` warnings.
 
 **Landed 2026-11-24:** README, architecture and roadmap were reconciled with
 the implemented clients, queue, export and lint setup; the remaining target
-state (scheduler, OpenAPI) is explicitly labelled and tracked as C7/C10.
+state (OpenAPI) is explicitly labelled and tracked as C10.
 
-### [ ] C7. No background sync — **Feature gap (roadmap)**
+### [x] C7. No background sync — **Feature gap (roadmap)**
 
 `docs/architecture.md` promises a scheduler; today sync only runs on a button
 press. This is the structural fix behind S7: a scheduler also enables token
 refresh, retry/backoff and "new ride" notifications. Keep it out of the
 request path.
+
+**Landed 2026-11-27:** `services/sync-scheduler.ts` runs an interval tick
+(`STRIDASH_SYNC_INTERVAL_MS`, default 15 minutes; `0` disables) that claims up
+to `STRIDASH_SYNC_BATCH_SIZE` active, due connections oldest-first, then hands
+them to the existing queue. The per-connection DB lock is still the
+cross-replica mutex; stale claims are taken over and regression tests cover
+claim races, enqueue rejection, disabled mode and timer shutdown. Provider
+token refresh already happens on use; retry/backoff and user notifications
+remain separate roadmap items.
 
 ### [x] C8. No deployment artifact — **Ops**
 
@@ -823,7 +834,7 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 81.82% lines/statements, 85.55% functions, 80.49% branches; web 13.82%
+server 81.92% lines/statements, 85.81% functions, 80.63% branches; web 13.82%
 lines/statements, 94.44% functions, 88.64% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 

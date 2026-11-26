@@ -13,6 +13,7 @@ import { authRoutes } from './routes/auth.js';
 import { connectionRoutes } from './routes/connections.js';
 import { dataRoutes } from './routes/data.js';
 import { drainSyncQueue, recoverStaleSyncLocks } from './services/sync-queue.js';
+import { startSyncScheduler } from './services/sync-scheduler.js';
 
 /** Nothing in the API accepts a body anywhere near this — it is a DoS guard. */
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -157,6 +158,15 @@ async function main(): Promise<void> {
     console.warn(`[sync] cleared ${recovered} stale sync lock(s) from a previous process`);
   }
 
+  const scheduler = startSyncScheduler(env);
+  if (scheduler) {
+    console.log(
+      `[sync] scheduler enabled: active connections older than ${Math.round(env.STRIDASH_SYNC_INTERVAL_MS / 1000)}s, batch ${env.STRIDASH_SYNC_BATCH_SIZE}`,
+    );
+  } else {
+    console.log('[sync] scheduler disabled (manual sync only)');
+  }
+
   const server = serve({ fetch: createApp(env).fetch, port: env.PORT }, (info) => {
     console.log(
       `Stridash server v${env.STRIDASH_VERSION} listening on http://localhost:${info.port}`,
@@ -169,6 +179,7 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     console.log(`\n${signal} received — draining sync queue (up to 30s)…`);
+    scheduler?.stop();
     server.close();
 
     const drained = await drainSyncQueue(30_000);

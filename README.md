@@ -37,7 +37,8 @@ Key design principles:
   those must not ship inside a mobile app.
 - **Manual syncs are queued**, not request-bound: `POST /connections/:id/sync`
   returns `202` and clients poll `GET /connections/:id/syncs`; Garmin history
-  scans can take minutes.
+  scans can take minutes. When `STRIDASH_SYNC_INTERVAL_MS > 0` (default 15
+  minutes) the server also queues due active connections automatically.
 - **The app is stateless** relative integrations; it talks only to the Stridash
   API. That keeps web/Android/iOS at feature parity except for device-level
   things (e.g. Bluetooth scale pairing, mobile-only).
