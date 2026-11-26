@@ -70,7 +70,8 @@ maintainability. Check the box when the fix (and its test) has landed.
 > timeout paths). C1/T20 extracted `DatePicker`, `LineChart` and
 > `CompareChart` into components and added the first DOM harness (Testing
 > Library + jsdom, 16 tests; web line coverage 13.8% → 29.0%, App.tsx down to
-> ~3,008 lines).
+> ~3,008 lines). T21 added the mobile Vitest runner and tests for the
+> extracted API helper (`EXPO_PUBLIC_API_URL` handling + health fetch).
 
 ---
 
@@ -932,6 +933,12 @@ loading/error/empty pages are still untested in the App monolith.
 - [ ] **T21. Mobile tests.** The mobile app has no test runner or test files.
       Add vitest (or jest) for pure helpers first — theme, formatting, API
       client — then React Native Testing Library for the key screens.
+
+**Progress 2026-11-27:** added Vitest to `apps/mobile` (`npm test -w
+@stridash/mobile`) and extracted the API URL/health-check logic to
+`src/lib/api.ts` with 4 tests (default/trimmed URL, successful health payload,
+non-2xx failure, 100% lines). The smoke screen now uses the helper. React
+Native component/screen tests still need an RN preset and testing library.
 - [x] **T22. Redaction/privacy tests.** `redact.ts` is 40.7%. Cover
       case-insensitive token keys, nested objects/arrays, the depth limit,
       short vs long values, non-string values, and assert tokens never reach a

@@ -9,10 +9,11 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { fetchHealth, getApiUrl } from '@/lib/api';
 import type { HealthResponse } from '@stridash/types';
 
 // Server targeting from env: EXPO_PUBLIC_API_URL=http://192.168.x.x:3000
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+const API_URL = getApiUrl();
 
 export default function HomeScreen() {
   const [state, setState] = useState<'checking' | 'up' | 'down'>('checking');
@@ -22,9 +23,7 @@ export default function HomeScreen() {
     let alive = true;
     async function check(): Promise<void> {
       try {
-        const res = await fetch(`${API_URL}/api/health`);
-        if (!res.ok) throw new Error(String(res.status));
-        const body: HealthResponse = await res.json();
+        const body: HealthResponse = await fetchHealth(API_URL);
         if (!alive) return;
         setVersion(body.version);
         setState('up');
