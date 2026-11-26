@@ -1646,6 +1646,92 @@ describe('connections', () => {
   });
 });
 
+// ─── Manual measurements ─────────────────────────────────────────────────────
+
+describe('manual measurements', () => {
+  it('creates a weigh-in and returns it in the measurement feed', async () => {
+    const measuredAt = '2040-01-01T07:30:00.000Z';
+    const res = await app.request('/api/measurements', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify({
+        kind: 'WEIGH_IN',
+        measuredAt,
+        weightKg: 82.5,
+        bodyFatPct: 18.4,
+        notes: 'after breakfast',
+      }),
+    });
+    expect(res.status).toBe(201);
+    const row = await json(res);
+    expect(row).toMatchObject({
+      provider: 'MANUAL',
+      kind: 'WEIGH_IN',
+      weightKg: 82.5,
+      bodyFatPct: 18.4,
+      notes: 'after breakfast',
+    });
+
+    const list = await json(
+      await app.request(
+        `/api/measurements?from=${encodeURIComponent(measuredAt)}&to=${encodeURIComponent(
+          '2040-01-01T23:59:59.999Z',
+        )}`,
+        authed(aliceToken),
+      ),
+    );
+    expect((list.items as Json[]).some((m) => m.id === row.id)).toBe(true);
+  });
+
+  it('creates a blood-pressure reading and rejects duplicates/invalid bodies', async () => {
+    const measuredAt = '2040-01-02T08:00:00.000Z';
+    const body = {
+      kind: 'BLOOD_PRESSURE',
+      measuredAt,
+      systolicMmhg: 120,
+      diastolicMmgh: 80,
+    };
+    // typo field is rejected
+    expect(
+      (
+        await app.request('/api/measurements', {
+          method: 'POST',
+          ...authed(aliceToken, { method: 'POST' }),
+          body: JSON.stringify(body),
+        })
+      ).status,
+    ).toBe(400);
+
+    const valid = {
+      kind: 'BLOOD_PRESSURE',
+      measuredAt,
+      systolicMmhg: 120,
+      diastolicMmhg: 80,
+      pulseBpm: 62,
+    };
+    const created = await app.request('/api/measurements', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify(valid),
+    });
+    expect(created.status).toBe(201);
+    expect(await json(created)).toMatchObject({
+      provider: 'MANUAL',
+      kind: 'BLOOD_PRESSURE',
+      systolicMmhg: 120,
+      diastolicMmhg: 80,
+      pulseBpm: 62,
+    });
+
+    const duplicate = await app.request('/api/measurements', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify(valid),
+    });
+    expect(duplicate.status).toBe(409);
+  });
+});
+
 // ─── Gear (provider-synced gear + Stridash-managed components) ────────────────
 
 describe('gear', () => {

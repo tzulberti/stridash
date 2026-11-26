@@ -20,6 +20,37 @@ const listQuerySchema = z.object({
   cursor: z.string().uuid().optional(),
 });
 
+const manualMeasurementSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('WEIGH_IN'),
+    measuredAt: z.string().datetime().optional(),
+    weightKg: z.number().positive().max(500),
+    bodyFatPct: z.number().min(0).max(80).optional(),
+    muscleMassKg: z.number().positive().max(300).optional(),
+    skeletalMusclePct: z.number().min(0).max(100).optional(),
+    bmi: z.number().positive().max(100).optional(),
+    visceralFatLevel: z.number().min(0).max(60).optional(),
+    notes: z.string().max(1000).optional(),
+  }),
+  z.object({
+    kind: z.literal('BLOOD_PRESSURE'),
+    measuredAt: z.string().datetime().optional(),
+    systolicMmhg: z.number().int().min(70).max(260),
+    diastolicMmhg: z.number().int().min(40).max(150),
+    pulseBpm: z.number().int().min(20).max(250).optional(),
+    notes: z.string().max(1000).optional(),
+  }),
+]);
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code?: string }).code === 'P2002'
+  );
+}
+
 /** Feed rows: scalars the list actually renders. Raw/detail payloads, notes
  * and HR-zone arrays live only on `/activities/:id` (D6). */
 const feedActivitySelect = {
@@ -560,6 +591,38 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
       items: items.map((m) => serializeRow(m)),
       nextCursor: items.length === q.data.limit ? (items.at(-1)?.id ?? null) : null,
     });
+  });
+
+  /** Manual weigh-in / blood-pressure quick-add (M5). Provider MANUAL, no
+   * connection; the same user+provider+kind+measuredAt unique key prevents
+   * accidental double-submits. */
+  routes.post('/measurements', async (c) => {
+    const parsed = manualMeasurementSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid request', detail: parsed.error.flatten().fieldErrors }, 400);
+    }
+    const body = parsed.data;
+    const measuredAt = body.measuredAt ? new Date(body.measuredAt) : new Date();
+    const { kind, measuredAt: _ignored, notes, ...fields } = body;
+    try {
+      const row = await prisma.measurement.create({
+        data: {
+          userId: c.get('userId'),
+          provider: 'MANUAL',
+          kind,
+          measuredAt,
+          notes: notes?.trim() || null,
+          ...fields,
+          raw: { provider: 'MANUAL' },
+        },
+      });
+      return c.json(serializeRow(row), 201);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        return c.json({ error: 'A measurement already exists at that time' }, 409);
+      }
+      throw err;
+    }
   });
 
   // ─── Gear (provider-synced gear + Stridash-managed components) ─────────────
