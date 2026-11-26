@@ -69,8 +69,8 @@ maintainability. Check the box when the fix (and its test) has landed.
 > (mobile/widget/portal chain, credential stop, MFA completion, rate-limit and
 > timeout paths). C1/T20 extracted the dashboard, activity detail, settings,
 > connections, gear and chart pieces into components, added a DOM harness and
-> covered auth/login; T20 is closed (60 component/DOM tests; web line coverage
-> 13.8% → 88.2%, App.tsx down to ~717 lines). T21 added the mobile Vitest
+> covered auth/login; T20 is closed (63 component/DOM tests; web line coverage
+> 13.8% → 88.7%, App.tsx down to ~647 lines). T21 added the mobile Vitest
 > runner and tests for the extracted API helper (`EXPO_PUBLIC_API_URL`
 > handling + health fetch).
 
@@ -598,10 +598,10 @@ lines. The route/page/chart monolith remains.
 **Progress 2026-11-27:** extracted all pages/presentational chunks out of the
 monolith: `DashboardView`, `ActivityDetail`, `SettingsSection`,
 `ConnectionsSection`, `GearSection`, `DatePicker`, `LineChart`,
-`CompareChart`, `ChartConfigList` and `Card`, with the chart catalog/order in
-`lib/chart-config.ts`. `App.tsx` is ~717 lines (down from ~4,000) and still
-owns auth boot, the data load and route switching; a `routes/`/`hooks/` split
-remains for the planned redesign.
+`CompareChart`, `ChartConfigList`, `Card` and `AppHeader`, with the chart
+catalog/order in `lib/chart-config.ts`. `App.tsx` is ~647 lines (down from
+~4,000) and still owns auth boot, the data load and route switching; a
+`routes/`/`hooks/` split remains for the planned redesign.
 
 ### [ ] C2. Dedupe/upsert logic is copy-pasted three times — **Maintainability**
 
@@ -849,8 +849,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 87% lines/statements, 90.28% functions, 79.7% branches; web 88.18%
-lines/statements, 72.44% functions, 80.01% branches (App.tsx is still the
+server 87% lines/statements, 90.28% functions, 79.7% branches; web 88.67%
+lines/statements, 74.33% functions, 80.19% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)
@@ -926,12 +926,12 @@ coverage is still zero.
 
 **Landed 2026-11-27:** added Testing Library + jsdom and extracted the
 dashboard, activity detail, settings, connections, gear, calendar, charts,
-chart settings and card components. 60 DOM tests cover login/bootstrap/logout,
-dashboard cards/charts/feed and range/filter controls, activity detail +
-resync + compare, settings preferences/export/delete, provider connect/MFA,
-gear add/retire/delete and loading/error/empty states. Web line coverage is
-88.2%; `App.tsx` is ~717 lines. The full web suite (including pure helpers) is
-144 tests.
+chart settings, card and app-header components. 63 DOM tests cover
+login/bootstrap/logout, header navigation, dashboard cards/charts/feed and
+range/filter controls, activity detail + resync + compare, settings
+preferences/export/delete, provider connect/MFA, gear add/retire/delete and
+loading/error/empty states. Web line coverage is 88.7%; `App.tsx` is ~647
+lines. The full web suite (including pure helpers) is 147 tests.
 
 - [ ] **T21. Mobile tests.** The mobile app has no test runner or test files.
       Add vitest (or jest) for pure helpers first — theme, formatting, API

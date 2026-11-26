@@ -23,6 +23,7 @@ import { api, setTokenListener } from './lib/api';
 // ─── Shared bits — pure display helpers live in lib/format.ts ────────────────
 
 import { SettingsSection } from './components/SettingsSection';
+import { AppHeader } from './components/AppHeader';
 import { ConnectionsSection, type ConnectionRow } from './components/ConnectionsSection';
 import { GearSection } from './components/GearSection';
 import { ActivityDetail } from './components/ActivityDetail';
@@ -82,7 +83,6 @@ export default function App() {
   const [wellness, setWellness] = useState<DailyWellnessRow[]>([]);
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
   // hamburger dropdown in the header (Providers Sync / Gear / Settings / Sign out)
-  const [menuOpen, setMenuOpen] = useState(false);
   // settings-owned preferences; the module-level formatter unit + locale are
   // kept in sync BEFORE the re-render so every fmt* call speaks the chosen
   // unit/language. localStorage gives the instant boot value; the server
@@ -241,22 +241,10 @@ export default function App() {
   useEffect(() => {
     const onPop = () => {
       setRoute(parseRoute(window.location.pathname));
-      setMenuOpen(false); // hamburger closes on navigation of any kind
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
-  // hamburger menu: any click outside of it closes it
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDocClick = (e: MouseEvent) => {
-      const wrap = document.querySelector('.menu-wrap');
-      if (wrap && !wrap.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('click', onDocClick);
-    return () => document.removeEventListener('click', onDocClick);
-  }, [menuOpen]);
-
   async function login(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -333,17 +321,14 @@ export default function App() {
   function openConnections(): void {
     window.history.pushState(null, '', '/connections');
     setRoute({ name: 'connections' });
-    setMenuOpen(false);
   }
   function openGear(): void {
     window.history.pushState(null, '', '/gear');
     setRoute({ name: 'gear' });
-    setMenuOpen(false);
   }
   function openSettings(): void {
     window.history.pushState(null, '', '/settings');
     setRoute({ name: 'settings' });
-    setMenuOpen(false);
   }
 
   /** force-sync one connection; one at a time so a slow Garmin history scan
@@ -517,71 +502,16 @@ export default function App() {
     }
     clearTokens();
     setToken(null);
-    setMenuOpen(false);
   };
 
   const header = (
-    <header>
-      <a
-        className="brand"
-        href="/"
-        title={t('nav.brandTitle')}
-        onClick={(e) => {
-          e.preventDefault();
-          goHome();
-        }}
-      >
-        <h1>🦾 Stridash</h1>
-      </a>
-      <div className="menu-wrap">
-        <button
-          type="button"
-          className="hamburger"
-          aria-label={t('nav.menu')}
-          aria-expanded={menuOpen}
-          onClick={(e) => {
-            e.stopPropagation(); // the outside-click listener would re-close it
-            setMenuOpen((v) => !v);
-          }}
-        >
-          ☰
-        </button>
-        {menuOpen && (
-          <nav className="menu">
-            <a
-              href="/connections"
-              onClick={(e) => {
-                e.preventDefault();
-                openConnections();
-              }}
-            >
-              {t('nav.providers')}
-            </a>
-            <a
-              href="/gear"
-              onClick={(e) => {
-                e.preventDefault();
-                openGear();
-              }}
-            >
-              {t('nav.gear')}
-            </a>
-            <a
-              href="/settings"
-              onClick={(e) => {
-                e.preventDefault();
-                openSettings();
-              }}
-            >
-              {t('nav.settings')}
-            </a>
-            <button type="button" className="danger" onClick={signOut}>
-              {t('nav.signOut')}
-            </button>
-          </nav>
-        )}
-      </div>
-    </header>
+    <AppHeader
+      goHome={goHome}
+      openConnections={openConnections}
+      openGear={openGear}
+      openSettings={openSettings}
+      signOut={signOut}
+    />
   );
   const footer = <footer>{t('footer.line')}</footer>;
 
