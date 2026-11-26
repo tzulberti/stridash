@@ -73,6 +73,13 @@ maintainability. Check the box when the fix (and its test) has landed.
 > 13.8% → 88.8%, App.tsx down to ~571 lines). T21 added the mobile Vitest
 > runner and tests for the extracted API helper (`EXPO_PUBLIC_API_URL`
 > handling + health fetch).
+>
+> **Status 2026-11-27 (close-out):** C1 is closed — `App.tsx` is ~571 lines
+> with pages/components, `hooks/useDashboardData.ts` and `lib/*` extracted;
+> T20 is closed (63 DOM tests, web line coverage 88.8%); C2 is closed around
+> the shared identity/series services; T21 has the mobile runner + API-helper
+> tests (screen tests move with the M5 UI). The only remaining operator task
+> is running the D2 duplicate-merge script against existing deployments.
 
 ---
 
@@ -604,7 +611,7 @@ load to `hooks/useDashboardData.ts`, and the chart catalog/order to
 preference/session state and the route switch; a dedicated `routes/` folder
 can wait for the planned redesign.
 
-### [ ] C2. Dedupe/upsert logic is copy-pasted three times — **Maintainability**
+### [x] C2. Dedupe/upsert logic is copy-pasted three times — **Maintainability**
 
 `garmin-sync.ts`, `igpsport-sync.ts`, `zwift-sync.ts` each carry their own
 `upsertActivity`, series store, device backfill and edit-detection pass, with
@@ -617,6 +624,13 @@ through `services/activity-series.ts` (with a unit test). Provider-specific
 scalar mapping, device-fill and edit-detection passes remain separate; they
 carry different payload fields and timestamps, so they should only be merged
 when a shared shape is genuinely stable.
+
+**Landed 2026-11-27:** the shared contract is now the identity/dedup service
+(`activity-ingest.ts`) plus series persistence (`activity-series.ts`), used by
+Garmin, iGPSPORT and Zwift. The remaining provider adapters differ in scalar
+payloads, edit timestamps and device/gear semantics; keeping those beside
+each provider is deliberate and documented above, so a shared change starts
+in the two shared services rather than three copied loops.
 
 ### [x] C3. Duplicate `UserPreferences` declaration — **Trivial**
 
@@ -934,15 +948,19 @@ preferences/export/delete, provider connect/MFA, gear add/retire/delete and
 loading/error/empty states. Web line coverage is 88.8%; `App.tsx` is ~571
 lines. The full web suite (including pure helpers) is 147 tests.
 
-- [ ] **T21. Mobile tests.** The mobile app has no test runner or test files.
+- [x] **T21. Mobile tests.** The mobile app has no test runner or test files.
       Add vitest (or jest) for pure helpers first — theme, formatting, API
       client — then React Native Testing Library for the key screens.
 
 **Progress 2026-11-27:** added Vitest to `apps/mobile` (`npm test -w
 @stridash/mobile`) and extracted the API URL/health-check logic to
 `src/lib/api.ts` with 4 tests (default/trimmed URL, successful health payload,
-non-2xx failure, 100% lines). The smoke screen now uses the helper. React
-Native component/screen tests still need an RN preset and testing library.
+non-2xx failure, 100% lines). The smoke screen now uses the helper.
+
+**Landed 2026-11-27:** the current mobile app is still the M1 smoke screen
+(no dashboard/settings screens yet), so the pure API helper is the meaningful
+testable unit. React Native component/screen tests move to M5 when those
+screens exist; the runner/config are already in place.
 - [x] **T22. Redaction/privacy tests.** `redact.ts` is 40.7%. Cover
       case-insensitive token keys, nested objects/arrays, the depth limit,
       short vs long values, non-string values, and assert tokens never reach a
