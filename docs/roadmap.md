@@ -164,9 +164,12 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       tooltips reading both series; while a comparison is active the
       single-activity charts and the axis tabs hide (the overlaid charts
       replace them) and a "Remove comparison" button restores them
-- [ ] Onboarding: create user → connect providers → first sync (UI)
+- [x] Onboarding: create user → connect providers → first sync (UI) —
+      register form, provider connect page, sync-now queue
 - [ ] Connections screen with "sync now" buttons + `sync_logs` error surfacing
-- [ ] Manual entry UI
+      — sync-now and status pills exist; history/error detail surfacing remains
+- [x] Manual entry UI — weight/body-fat and blood-pressure quick-add on the
+      dashboard (`POST /api/measurements`, provider MANUAL)
 - [ ] Mobile (Expo) app UI — dashboards phone-sized
 - [ ] General overview dashboard: one aggregated home view beyond today's
       stat cards — training load, steps/sleep/body-battery/weight trends,

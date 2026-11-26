@@ -90,6 +90,11 @@ maintainability. Check the box when the fix (and its test) has landed.
 > ingest added (`services/garmin-measurements.ts`, separate MEASUREMENTS sync
 > log, 365-day first backfill / 7-day overlap). Live health-endpoint smoke test
 > remains.
+>
+> **Status 2026-11-27 (M5):** web registration/onboarding (register → connect
+> providers → sync) and dashboard quick-add for weigh-ins/body-fat and blood
+> pressure (`POST /api/measurements`, provider MANUAL) landed. Mobile UI and
+> the full redesign remain.
 
 ---
 
@@ -874,8 +879,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 88.14% lines/statements, 91.89% functions, 80.25% branches; web 88.79%
-lines/statements, 74.34% functions, 80.33% branches (App.tsx is still the
+server 88.46% lines/statements, 91.91% functions, 80.42% branches; web 89.8%
+lines/statements, 75% functions, 80.91% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)
