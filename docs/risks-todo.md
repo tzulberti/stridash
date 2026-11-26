@@ -70,7 +70,7 @@ maintainability. Check the box when the fix (and its test) has landed.
 > timeout paths). C1/T20 extracted the dashboard, activity detail, settings,
 > connections, gear and chart pieces into components, added a DOM harness and
 > covered auth/login; T20 is closed (63 component/DOM tests; web line coverage
-> 13.8% → 88.7%, App.tsx down to ~647 lines). T21 added the mobile Vitest
+> 13.8% → 88.8%, App.tsx down to ~571 lines). T21 added the mobile Vitest
 > runner and tests for the extracted API helper (`EXPO_PUBLIC_API_URL`
 > handling + health fetch).
 
@@ -584,7 +584,7 @@ unique index on `(connection_id, source_activity_id)` already has
 `connection_id` as its leading column, so an extra connection index would be
 redundant.
 
-### [ ] C1. `apps/web/src/App.tsx` is ~4,000 lines — **Maintainability**
+### [x] C1. `apps/web/src/App.tsx` is ~4,000 lines — **Maintainability**
 
 Routing, API client, every page, charts, and i18n wiring in one component.
 Split into `routes/`, `components/`, `hooks/`, `lib/api.ts` **before** the
@@ -595,13 +595,14 @@ to `apps/web/src/lib/api.ts` (9 unit tests), and chart axis/zone/split math
 moved to `apps/web/src/lib/chart.ts` (15 unit tests); `App.tsx` is now ~3,640
 lines. The route/page/chart monolith remains.
 
-**Progress 2026-11-27:** extracted all pages/presentational chunks out of the
-monolith: `DashboardView`, `ActivityDetail`, `SettingsSection`,
+**Landed 2026-11-27:** extracted all pages/presentational chunks to
+`components/` (`DashboardView`, `ActivityDetail`, `SettingsSection`,
 `ConnectionsSection`, `GearSection`, `DatePicker`, `LineChart`,
-`CompareChart`, `ChartConfigList`, `Card` and `AppHeader`, with the chart
-catalog/order in `lib/chart-config.ts`. `App.tsx` is ~647 lines (down from
-~4,000) and still owns auth boot, the data load and route switching; a
-`routes/`/`hooks/` split remains for the planned redesign.
+`CompareChart`, `ChartConfigList`, `Card`, `AppHeader`), the data/pagination
+load to `hooks/useDashboardData.ts`, and the chart catalog/order to
+`lib/chart-config.ts`. `App.tsx` is ~571 lines and now only owns auth boot,
+preference/session state and the route switch; a dedicated `routes/` folder
+can wait for the planned redesign.
 
 ### [ ] C2. Dedupe/upsert logic is copy-pasted three times — **Maintainability**
 
@@ -849,8 +850,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 87% lines/statements, 90.28% functions, 79.7% branches; web 88.67%
-lines/statements, 74.33% functions, 80.19% branches (App.tsx is still the
+server 87% lines/statements, 90.28% functions, 79.7% branches; web 88.75%
+lines/statements, 74.44% functions, 80.23% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)
@@ -930,7 +931,7 @@ chart settings, card and app-header components. 63 DOM tests cover
 login/bootstrap/logout, header navigation, dashboard cards/charts/feed and
 range/filter controls, activity detail + resync + compare, settings
 preferences/export/delete, provider connect/MFA, gear add/retire/delete and
-loading/error/empty states. Web line coverage is 88.7%; `App.tsx` is ~647
+loading/error/empty states. Web line coverage is 88.8%; `App.tsx` is ~571
 lines. The full web suite (including pure helpers) is 147 tests.
 
 - [ ] **T21. Mobile tests.** The mobile app has no test runner or test files.

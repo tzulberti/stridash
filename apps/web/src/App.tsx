@@ -7,13 +7,7 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import type {
-  Measurement,
-  Activity,
-  MeResponse,
-  ChartChannelConfig,
-  ChartProvider,
-} from '@stridash/types';
+import type { MeResponse, ChartChannelConfig, ChartProvider } from '@stridash/types';
 import { clearTokens, readToken, saveTokens, storedRefreshToken } from './lib/token-storage';
 import { summarizeSyncStatus, type SyncStatusJson } from './lib/sync-summary';
 import { api, setTokenListener } from './lib/api';
@@ -24,7 +18,8 @@ import { api, setTokenListener } from './lib/api';
 
 import { SettingsSection } from './components/SettingsSection';
 import { AppHeader } from './components/AppHeader';
-import { ConnectionsSection, type ConnectionRow } from './components/ConnectionsSection';
+import { useDashboardData } from './hooks/useDashboardData';
+import { ConnectionsSection } from './components/ConnectionsSection';
 import { GearSection } from './components/GearSection';
 import { ActivityDetail } from './components/ActivityDetail';
 import {
@@ -34,9 +29,7 @@ import {
   SLEEP_METRIC,
   type BodyMetricKey,
   type DailyMetricKey,
-  type DailyWellnessRow,
   type SleepMetricKey,
-  type SleepRow,
 } from './components/DashboardView';
 import {
   setUnit,
@@ -74,15 +67,15 @@ export default function App() {
   const [token, setToken] = useState<string | null>(() => readToken());
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
 
-  const [connections, setConnections] = useState<ConnectionRow[]>([]);
-  const [measurements, setMeasurements] = useState<Measurement[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [sleep, setSleep] = useState<SleepRow[]>([]);
-  const [wellness, setWellness] = useState<DailyWellnessRow[]>([]);
+  const onUnauthorized = useCallback(() => {
+    clearTokens();
+    setToken(null);
+  }, []);
+  const { connections, measurements, activities, sleep, wellness, error, setError, loading, load } =
+    useDashboardData(token, onUnauthorized);
+
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
-  // hamburger dropdown in the header (Providers Sync / Gear / Settings / Sign out)
   // settings-owned preferences; the module-level formatter unit + locale are
   // kept in sync BEFORE the re-render so every fmt* call speaks the chosen
   // unit/language. localStorage gives the instant boot value; the server
@@ -163,79 +156,10 @@ export default function App() {
   const [feedType, setFeedType] = useState<string>(BOOT_URL.feedType);
   const [feedProv, setFeedProv] = useState<string>(BOOT_URL.feedProv);
   const [rememberMe, setRememberMe] = useState(true);
-  const [loading, setLoading] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
-
-  const load = useCallback(async (tok: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      // measurements newest-first already; charts want oldest-first
-      const [conns, meas] = await Promise.all([
-        api<{ items: ConnectionRow[] }>('/connections', { token: tok }),
-        api<{ items: Measurement[] }>('/measurements', { token: tok, body: undefined }),
-      ]);
-      setConnections(conns.items);
-      setMeasurements(meas.items);
-
-      // activities paginate server-side (max 100/page, cursor) — pull all
-      // pages so the feed and the stat card cover the full history
-      const acts: Activity[] = [];
-      let cursor: string | undefined;
-      for (let page = 0; page < 50; page++) {
-        const r = await api<{ items: Activity[]; nextCursor: string | null }>('/activities', {
-          token: tok,
-          query: { limit: '100', ...(cursor ? { cursor } : {}) },
-        });
-        acts.push(...r.items);
-        if (!r.nextCursor) break;
-        cursor = r.nextCursor;
-      }
-      setActivities(acts);
-
-      // sleep + daily wellness: newest-first pages of 200, walk back with
-      // the `to` date filter (rows keyed by calendar date)
-      const fetchDateKeyedAll = async <T extends { dateKey: string }>(
-        path: string,
-      ): Promise<T[]> => {
-        const out: T[] = [];
-        let to: string | undefined;
-        for (let page = 0; page < 30; page++) {
-          const r = await api<{ items: T[] }>(path, {
-            token: tok,
-            query: { limit: '200', ...(to ? { to } : {}) },
-          });
-          if (r.items.length === 0) break;
-          const last = r.items[r.items.length - 1];
-          if (!last) break;
-          out.push(...r.items);
-          const oldest = new Date(`${last.dateKey}T00:00:00.000Z`);
-          to = new Date(oldest.getTime() - 86_400_000).toISOString().slice(0, 10);
-        }
-        return out.reverse(); // charts want oldest-first
-      };
-      const [sRows, wRows] = await Promise.all([
-        fetchDateKeyedAll<SleepRow>('/sleeps'),
-        fetchDateKeyedAll<DailyWellnessRow>('/wellness'),
-      ]);
-      setSleep(sRows);
-      setWellness(wRows);
-    } catch (e) {
-      setError(String(e));
-      if (String(e).includes('401') || String(e).includes('Unauthorized')) {
-        clearTokens();
-        setToken(null);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     setTokenListener(setToken);
-  }, [token, load]);
-  useEffect(() => {
-    if (token) void load(token);
   }, [token, load]);
   // browser back/forward between the dashboard and activity pages
   useEffect(() => {
