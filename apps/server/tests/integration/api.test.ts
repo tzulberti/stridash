@@ -1443,6 +1443,59 @@ describe('connections', () => {
     expect(syncIgpSportConnection).toHaveBeenCalledTimes(1);
   });
 
+  it('records a PARTIAL sync result in history and clears the lock', async () => {
+    const igps = await prisma.connection.create({
+      data: {
+        userId: (await prisma.user.findUniqueOrThrow({ where: { email: 'alice@test.stridash' } }))
+          .id,
+        provider: 'IGPSPORT',
+        providerUserId: 'partial-sync-1',
+        status: 'ACTIVE',
+        accessTokenEnc: encryptToken('partial-access', env.STRIDASH_ENC_KEY),
+        scopes: [],
+      },
+    });
+
+    syncIgpSportConnection.mockClear();
+    syncIgpSportConnection.mockImplementationOnce(async (_env, connection) => {
+      await prisma.syncLog.create({
+        data: {
+          connectionId: connection.id,
+          kind: 'ACTIVITIES',
+          status: 'PARTIAL',
+          itemsPulled: 3,
+          itemsCreated: 2,
+          errorDetail: { failedRides: ['r1'] },
+          finishedAt: new Date(),
+        },
+      });
+      return { status: 'PARTIAL', itemsPulled: 3, itemsCreated: 2 };
+    });
+
+    const res = await app.request(`/api/connections/${igps.id}/sync`, {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+    });
+    expect(res.status).toBe(202);
+
+    await waitFor(async () => {
+      const row = await prisma.connection.findUniqueOrThrow({ where: { id: igps.id } });
+      return row.syncStartedAt === null;
+    }, 'PARTIAL sync lock release');
+
+    const history = await json(
+      await app.request(`/api/connections/${igps.id}/syncs`, authed(aliceToken)),
+    );
+    expect(history.inProgress).toBe(false);
+    expect(history.connectionStatus).toBe('ACTIVE');
+    expect((history.items as Json[])[0]).toMatchObject({
+      status: 'PARTIAL',
+      itemsPulled: 3,
+      itemsCreated: 2,
+      errorDetail: { failedRides: ['r1'] },
+    });
+  });
+
   it('throttles connection-create attempts per user', async () => {
     const limitedApp = createApp({
       ...env,

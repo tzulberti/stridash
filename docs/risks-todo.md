@@ -61,7 +61,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > **Status 2026-11-26:** T17 added orchestration tests for Garmin,
 > iGPSPORT, Omron and Garmin wellness sync (page scans, known-source and
 > stale-page skips, FIT fallback, gear/device backfill, edit detection,
-> login/error paths, sleep/daily upserts).
+> login/error paths, sleep/daily upserts). T18 closed the connection/sync
+> route gap with provider connect/MFA tests, sync-claim races and a PARTIAL
+> history case (`routes/connections.ts` 96.5%, `sync-queue.ts` 99.2%).
 
 ---
 
@@ -821,7 +823,7 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 75.96% lines/statements, 84.07% functions, 78.84% branches; web 13.82%
+server 81.82% lines/statements, 85.55% functions, 80.49% branches; web 13.82%
 lines/statements, 94.44% functions, 88.64% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
@@ -848,16 +850,24 @@ wellness (sleep/daily chunks, detail enrichment, malformed rows, partial
 failures) and Omron (device filtering, per-device PARTIAL, revoked/region and
 listing failures).
 
-- [ ] **T18. Connection/sync routes.** Cover `routes/connections.ts` (26.1%):
+- [x] **T18. Connection/sync routes.** Cover `routes/connections.ts` (26.1%):
       auth/ownership, connect/disconnect, each provider's sync trigger,
       provider error → `PARTIAL` vs `ERROR`, duplicate/concurrent sync handling
       (S7), unknown ids, and response shapes.
 
-**Progress 2026-11-24:** integration coverage now includes cross-user
+**Landed 2026-11-26:** added route unit tests for the Omron, iGPSPORT, Zwift
+and Garmin connect flows (success identities, encrypted tokens/config,
+unsupported regions, credential/rate-limit/upstream errors, token exchange and
+API-tier verification), the full Garmin MFA park/complete/wrong-code path, and
+the sync route's claim races. Added sync-queue tests for every provider
+dispatch, Garmin wellness failure isolation, PARTIAL vs credential ERROR,
+duplicate jobs and drain timeouts, plus an integration PARTIAL history case.
+Coverage: `routes/connections.ts` 96.5%, `sync-queue.ts` 99.2%.
+
+**Earlier progress 2026-11-24:** integration coverage includes cross-user
 sync/status/delete 404s, token-free list responses, non-ACTIVE 409,
 concurrent-sync locking, create throttling, worker `ERROR` vs unknown-failure
-handling, stale-lock recovery, and soft-revoke. Provider-specific connect
-flows and a `PARTIAL` result case remain.
+handling, stale-lock recovery, and soft-revoke.
 
 - [ ] **T19. Provider client error paths.** Garmin SSO (9.3%), cookie jar
       (18.4%), Garmin API (26.2%), Zwift (24.7%), iGPSPORT (29.5%), Omron
