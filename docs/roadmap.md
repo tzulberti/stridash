@@ -173,10 +173,9 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       connection
 - [x] Manual entry UI — weight/body-fat and blood-pressure quick-add on the
       dashboard (`POST /api/measurements`, provider MANUAL)
-- [ ] Mobile (Expo) app UI — dashboards phone-sized (login/register,
-      secure session, dashboard cards, recent activities, provider
-      connect/MFA/Strava consent, sync and quick-add landed; visual redesign
-      remains)
+- [x] Mobile (Expo) app UI — login/register, secure session, phone-sized
+      dashboard cards, recent activities, provider connect/MFA/Strava
+      consent, sync and weigh-in/blood-pressure quick-add
 - [x] General overview dashboard: one aggregated home view beyond today's
       stat cards — training-load trend, steps/sleep/body-battery/weight
       trends, gear wear status and connection/sync health (2026-11 request)
