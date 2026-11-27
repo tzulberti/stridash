@@ -45,6 +45,7 @@ model User {
   authIdentities AuthIdentity[]
   refreshTokens  RefreshToken[]
   apiTokens      ApiToken[]
+  pushTokens     PushToken[]
   sleepSessions  SleepSession[]
   dailyWellness  DailyWellness[]
   preferences    UserPreferences?
@@ -178,6 +179,22 @@ model ApiToken {
 
   @@index([userId])
   @@map("api_tokens")
+}
+
+/// Expo push tokens for “new activity synced” notifications. A device token
+/// moves to the latest user that registers it (family devices).
+model PushToken {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  userId     String   @db.Uuid @map("user_id")
+  token      String   @unique
+  platform   String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
 }
 
 // ─── Connections (external providers) ────────────────────────────────────────

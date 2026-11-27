@@ -8,7 +8,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { prisma, syncs } = vi.hoisted(() => {
+const { prisma, syncs, notify } = vi.hoisted(() => {
   const prisma = {
     connection: {
       findUnique: vi.fn(),
@@ -25,7 +25,8 @@ const { prisma, syncs } = vi.hoisted(() => {
     omron: vi.fn(),
     strava: vi.fn(),
   };
-  return { prisma, syncs };
+  const notify = vi.fn();
+  return { prisma, syncs, notify };
 });
 
 vi.mock('../src/db.js', () => ({ prisma }));
@@ -38,6 +39,7 @@ vi.mock('../src/services/zwift-sync.js', () => ({ syncZwiftConnection: syncs.zwi
 vi.mock('../src/services/igpsport-sync.js', () => ({ syncIgpSportConnection: syncs.igpsport }));
 vi.mock('../src/services/omron-sync.js', () => ({ syncOmronConnection: syncs.omron }));
 vi.mock('../src/services/strava-sync.js', () => ({ syncStravaConnection: syncs.strava }));
+vi.mock('../src/services/notifications.js', () => ({ notifyNewActivities: notify }));
 
 import {
   drainSyncQueue,
@@ -75,6 +77,8 @@ beforeEach(() => {
   syncs.igpsport.mockReset();
   syncs.omron.mockReset();
   syncs.strava.mockReset();
+  notify.mockReset();
+  notify.mockResolvedValue(undefined);
 
   prisma.connection.updateMany.mockResolvedValue({ count: 1 });
   prisma.syncLog.updateMany.mockResolvedValue({ count: 0 });
@@ -142,6 +146,28 @@ describe('enqueueConnectionSync — dispatch', () => {
       where: { id: conn.id, syncStartedAt: claimedAt },
       data: { syncStartedAt: null },
     });
+  });
+
+  it('queues a new-activity notification when the sync creates rows', async () => {
+    const conn = connection('IGPSPORT');
+    prisma.connection.findUnique.mockResolvedValueOnce(conn);
+    syncs.igpsport.mockResolvedValueOnce({ status: 'OK', itemsCreated: 2 });
+
+    enqueueConnectionSync(env, job(conn));
+    await drainSyncQueue(1_000);
+
+    expect(notify).toHaveBeenCalledWith('user-1', 2);
+  });
+
+  it('does not notify when the sync creates nothing', async () => {
+    const conn = connection('IGPSPORT');
+    prisma.connection.findUnique.mockResolvedValueOnce(conn);
+    syncs.igpsport.mockResolvedValueOnce({ status: 'OK', itemsCreated: 0 });
+
+    enqueueConnectionSync(env, job(conn));
+    await drainSyncQueue(1_000);
+
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it('does nothing when the connection vanished or is no longer active', async () => {

@@ -18,6 +18,7 @@ vi.mock('expo-web-browser', () => ({ openBrowserAsync: vi.fn() }));
 vi.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }: { children?: unknown }) => <>{children}</>,
 }));
+vi.mock('@/lib/push', () => ({ registerForPush: vi.fn(async () => 'skipped') }));
 
 const onSignOut = vi.fn();
 

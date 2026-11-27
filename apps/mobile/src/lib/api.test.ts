@@ -12,6 +12,7 @@ import {
   connectProvider,
   verifyConnectionMfa,
   stravaAuthorizeUrl,
+  registerPushToken,
 } from './api';
 
 afterEach(() => {
@@ -230,6 +231,20 @@ describe('mobile endpoints', () => {
     );
     await expect(stravaAuthorizeUrl('tok')).resolves.toMatchObject({
       url: expect.stringContaining('strava.com'),
+    });
+  });
+
+  it('registers a push token', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 'p1' })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await registerPushToken('tok', 'ExponentPushToken[device]', 'ios');
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(String(url)).toBe(`${DEFAULT_API_URL}/api/push-tokens`);
+    expect(JSON.parse(String(init.body))).toEqual({
+      token: 'ExponentPushToken[device]',
+      platform: 'ios',
     });
   });
 });

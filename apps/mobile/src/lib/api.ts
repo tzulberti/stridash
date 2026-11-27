@@ -230,3 +230,15 @@ export function verifyConnectionMfa(
 export function stravaAuthorizeUrl(token: string): Promise<{ url: string }> {
   return apiRequest('/strava/authorize', { token });
 }
+
+export function registerPushToken(
+  token: string,
+  pushToken: string,
+  platform: 'ios' | 'android' | 'web',
+): Promise<unknown> {
+  return apiRequest('/push-tokens', {
+    method: 'POST',
+    token,
+    body: { token: pushToken, platform },
+  });
+}

@@ -105,8 +105,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > per-provider terms risk profile is documented in
 > `docs/provider-tos-risk.md`. An OpenAPI 3.1 spec is served at
 > `/api/openapi.json`, generated into `docs/openapi.json`, and the generated
-> path/component types live in `packages/types/src/openapi.ts`; BLE, push and
-> webhooks remain.
+> path/component types live in `packages/types/src/openapi.ts`; Expo push
+> notifications for newly synced activities landed as well. BLE and webhooks
+> remain.
 >
 > **Status 2026-11-27 (M7):** long-lived per-user API tokens landed
 > (`POST/GET /api/tokens`, revoke, hashed at rest, accepted by every
@@ -897,7 +898,7 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 89.19% lines/statements, 92.06% functions, 80.48% branches; web 90.05%
+server 89.33% lines/statements, 92.11% functions, 80.67% branches; web 90.05%
 lines/statements, 75% functions, 80.62% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 

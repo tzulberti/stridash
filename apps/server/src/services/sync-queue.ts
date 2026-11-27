@@ -12,6 +12,7 @@ import { syncIgpSportConnection } from './igpsport-sync.js';
 import { syncOmronConnection } from './omron-sync.js';
 import { syncStravaConnection } from './strava-sync.js';
 import { syncZwiftConnection } from './zwift-sync.js';
+import { notifyNewActivities } from './notifications.js';
 import type { Env } from '../env.js';
 
 /** A manual sync older than this is assumed crashed and may be taken over. */
@@ -110,8 +111,9 @@ async function runJob(env: Env, job: QueuedSync): Promise<void> {
     const connection = await prisma.connection.findUnique({ where: { id: job.connectionId } });
     if (!connection || connection.status !== 'ACTIVE') return;
 
+    let created = 0;
     if (connection.provider === 'GARMIN') {
-      await syncGarminConnection(env, connection);
+      created = (await syncGarminConnection(env, connection)).itemsCreated;
       // Sleep/daily metrics run below the activities so one tap syncs both;
       // a wellness failure doesn't invalidate the activities result.
       try {
@@ -124,22 +126,21 @@ async function runJob(env: Env, job: QueuedSync): Promise<void> {
       } catch (err) {
         console.error('[garmin] measurements sync failed:', safeErrorForLog(err));
       }
-      return;
-    }
-    if (connection.provider === 'ZWIFT') {
-      await syncZwiftConnection(env, connection);
-      return;
-    }
-    if (connection.provider === 'IGPSPORT') {
-      await syncIgpSportConnection(env, connection);
-      return;
-    }
-    if (connection.provider === 'STRAVA') {
-      await syncStravaConnection(env, connection);
-      return;
-    }
-    if (connection.provider === 'OMRON') {
+    } else if (connection.provider === 'ZWIFT') {
+      created = (await syncZwiftConnection(env, connection)).itemsCreated;
+    } else if (connection.provider === 'IGPSPORT') {
+      created = (await syncIgpSportConnection(env, connection)).itemsCreated;
+    } else if (connection.provider === 'STRAVA') {
+      created = (await syncStravaConnection(env, connection)).itemsCreated;
+    } else if (connection.provider === 'OMRON') {
       await syncOmronConnection(env, connection);
+    }
+
+    // Never hold the connection lock while Expo's push endpoint is slow.
+    if (created > 0) {
+      void notifyNewActivities(connection.userId, created).catch((err) =>
+        console.error('[push] activity notification failed:', safeErrorForLog(err)),
+      );
     }
   } catch (err) {
     await recordFailure(job.connectionId, err);

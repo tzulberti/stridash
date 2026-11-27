@@ -1655,6 +1655,43 @@ describe('connections', () => {
   });
 });
 
+// ─── Push tokens ─────────────────────────────────────────────────────────────
+
+describe('push tokens', () => {
+  it('registers, refreshes and removes an Expo push token', async () => {
+    const body = { token: 'ExponentPushToken[test-1]', platform: 'ios' };
+    const created = await app.request('/api/push-tokens', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify(body),
+    });
+    expect(created.status).toBe(201);
+    expect(await json(created)).toMatchObject(body);
+
+    // re-registering the same device refreshes lastSeenAt instead of failing
+    const again = await app.request('/api/push-tokens', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify(body),
+    });
+    expect(again.status).toBe(201);
+
+    const invalid = await app.request('/api/push-tokens', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify({ token: 'not-a-token', platform: 'ios' }),
+    });
+    expect(invalid.status).toBe(400);
+
+    const removed = await app.request('/api/push-tokens', {
+      method: 'DELETE',
+      ...authed(aliceToken, { method: 'DELETE' }),
+      body: JSON.stringify({ token: body.token }),
+    });
+    expect(removed.status).toBe(200);
+  });
+});
+
 // ─── Manual measurements ─────────────────────────────────────────────────────
 
 describe('manual measurements', () => {

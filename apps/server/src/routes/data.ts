@@ -28,6 +28,15 @@ const apiTokenCreateSchema = z.object({
   expiresInDays: z.number().int().min(1).max(3650).optional(),
 });
 
+const pushTokenSchema = z.object({
+  token: z
+    .string()
+    .min(10)
+    .max(512)
+    .regex(/^(ExponentPushToken|ExpoPushToken)\[.+\]$/, 'Must be an Expo push token'),
+  platform: z.enum(['ios', 'android', 'web']),
+});
+
 const manualMeasurementSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('WEIGH_IN'),
@@ -327,6 +336,39 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     if (!id) return c.json({ error: 'Invalid token id' }, 400);
     const revoked = await revokeApiToken(c.get('userId'), id);
     if (!revoked) return c.json({ error: 'Not found' }, 404);
+    return c.json({ ok: true });
+  });
+
+  // ─── Push tokens (mobile "new activity synced") ───────────────────────────
+
+  routes.post('/push-tokens', async (c) => {
+    const body = pushTokenSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'Invalid request', detail: body.error.flatten().fieldErrors }, 400);
+    }
+    const row = await prisma.pushToken.upsert({
+      where: { token: body.data.token },
+      create: {
+        userId: c.get('userId'),
+        token: body.data.token,
+        platform: body.data.platform,
+      },
+      update: {
+        userId: c.get('userId'),
+        platform: body.data.platform,
+        lastSeenAt: new Date(),
+      },
+      select: { id: true, token: true, platform: true, createdAt: true, lastSeenAt: true },
+    });
+    return c.json(row, 201);
+  });
+
+  routes.delete('/push-tokens', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    if (typeof body?.token !== 'string') return c.json({ error: 'Invalid request' }, 400);
+    await prisma.pushToken.deleteMany({
+      where: { userId: c.get('userId'), token: body.token },
+    });
     return c.json({ ok: true });
   });
 

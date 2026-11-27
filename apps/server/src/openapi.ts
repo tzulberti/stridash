@@ -473,6 +473,48 @@ export function openapiDocument(version = '0.1.0') {
         },
       },
 
+      '/api/push-tokens': {
+        post: {
+          tags: ['account'],
+          summary: 'Register/refresh an Expo push token',
+          security: bearer,
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['token', 'platform'],
+                  properties: {
+                    token: { type: 'string' },
+                    platform: { enum: ['ios', 'android', 'web'] },
+                  },
+                },
+              },
+            },
+          },
+          responses: { '201': jsonResponse(object), '400': errorResponse },
+        },
+        delete: {
+          tags: ['account'],
+          summary: 'Remove an Expo push token',
+          security: bearer,
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['token'],
+                  properties: { token: { type: 'string' } },
+                },
+              },
+            },
+          },
+          responses: { '200': jsonResponse(object), '400': errorResponse },
+        },
+      },
+
       '/api/activities': {
         get: {
           tags: ['activities'],

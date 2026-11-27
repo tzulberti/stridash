@@ -13,6 +13,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ManualEntry } from '@/components/ManualEntry';
 import { ConnectionForm } from '@/components/ConnectionForm';
+import { registerForPush } from '@/lib/push';
 import {
   loadDashboard,
   syncConnection,
@@ -76,6 +77,10 @@ export function DashboardScreen(props: { token: string; onSignOut: () => void })
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch starts with loading=true
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void registerForPush(token).catch(() => undefined);
+  }, [token]);
 
   async function sync(connection: MobileConnection): Promise<void> {
     setSyncNote(null);
