@@ -298,4 +298,5 @@ export const hi: Record<MsgKey, string> = {
   'auth.register': 'पंजीकरण करें',
   'auth.haveAccount': 'पहले से खाता है? साइन इन करें',
   'auth.needAccount': 'खाता चाहिए? बनाएं',
+  'conn.lastSyncIssue': 'पिछला सिंक {status} — {pulled} प्राप्त, {failed} विफल',
 };

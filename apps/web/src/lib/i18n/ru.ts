@@ -298,4 +298,5 @@ export const ru: Record<MsgKey, string> = {
   'auth.register': 'Зарегистрироваться',
   'auth.haveAccount': 'Уже есть аккаунт? Войти',
   'auth.needAccount': 'Нужен аккаунт? Создайте',
+  'conn.lastSyncIssue': 'последняя синхронизация {status} — {pulled} получено, {failed} ошибок',
 };

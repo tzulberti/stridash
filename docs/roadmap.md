@@ -166,8 +166,9 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       replace them) and a "Remove comparison" button restores them
 - [x] Onboarding: create user → connect providers → first sync (UI) —
       register form, provider connect page, sync-now queue
-- [ ] Connections screen with "sync now" buttons + `sync_logs` error surfacing
-      — sync-now and status pills exist; history/error detail surfacing remains
+- [x] Connections screen with "sync now" buttons + `sync_logs` error surfacing —
+      sync-now queue, status pills and the latest PARTIAL/ERROR log line per
+      connection
 - [x] Manual entry UI — weight/body-fat and blood-pressure quick-add on the
       dashboard (`POST /api/measurements`, provider MANUAL)
 - [ ] Mobile (Expo) app UI — dashboards phone-sized

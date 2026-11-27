@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { fmtDate } from '../lib/format';
 import { t } from '../lib/i18n/index';
@@ -9,6 +9,22 @@ export interface ConnectionRow {
   providerUserId: string;
   status: string;
   lastSyncedAt: string | null;
+}
+
+type SyncLogRow = {
+  status: string;
+  itemsPulled: number;
+  itemsCreated: number;
+  itemsUpdated: number;
+  errorDetail?: unknown;
+  startedAt: string;
+  finishedAt?: string | null;
+};
+
+function failedCount(detail: unknown): number {
+  if (!detail || typeof detail !== 'object') return 0;
+  const failed = (detail as { failed?: unknown }).failed;
+  return Array.isArray(failed) ? failed.length : 1;
 }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -62,6 +78,35 @@ export function ConnectionsSection(props: {
   // so the "sync failed — " prefix re-translates on a language switch)
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [syncMsg, setSyncMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
+  // Last sync_logs row per connection: surfaces PARTIAL/ERROR even when the
+  // failure happened on a scheduler/manual run this browser did not start.
+  const [history, setHistory] = useState<Record<string, SyncLogRow>>({});
+
+  useEffect(() => {
+    let alive = true;
+    if (conn.length === 0) {
+      setHistory({});
+      return;
+    }
+    void Promise.all(
+      conn.map(async (c) => {
+        try {
+          const res = await api<{ items?: SyncLogRow[] }>(`/connections/${c.id}/syncs`, { token });
+          return [c.id, res.items?.[0]] as const;
+        } catch {
+          return [c.id, undefined] as const;
+        }
+      }),
+    ).then((rows) => {
+      if (!alive) return;
+      const next: Record<string, SyncLogRow> = {};
+      for (const [id, log] of rows) if (log) next[id] = log;
+      setHistory(next);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [conn, token]);
 
   async function runSync(id: string): Promise<void> {
     const out = await syncConnection(id);
@@ -187,6 +232,15 @@ export function ConnectionsSection(props: {
                   date: c.lastSyncedAt ? fmtDate(c.lastSyncedAt) : t('conn.never'),
                 })}
               </div>
+              {history[c.id] && history[c.id]?.status !== 'OK' ? (
+                <p className="conn-msg err">
+                  {t('conn.lastSyncIssue', {
+                    status: history[c.id]!.status.toLowerCase(),
+                    pulled: history[c.id]!.itemsPulled,
+                    failed: failedCount(history[c.id]!.errorDetail),
+                  })}
+                </p>
+              ) : null}
               {(() => {
                 const msg = syncMsg[c.id];
                 return msg ? (

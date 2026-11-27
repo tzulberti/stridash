@@ -299,4 +299,5 @@ export const ja: Record<MsgKey, string> = {
   'auth.register': '登録',
   'auth.haveAccount': 'アカウントをお持ちですか？サインイン',
   'auth.needAccount': 'アカウントが必要ですか？作成',
+  'conn.lastSyncIssue': '前回の同期 {status} — 取得 {pulled}、失敗 {failed}',
 };

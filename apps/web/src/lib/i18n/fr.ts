@@ -300,4 +300,5 @@ export const fr: Record<MsgKey, string> = {
   'auth.register': 'Inscription',
   'auth.haveAccount': 'Déjà inscrit ? Se connecter',
   'auth.needAccount': 'Pas encore de compte ? En créer un',
+  'conn.lastSyncIssue': 'dernière synchro {status} — {pulled} récupérés, {failed} échoués',
 };

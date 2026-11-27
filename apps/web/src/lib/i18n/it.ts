@@ -301,4 +301,5 @@ export const it: Record<MsgKey, string> = {
   'auth.register': 'Registrati',
   'auth.haveAccount': 'Hai già un account? Accedi',
   'auth.needAccount': 'Ti serve un account? Creane uno',
+  'conn.lastSyncIssue': 'ultima sincronizzazione {status} — {pulled} scaricati, {failed} falliti',
 };

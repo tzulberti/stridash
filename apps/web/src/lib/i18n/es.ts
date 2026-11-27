@@ -299,4 +299,5 @@ export const es: Record<MsgKey, string> = {
   'auth.register': 'Registrarse',
   'auth.haveAccount': '¿Ya tienes una cuenta? Inicia sesión',
   'auth.needAccount': '¿Necesitas una cuenta? Crea una',
+  'conn.lastSyncIssue': 'última sincronización {status} — {pulled} obtenidos, {failed} fallidos',
 };

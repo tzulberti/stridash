@@ -80,6 +80,29 @@ describe('ConnectionsSection', () => {
     expect(screen.getAllByText(/last sync/).length).toBe(3);
   });
 
+  it('surfaces the latest PARTIAL/ERROR sync log on the card', async () => {
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === '/connections/c1/syncs') {
+        return {
+          items: [
+            {
+              status: 'PARTIAL',
+              itemsPulled: 3,
+              itemsCreated: 2,
+              itemsUpdated: 0,
+              errorDetail: { failed: ['r1', 'r2'] },
+              startedAt: '2026-11-27T08:00:00.000Z',
+            },
+          ],
+        };
+      }
+      return { items: [] };
+    });
+    renderSection();
+
+    expect(await screen.findByText(/last sync partial — 3 pulled, 2 failed/)).toBeTruthy();
+  });
+
   it('runs a sync and renders the result on that card', async () => {
     baseProps.syncConnection.mockResolvedValueOnce({ ok: false, text: 'boom' });
     renderSection();
@@ -170,7 +193,12 @@ describe('ConnectionsSection', () => {
   });
 
   it('starts the Strava OAuth flow and redirects to the consent URL', async () => {
-    apiMock.mockResolvedValueOnce({ url: 'https://www.strava.com/oauth/authorize?state=s' });
+    apiMock.mockImplementation(async (path: string) => {
+      if (path === '/strava/authorize') {
+        return { url: 'https://www.strava.com/oauth/authorize?state=s' };
+      }
+      return { items: [] };
+    });
     renderSection();
 
     fireEvent.click(screen.getByRole('button', { name: /Strava/ }));
@@ -228,7 +256,20 @@ describe('ConnectionsSection', () => {
   });
 
   it('surfaces connect and delete failures', async () => {
-    apiMock.mockRejectedValueOnce(new Error('bad credentials'));
+    let connectFails = true;
+    apiMock.mockImplementation(
+      async (path: string, opts?: { method?: string }): Promise<Record<string, unknown>> => {
+        if (path.endsWith('/syncs')) return { items: [] };
+        if (path === '/connections' && opts?.method === 'POST' && connectFails) {
+          connectFails = false;
+          throw new Error('bad credentials');
+        }
+        if (path.startsWith('/connections/') && opts?.method === 'DELETE') {
+          throw new Error('delete failed');
+        }
+        return {};
+      },
+    );
     renderSection();
     fireEvent.change(screen.getByPlaceholderText('Omron email or username'), {
       target: { value: 'scale@example.com' },
@@ -239,7 +280,6 @@ describe('ConnectionsSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'connect' }));
     expect(await screen.findByText('bad credentials')).toBeTruthy();
 
-    apiMock.mockRejectedValueOnce(new Error('delete failed'));
     fireEvent.click(screen.getAllByRole('button', { name: 'delete' })[0]!);
     fireEvent.click(screen.getByRole('button', { name: 'yes, delete' }));
     expect(await screen.findByText('delete failed')).toBeTruthy();

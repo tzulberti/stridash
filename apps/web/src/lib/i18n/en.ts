@@ -315,6 +315,7 @@ export const en = {
   'auth.register': 'Register',
   'auth.haveAccount': 'Already have an account? Sign in',
   'auth.needAccount': 'Need an account? Create one',
+  'conn.lastSyncIssue': 'last sync {status} — {pulled} pulled, {failed} failed',
 } as const;
 
 export type MsgKey = keyof typeof en;

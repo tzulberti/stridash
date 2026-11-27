@@ -299,4 +299,5 @@ export const ko: Record<MsgKey, string> = {
   'auth.register': '가입',
   'auth.haveAccount': '이미 계정이 있나요? 로그인',
   'auth.needAccount': '계정이 필요하신가요? 만들기',
+  'conn.lastSyncIssue': '마지막 동기화 {status} — {pulled}개 가져옴, {failed}개 실패',
 };

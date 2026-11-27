@@ -294,4 +294,5 @@ export const zh: Record<MsgKey, string> = {
   'auth.register': '注册',
   'auth.haveAccount': '已有账户？登录',
   'auth.needAccount': '需要账户？创建一个',
+  'conn.lastSyncIssue': '上次同步 {status} — 获取 {pulled}，失败 {failed}',
 };
