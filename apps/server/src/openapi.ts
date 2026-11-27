@@ -420,6 +420,59 @@ export function openapiDocument(version = '0.1.0') {
         },
       },
 
+      '/api/tokens': {
+        get: {
+          tags: ['account'],
+          summary: 'List long-lived API tokens (metadata only)',
+          security: bearer,
+          responses: { '200': listResponse },
+        },
+        post: {
+          tags: ['account'],
+          summary: 'Create a long-lived API token (raw value shown once)',
+          security: bearer,
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['name'],
+                  properties: {
+                    name: { type: 'string', minLength: 1, maxLength: 80 },
+                    expiresInDays: { type: 'integer', minimum: 1, maximum: 3650 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '201': jsonResponse({
+              type: 'object',
+              properties: {
+                token: { type: 'string' },
+                id: { type: 'string', format: 'uuid' },
+                name: { type: 'string' },
+                prefix: { type: 'string' },
+                expiresAt: { type: ['string', 'null'], format: 'date-time' },
+                lastUsedAt: { type: ['string', 'null'], format: 'date-time' },
+                createdAt: { type: 'string', format: 'date-time' },
+              },
+            }),
+            '400': errorResponse,
+          },
+        },
+      },
+      '/api/tokens/{id}': {
+        delete: {
+          tags: ['account'],
+          summary: 'Revoke a long-lived API token',
+          security: bearer,
+          parameters: [idParam],
+          responses: { '200': jsonResponse(object), '404': errorResponse },
+        },
+      },
+
       '/api/activities': {
         get: {
           tags: ['activities'],

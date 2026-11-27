@@ -1966,6 +1966,45 @@ describe('account export + delete', () => {
     expect(measurements.some((m) => m.notes === 'export-page-204')).toBe(true);
   });
 
+  it('issues, lists and revokes long-lived API tokens', async () => {
+    const created = await app.request('/api/tokens', {
+      method: 'POST',
+      ...authed(token, { method: 'POST' }),
+      body: JSON.stringify({ name: 'MCP test', expiresInDays: 30 }),
+    });
+    expect(created.status).toBe(201);
+    const body = await json(created);
+    const raw = String(body.token);
+    expect(raw.startsWith('sdat_')).toBe(true);
+    expect(body.prefix).toBe(raw.slice(0, 9));
+    expect(JSON.stringify(body)).not.toContain('tokenHash');
+
+    const me = await app.request('/api/me', {
+      headers: { Authorization: `Bearer ${raw}` },
+    });
+    expect(me.status).toBe(200);
+    expect((await json(me)).email).toBe(email);
+
+    const list = await app.request('/api/tokens', authed(token));
+    expect(list.status).toBe(200);
+    const items = (await json(list)).items as Json[];
+    expect(items.some((t) => t.id === body.id && t.name === 'MCP test')).toBe(true);
+    expect(JSON.stringify(items)).not.toContain('tokenHash');
+
+    const revoked = await app.request(`/api/tokens/${String(body.id)}`, {
+      method: 'DELETE',
+      ...authed(token, { method: 'DELETE' }),
+    });
+    expect(revoked.status).toBe(200);
+    expect(
+      (
+        await app.request('/api/me', {
+          headers: { Authorization: `Bearer ${raw}` },
+        })
+      ).status,
+    ).toBe(401);
+  });
+
   it('streams CSV exports with RFC escaping and validates the type', async () => {
     const created = await app.request('/api/measurements', {
       method: 'POST',

@@ -85,6 +85,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 - [Strava](docs/strava.md) — OAuth setup, scopes and sync behaviour
 - [Provider ToS risk](docs/provider-tos-risk.md) — per-provider terms/risk notes
 - [OpenAPI](docs/openapi.json) — API spec (also served at `/api/openapi.json`)
+- [API tokens](docs/api-tokens.md) — long-lived tokens for MCP/automation
 - [Risks & TODO](docs/risks-todo.md) — open security/correctness/maintainability work
 - [Roadmap](docs/roadmap.md) — milestones and known feature gaps
 

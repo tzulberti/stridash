@@ -12,6 +12,7 @@ import { resyncIgpSportActivity } from '../services/igpsport-sync.js';
 import { resyncZwiftActivity } from '../services/zwift-sync.js';
 import { serializeRow } from '../serialize.js';
 import { uuidParam } from '../params.js';
+import { createApiToken, listApiTokens, revokeApiToken } from '../services/api-tokens.js';
 
 const listQuerySchema = z.object({
   /** ISO date lower bound (activities.start_time / measurements.measured_at) */
@@ -19,6 +20,12 @@ const listQuerySchema = z.object({
   to: z.string().datetime().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.string().uuid().optional(),
+});
+
+const apiTokenCreateSchema = z.object({
+  name: z.string().min(1).max(80),
+  /** Optional lifetime; omitted = non-expiring until revoked. */
+  expiresInDays: z.number().int().min(1).max(3650).optional(),
 });
 
 const manualMeasurementSchema = z.discriminatedUnion('kind', [
@@ -293,6 +300,33 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
       }
       throw err;
     }
+    return c.json({ ok: true });
+  });
+
+  // ─── API tokens (MCP/automation, long-lived) ──────────────────────────────
+
+  routes.get('/tokens', async (c) => {
+    const items = await listApiTokens(c.get('userId'));
+    return c.json({ items, nextCursor: null });
+  });
+
+  routes.post('/tokens', async (c) => {
+    const body = apiTokenCreateSchema.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'Invalid request', detail: body.error.flatten().fieldErrors }, 400);
+    }
+    const expiresAt = body.data.expiresInDays
+      ? new Date(Date.now() + body.data.expiresInDays * 86_400_000)
+      : null;
+    const created = await createApiToken(c.get('userId'), body.data.name.trim(), expiresAt);
+    return c.json({ token: created.token, ...created.item }, 201);
+  });
+
+  routes.delete('/tokens/:id', async (c) => {
+    const id = uuidParam(c);
+    if (!id) return c.json({ error: 'Invalid token id' }, 400);
+    const revoked = await revokeApiToken(c.get('userId'), id);
+    if (!revoked) return c.json({ error: 'Not found' }, 404);
     return c.json({ ok: true });
   });
 

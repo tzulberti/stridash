@@ -44,6 +44,7 @@ model User {
   gearComponents GearComponent[]
   authIdentities AuthIdentity[]
   refreshTokens  RefreshToken[]
+  apiTokens      ApiToken[]
   sleepSessions  SleepSession[]
   dailyWellness  DailyWellness[]
   preferences    UserPreferences?
@@ -157,6 +158,26 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+/// Long-lived per-user API token for MCP/automation clients. Only the SHA-256
+/// hash is stored; the raw `sdat_…` value is shown once when created.
+model ApiToken {
+  id         String    @id @db.Uuid @default(uuid(7))
+  userId     String    @db.Uuid @map("user_id")
+  name       String
+  /// sha256(raw token) — the raw value never reaches the database
+  tokenHash  String    @unique @map("token_hash")
+  /// first 9 chars (`sdat_` + 4) for identification in the UI/logs
+  prefix     String
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz(6)
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("api_tokens")
 }
 
 // ─── Connections (external providers) ────────────────────────────────────────

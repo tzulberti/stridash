@@ -243,7 +243,8 @@ shoes retire?" from the synced data.)*
 - [ ] Tool surface, read-only and single-user-scoped: activity search /
       detail / compare, weigh-ins + blood pressure, sleep + daily wellness,
       gear wear, connection & sync status
-- [ ] Auth: long-lived per-user API token (the browser JWT session doesn't
-      fit MCP clients) — `POST /api/tokens` + revocation
+- [x] Auth: long-lived per-user API token (the browser JWT session doesn't
+      fit MCP clients) — `POST/GET /api/tokens`, revoke via
+      `DELETE /api/tokens/:id`, hashed at rest; see `docs/api-tokens.md`
 - [ ] Reuse the server's service layer so MCP tools and the REST API can
       never disagree

@@ -50,7 +50,9 @@
     "schemas": {
       "Error": {
         "type": "object",
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "string"
@@ -60,7 +62,10 @@
       },
       "AuthTokens": {
         "type": "object",
-        "required": ["accessToken", "refreshToken"],
+        "required": [
+          "accessToken",
+          "refreshToken"
+        ],
         "properties": {
           "accessToken": {
             "type": "string"
@@ -110,7 +115,9 @@
   "paths": {
     "/api/health": {
       "get": {
-        "tags": ["health"],
+        "tags": [
+          "health"
+        ],
         "summary": "Health + version",
         "responses": {
           "200": {
@@ -128,7 +135,9 @@
     },
     "/api/openapi.json": {
       "get": {
-        "tags": ["health"],
+        "tags": [
+          "health"
+        ],
         "summary": "This OpenAPI document",
         "responses": {
           "200": {
@@ -147,7 +156,9 @@
     },
     "/api/auth/register": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Create an account and return a token pair",
         "requestBody": {
           "required": true,
@@ -155,7 +166,11 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["email", "password", "displayName"],
+                "required": [
+                  "email",
+                  "password",
+                  "displayName"
+                ],
                 "properties": {
                   "email": {
                     "type": "string",
@@ -221,7 +236,9 @@
     },
     "/api/auth/login": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Log in",
         "requestBody": {
           "required": true,
@@ -229,7 +246,10 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["email", "password"],
+                "required": [
+                  "email",
+                  "password"
+                ],
                 "properties": {
                   "email": {
                     "type": "string",
@@ -280,7 +300,9 @@
     },
     "/api/auth/refresh": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Rotate a refresh token",
         "requestBody": {
           "required": true,
@@ -288,7 +310,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["refreshToken"],
+                "required": [
+                  "refreshToken"
+                ],
                 "properties": {
                   "refreshToken": {
                     "type": "string"
@@ -324,7 +348,9 @@
     },
     "/api/auth/logout": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Revoke a refresh-token family",
         "requestBody": {
           "required": true,
@@ -332,7 +358,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["refreshToken"],
+                "required": [
+                  "refreshToken"
+                ],
                 "properties": {
                   "refreshToken": {
                     "type": "string"
@@ -351,7 +379,9 @@
     },
     "/api/strava/authorize": {
       "get": {
-        "tags": ["strava"],
+        "tags": [
+          "strava"
+        ],
         "summary": "Strava consent URL",
         "security": [
           {
@@ -400,7 +430,9 @@
     },
     "/api/strava/callback": {
       "get": {
-        "tags": ["strava"],
+        "tags": [
+          "strava"
+        ],
         "summary": "Strava OAuth callback (browser redirect)",
         "parameters": [
           {
@@ -434,7 +466,9 @@
     },
     "/api/connections": {
       "get": {
-        "tags": ["connections"],
+        "tags": [
+          "connections"
+        ],
         "summary": "List provider connections (tokens excluded)",
         "security": [
           {
@@ -457,7 +491,10 @@
                       }
                     },
                     "nextCursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "format": "uuid"
                     }
                   }
@@ -468,7 +505,9 @@
         }
       },
       "post": {
-        "tags": ["connections"],
+        "tags": [
+          "connections"
+        ],
         "summary": "Connect a provider with credentials",
         "security": [
           {
@@ -483,7 +522,12 @@
                 "oneOf": [
                   {
                     "type": "object",
-                    "required": ["provider", "identifier", "password", "country"],
+                    "required": [
+                      "provider",
+                      "identifier",
+                      "password",
+                      "country"
+                    ],
                     "properties": {
                       "provider": {
                         "const": "OMRON"
@@ -503,10 +547,17 @@
                   },
                   {
                     "type": "object",
-                    "required": ["provider", "username", "password"],
+                    "required": [
+                      "provider",
+                      "username",
+                      "password"
+                    ],
                     "properties": {
                       "provider": {
-                        "enum": ["IGPSPORT", "ZWIFT"]
+                        "enum": [
+                          "IGPSPORT",
+                          "ZWIFT"
+                        ]
                       },
                       "username": {
                         "type": "string"
@@ -515,13 +566,20 @@
                         "type": "string"
                       },
                       "region": {
-                        "enum": ["intl", "cn"]
+                        "enum": [
+                          "intl",
+                          "cn"
+                        ]
                       }
                     }
                   },
                   {
                     "type": "object",
-                    "required": ["provider", "email", "password"],
+                    "required": [
+                      "provider",
+                      "email",
+                      "password"
+                    ],
                     "properties": {
                       "provider": {
                         "const": "GARMIN"
@@ -607,7 +665,9 @@
     },
     "/api/connections/{id}/mfa": {
       "post": {
-        "tags": ["connections"],
+        "tags": [
+          "connections"
+        ],
         "summary": "Complete a pending Garmin MFA login",
         "security": [
           {
@@ -631,7 +691,9 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["code"],
+                "required": [
+                  "code"
+                ],
                 "properties": {
                   "code": {
                     "type": "string"
@@ -697,7 +759,9 @@
     },
     "/api/connections/{id}": {
       "delete": {
-        "tags": ["connections"],
+        "tags": [
+          "connections"
+        ],
         "summary": "Soft-revoke a connection and wipe its tokens",
         "security": [
           {
@@ -742,7 +806,9 @@
     },
     "/api/connections/{id}/sync": {
       "post": {
-        "tags": ["connections"],
+        "tags": [
+          "connections"
+        ],
         "summary": "Queue a manual sync",
         "security": [
           {
@@ -818,8 +884,189 @@
     },
     "/api/connections/{id}/syncs": {
       "get": {
-        "tags": ["connections"],
+        "tags": [
+          "connections"
+        ],
         "summary": "Recent sync logs + in-progress state",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tokens": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "List long-lived API tokens (metadata only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Create a long-lived API token (raw value shown once)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "expiresInDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3650
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "prefix": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "lastUsedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tokens/{id}": {
+      "delete": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Revoke a long-lived API token",
         "security": [
           {
             "bearerAuth": []
@@ -863,7 +1110,9 @@
     },
     "/api/activities": {
       "get": {
-        "tags": ["activities"],
+        "tags": [
+          "activities"
+        ],
         "summary": "Activity feed",
         "security": [
           {
@@ -921,7 +1170,10 @@
                       }
                     },
                     "nextCursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "format": "uuid"
                     }
                   }
@@ -934,7 +1186,9 @@
     },
     "/api/activities/{id}": {
       "get": {
-        "tags": ["activities"],
+        "tags": [
+          "activities"
+        ],
         "summary": "Activity detail + series",
         "security": [
           {
@@ -979,7 +1233,9 @@
     },
     "/api/activities/{id}/similar": {
       "get": {
-        "tags": ["activities"],
+        "tags": [
+          "activities"
+        ],
         "summary": "Similar activities for comparison",
         "security": [
           {
@@ -1013,7 +1269,10 @@
                       }
                     },
                     "nextCursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "format": "uuid"
                     }
                   }
@@ -1036,7 +1295,9 @@
     },
     "/api/activities/{id}/resync": {
       "post": {
-        "tags": ["activities"],
+        "tags": [
+          "activities"
+        ],
         "summary": "Force re-sync from the owning provider",
         "security": [
           {
@@ -1101,7 +1362,9 @@
     },
     "/api/measurements": {
       "get": {
-        "tags": ["measurements"],
+        "tags": [
+          "measurements"
+        ],
         "summary": "Weigh-ins and blood-pressure readings",
         "security": [
           {
@@ -1159,7 +1422,10 @@
                       }
                     },
                     "nextCursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "format": "uuid"
                     }
                   }
@@ -1170,7 +1436,9 @@
         }
       },
       "post": {
-        "tags": ["measurements"],
+        "tags": [
+          "measurements"
+        ],
         "summary": "Manual weigh-in or blood-pressure quick-add",
         "security": [
           {
@@ -1185,7 +1453,10 @@
                 "oneOf": [
                   {
                     "type": "object",
-                    "required": ["kind", "weightKg"],
+                    "required": [
+                      "kind",
+                      "weightKg"
+                    ],
                     "properties": {
                       "kind": {
                         "const": "WEIGH_IN"
@@ -1224,7 +1495,11 @@
                   },
                   {
                     "type": "object",
-                    "required": ["kind", "systolicMmhg", "diastolicMmhg"],
+                    "required": [
+                      "kind",
+                      "systolicMmhg",
+                      "diastolicMmhg"
+                    ],
                     "properties": {
                       "kind": {
                         "const": "BLOOD_PRESSURE"
@@ -1295,7 +1570,9 @@
     },
     "/api/sleeps": {
       "get": {
-        "tags": ["wellness"],
+        "tags": [
+          "wellness"
+        ],
         "summary": "Sleep sessions",
         "security": [
           {
@@ -1353,7 +1630,10 @@
                       }
                     },
                     "nextCursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "format": "uuid"
                     }
                   }
@@ -1366,7 +1646,9 @@
     },
     "/api/wellness": {
       "get": {
-        "tags": ["wellness"],
+        "tags": [
+          "wellness"
+        ],
         "summary": "Daily wellness rows",
         "security": [
           {
@@ -1424,7 +1706,10 @@
                       }
                     },
                     "nextCursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "format": "uuid"
                     }
                   }
@@ -1437,7 +1722,9 @@
     },
     "/api/gear": {
       "get": {
-        "tags": ["gear"],
+        "tags": [
+          "gear"
+        ],
         "summary": "Gear + computed usage",
         "security": [
           {
@@ -1460,7 +1747,10 @@
                       }
                     },
                     "nextCursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "format": "uuid"
                     }
                   }
@@ -1473,7 +1763,9 @@
     },
     "/api/gear/{gearId}/components": {
       "post": {
-        "tags": ["gear"],
+        "tags": [
+          "gear"
+        ],
         "summary": "Add a wear component to a gear item",
         "security": [
           {
@@ -1497,7 +1789,10 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["name", "kind"],
+                "required": [
+                  "name",
+                  "kind"
+                ],
                 "properties": {
                   "name": {
                     "type": "string"
@@ -1567,7 +1862,9 @@
     },
     "/api/gear/components/{componentId}": {
       "patch": {
-        "tags": ["gear"],
+        "tags": [
+          "gear"
+        ],
         "summary": "Retire/update a gear component",
         "security": [
           {
@@ -1596,18 +1893,30 @@
                     "type": "string"
                   },
                   "installedAt": {
-                    "type": ["string", "null"],
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "format": "date"
                   },
                   "retiredAt": {
-                    "type": ["string", "null"],
+                    "type": [
+                      "string",
+                      "null"
+                    ],
                     "format": "date"
                   },
                   "thresholdM": {
-                    "type": ["number", "null"]
+                    "type": [
+                      "number",
+                      "null"
+                    ]
                   },
                   "notes": {
-                    "type": ["string", "null"]
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 }
               }
@@ -1639,7 +1948,9 @@
         }
       },
       "delete": {
-        "tags": ["gear"],
+        "tags": [
+          "gear"
+        ],
         "summary": "Delete a gear component",
         "security": [
           {
@@ -1684,7 +1995,9 @@
     },
     "/api/me": {
       "get": {
-        "tags": ["account"],
+        "tags": [
+          "account"
+        ],
         "summary": "Account + preferences + chart configuration",
         "security": [
           {
@@ -1716,7 +2029,9 @@
         }
       },
       "patch": {
-        "tags": ["account"],
+        "tags": [
+          "account"
+        ],
         "summary": "Update account/preferences",
         "security": [
           {
@@ -1759,7 +2074,9 @@
         }
       },
       "delete": {
-        "tags": ["account"],
+        "tags": [
+          "account"
+        ],
         "summary": "Delete the account and all user data",
         "security": [
           {
@@ -1793,7 +2110,9 @@
     },
     "/api/preferences/charts/{provider}": {
       "put": {
-        "tags": ["account"],
+        "tags": [
+          "account"
+        ],
         "summary": "Replace one provider’s chart channel order/visibility",
         "security": [
           {
@@ -1816,13 +2135,18 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["channels"],
+                "required": [
+                  "channels"
+                ],
                 "properties": {
                   "channels": {
                     "type": "array",
                     "items": {
                       "type": "object",
-                      "required": ["key", "visible"],
+                      "required": [
+                        "key",
+                        "visible"
+                      ],
                       "properties": {
                         "key": {
                           "type": "string"
@@ -1865,7 +2189,9 @@
     },
     "/api/export": {
       "get": {
-        "tags": ["account"],
+        "tags": [
+          "account"
+        ],
         "summary": "Full JSON account export (streamed)",
         "security": [
           {
@@ -1889,7 +2215,9 @@
     },
     "/api/export/csv": {
       "get": {
-        "tags": ["account"],
+        "tags": [
+          "account"
+        ],
         "summary": "CSV export (streamed)",
         "security": [
           {
@@ -1902,7 +2230,12 @@
             "in": "query",
             "required": true,
             "schema": {
-              "enum": ["activities", "measurements", "sleep", "wellness"]
+              "enum": [
+                "activities",
+                "measurements",
+                "sleep",
+                "wellness"
+              ]
             }
           }
         ],

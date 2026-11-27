@@ -1,6 +1,7 @@
 # generated code
 apps/server/src/generated/
 packages/types/src/openapi.ts
+docs/openapi.json
 package-lock.json
 
 # build output / platform artifacts

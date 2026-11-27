@@ -107,6 +107,10 @@ maintainability. Check the box when the fix (and its test) has landed.
 > `/api/openapi.json`, generated into `docs/openapi.json`, and the generated
 > path/component types live in `packages/types/src/openapi.ts`; BLE, push and
 > webhooks remain.
+>
+> **Status 2026-11-27 (M7):** long-lived per-user API tokens landed
+> (`POST/GET /api/tokens`, revoke, hashed at rest, accepted by every
+> authenticated route); the MCP server/tool surface remains.
 
 ---
 
@@ -891,7 +895,7 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 88.27% lines/statements, 91.83% functions, 80.39% branches; web 90.05%
+server 89.19% lines/statements, 92.06% functions, 80.48% branches; web 90.05%
 lines/statements, 75% functions, 80.62% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 

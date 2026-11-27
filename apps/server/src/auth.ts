@@ -16,6 +16,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { verify, sign } from 'hono/jwt';
 import type { Context } from 'hono';
 import { prisma } from './db.js';
+import { isApiToken, verifyApiToken } from './services/api-tokens.js';
 
 const ACCESS_TTL_S = 15 * 60;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -155,6 +156,13 @@ export async function requireUserId(c: Context, jwtSecret: string): Promise<stri
   const header = c.req.header('Authorization') ?? '';
   const match = /^Bearer\s+(.+)$/i.exec(header);
   if (!match) throw new UnauthorizedError();
+
+  const raw = match[1]!;
+  if (isApiToken(raw)) {
+    const userId = await verifyApiToken(raw);
+    if (!userId) throw new UnauthorizedError();
+    return userId;
+  }
 
   let payload: Record<string, unknown>;
   try {
