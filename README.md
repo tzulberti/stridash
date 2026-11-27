@@ -76,6 +76,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 4. ✅ **M4 – Omron scale integration** — weight + body composition time series (server side)
 5. ▶ **M5 – App dashboard** — web dashboard, onboarding, manual entry, overview health, mobile UI and a responsive pass are live; the larger visual-design pass remains
 6. ☐ **M6 – Extras** — CSV export, OpenAPI spec and generated API types are live; BLE scale support, webhooks, push and multi-user hardening remain
+7. 🔨 **M7 – MCP server** — stdio server with read-only activity/measurement/wellness/gear tools and API-token auth; streamable HTTP remains
 
 ## Docs
 
@@ -86,6 +87,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 - [Provider ToS risk](docs/provider-tos-risk.md) — per-provider terms/risk notes
 - [OpenAPI](docs/openapi.json) — API spec (also served at `/api/openapi.json`)
 - [API tokens](docs/api-tokens.md) — long-lived tokens for MCP/automation
+- [MCP server](docs/mcp.md) — read-only LLM tools over stdio
 - [Risks & TODO](docs/risks-todo.md) — open security/correctness/maintainability work
 - [Roadmap](docs/roadmap.md) — milestones and known feature gaps
 

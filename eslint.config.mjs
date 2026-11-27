@@ -69,4 +69,15 @@ export default tseslint.config(
     },
     rules: typedRules,
   },
+  {
+    files: ['apps/mcp/**/*.ts'],
+    languageOptions: {
+      globals: globals.node,
+      parserOptions: {
+        project: ['./apps/mcp/tsconfig.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: typedRules,
+  },
 );

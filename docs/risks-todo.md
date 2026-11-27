@@ -110,7 +110,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 >
 > **Status 2026-11-27 (M7):** long-lived per-user API tokens landed
 > (`POST/GET /api/tokens`, revoke, hashed at rest, accepted by every
-> authenticated route); the MCP server/tool surface remains.
+> authenticated route), and the stdio MCP server now exposes read-only
+> activity/measurement/sleep/wellness/gear/connection tools. Streamable HTTP
+> transport remains.
 
 ---
 
