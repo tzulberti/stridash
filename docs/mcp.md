@@ -44,6 +44,28 @@ authorization/ownership rules apply as for any other client.
    }
    ```
 
+## Streamable HTTP (remote clients)
+
+Run the same server with the HTTP transport:
+
+```bash
+STRIDASH_API_URL=http://localhost:3000 \
+STRIDASH_API_TOKEN=sdat_… \
+MCP_TRANSPORT=http \
+MCP_HTTP_HOST=127.0.0.1 \
+MCP_HTTP_PORT=3100 \
+MCP_HTTP_TOKEN=local-mcp-secret \
+npm run start:http -w @stridash/mcp
+```
+
+- MCP endpoint: `POST http://127.0.0.1:3100/mcp`
+- Health: `GET http://127.0.0.1:3100/health`
+- If `MCP_HTTP_TOKEN` is set, send
+  `Authorization: Bearer local-mcp-secret`.
+- The transport is **stateless** (one MCP server instance per request, no
+  session id). Put it behind a TLS reverse proxy before exposing it beyond
+  localhost.
+
 ## Tools
 
 | Tool | Purpose |
@@ -62,8 +84,7 @@ provider credentials or tokens are exposed.
 
 ## Current limitations
 
-- **stdio transport only**. Streamable HTTP for remote MCP clients is the next
-  step.
+- The HTTP transport is stateless; resumable/event-store sessions are not wired.
 - No write tools (manual entry/sync triggers) yet; this is deliberate for the
   first MCP surface.
 - The MCP process is stateless; the API token is the entire session.

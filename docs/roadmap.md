@@ -231,15 +231,15 @@ phone breakpoints); the larger visual-design pass remains.
       (M3 / M2.1 / M4). Practical exposure is account-flagging, not legal:
       own-account, read-only, self-hosted.
 
-## M7 — MCP server 🔨 (stdio server built; HTTP transport pending)
+## M7 — MCP server ✅
 
 *(Expose Stridash to LLM clients over the Model Context Protocol (2026-11
 request): an assistant connects with the user's own token and can answer
 "how far did I run this month?", "what's my resting-HR trend?", "when do my
 shoes retire?" from the synced data.)*
 
-- [x] MCP server package (`apps/mcp`): stdio transport for local clients
-- [ ] Streamable HTTP transport for remote MCP clients
+- [x] MCP server package (`apps/mcp`): stdio transport for local clients +
+      stateless Streamable HTTP for remote clients (`MCP_TRANSPORT=http`)
 - [x] Tool surface, read-only and single-user-scoped: activity search /
       detail / compare, weigh-ins + blood pressure, sleep + daily wellness,
       gear wear, connection & sync status
