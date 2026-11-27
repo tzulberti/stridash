@@ -214,7 +214,7 @@ phone breakpoints); the larger visual-design pass remains.
 - [ ] Generated OpenAPI spec + client (from the existing zod route schemas;
       benefits the web/mobile clients and the M7 MCP server)
 - [ ] Garadget-style webhooks/poll for near-real-time sync where APIs allow
-- [ ] Write `docs/provider-tos-risk.md` — the per-provider terms-of-service
+- [x] Write `docs/provider-tos-risk.md` — the per-provider terms-of-service
       risk profile audited 2026-11: **Zwift** §5.a explicitly prohibits
       unofficial API clients (reverse engineering, scraping, "applications
       that interact with our Platform without prior written authorization")

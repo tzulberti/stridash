@@ -83,6 +83,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 - [Data model](docs/data-model.md) — PostgreSQL/Prisma schema and dedup rules
 - [Deployment](docs/deployment.md) — production Compose, TLS and key rotation
 - [Strava](docs/strava.md) — OAuth setup, scopes and sync behaviour
+- [Provider ToS risk](docs/provider-tos-risk.md) — per-provider terms/risk notes
 - [Risks & TODO](docs/risks-todo.md) — open security/correctness/maintainability work
 - [Roadmap](docs/roadmap.md) — milestones and known feature gaps
 
