@@ -74,7 +74,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 2. 🔨 **M2 – Strava integration** — OAuth, encrypted tokens, incremental sync and gear are built; live-account smoke test pending
 3. ▶ **M3 – Garmin Connect integration** — server-side activities, wellness, gear, sleep, weight/body composition and blood pressure built; live health-endpoint smoke test remains
 4. ✅ **M4 – Omron scale integration** — weight + body composition time series (server side)
-5. ▶ **M5 – App dashboard** — web dashboard, registration/onboarding, manual weight/BP quick-add (web + mobile) and a first mobile dashboard/login are live; mobile provider setup and redesign remain
+5. ▶ **M5 – App dashboard** — web dashboard, registration/onboarding, manual weight/BP quick-add and the mobile dashboard/login/provider onboarding are live; visual redesign remains
 6. ☐ **M6 – Extras** — direct BLE scale support on mobile, CSV export, multi-user hardening
 
 ## Docs

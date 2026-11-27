@@ -193,3 +193,40 @@ export type ManualMeasurement =
 export function createMeasurement(token: string, measurement: ManualMeasurement): Promise<unknown> {
   return apiRequest('/measurements', { method: 'POST', token, body: measurement });
 }
+
+export type CredentialProvider = 'OMRON' | 'IGPSPORT' | 'GARMIN' | 'ZWIFT';
+
+export type ConnectProviderBody =
+  | { provider: 'OMRON'; identifier: string; password: string; country: string }
+  | { provider: 'IGPSPORT'; username: string; password: string; region: 'intl' }
+  | { provider: 'GARMIN'; email: string; password: string }
+  | { provider: 'ZWIFT'; username: string; password: string };
+
+export interface ConnectResult {
+  mfaRequired?: boolean;
+  method?: string;
+  connection?: { id: string };
+  [key: string]: unknown;
+}
+
+/** Credential-based provider connect (Garmin may answer 202 + mfaRequired). */
+export function connectProvider(token: string, body: ConnectProviderBody): Promise<ConnectResult> {
+  return apiRequest('/connections', { method: 'POST', token, body });
+}
+
+export function verifyConnectionMfa(
+  token: string,
+  connectionId: string,
+  code: string,
+): Promise<unknown> {
+  return apiRequest(`/connections/${connectionId}/mfa`, {
+    method: 'POST',
+    token,
+    body: { code },
+  });
+}
+
+/** Strava consent URL; the caller opens it in the system browser. */
+export function stravaAuthorizeUrl(token: string): Promise<{ url: string }> {
+  return apiRequest('/strava/authorize', { token });
+}

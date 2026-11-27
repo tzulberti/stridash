@@ -9,6 +9,9 @@ import {
   login,
   syncConnection,
   createMeasurement,
+  connectProvider,
+  verifyConnectionMfa,
+  stravaAuthorizeUrl,
 } from './api';
 
 afterEach(() => {
@@ -185,6 +188,48 @@ describe('mobile endpoints', () => {
       kind: 'BLOOD_PRESSURE',
       systolicMmhg: 120,
       diastolicMmhg: 80,
+    });
+  });
+
+  it('connects credential providers and verifies MFA', async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init: RequestInit) =>
+        new Response(
+          JSON.stringify({ mfaRequired: true, method: 'email', connection: { id: 'c9' } }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await connectProvider('tok', {
+      provider: 'GARMIN',
+      email: 'rider@example.com',
+      password: 'secret',
+    });
+    expect(result).toMatchObject({ mfaRequired: true, connection: { id: 'c9' } });
+    const [connectUrl, connectInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(String(connectUrl)).toBe(`${DEFAULT_API_URL}/api/connections`);
+    expect(JSON.parse(String(connectInit.body))).toEqual({
+      provider: 'GARMIN',
+      email: 'rider@example.com',
+      password: 'secret',
+    });
+
+    await verifyConnectionMfa('tok', 'c9', '123456');
+    const [mfaUrl, mfaInit] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(String(mfaUrl)).toBe(`${DEFAULT_API_URL}/api/connections/c9/mfa`);
+    expect(JSON.parse(String(mfaInit.body))).toEqual({ code: '123456' });
+  });
+
+  it('gets the Strava consent URL', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ url: 'https://www.strava.com/oauth/authorize?state=s' })),
+      ),
+    );
+    await expect(stravaAuthorizeUrl('tok')).resolves.toMatchObject({
+      url: expect.stringContaining('strava.com'),
     });
   });
 });

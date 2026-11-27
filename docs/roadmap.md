@@ -138,7 +138,9 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       flow via [omron-connect-create.readme.io](https://omron-connect-create.readme.io);
       app registration, production approval) and retire the
       reverse-engineered app protocol it replaces
-- [ ] Mobile connection UI (M5 scope)
+- [x] Mobile connection UI (M5 scope) — provider list, credential
+      connect (Omron/iGPSPORT/Garmin/Zwift), Garmin MFA and Strava browser
+      consent
 
 ## M5 — App dashboard ▶ (web dashboard — first cut)
 
@@ -172,8 +174,9 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [x] Manual entry UI — weight/body-fat and blood-pressure quick-add on the
       dashboard (`POST /api/measurements`, provider MANUAL)
 - [ ] Mobile (Expo) app UI — dashboards phone-sized (login/register,
-      secure session, dashboard cards, recent activities, provider sync
-      landed; provider onboarding/manual entry/redesign remain)
+      secure session, dashboard cards, recent activities, provider
+      connect/MFA/Strava consent, sync and quick-add landed; visual redesign
+      remains)
 - [ ] General overview dashboard: one aggregated home view beyond today's
       stat cards — training load, steps/sleep/body-battery/weight trends,
       gear wear status, connection/sync health (2026-11 request)
@@ -189,9 +192,9 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 **Progress 2026-11-27:** the mobile Expo app now has login/register, secure
 token storage (`expo-secure-store`, localStorage on web), a phone-sized
 dashboard (latest weight/body fat/sleep/steps/resting HR, activity and
-connection counts), pull-to-refresh, recent activities, provider status,
-sync-now and weigh-in/blood-pressure quick-add. Mobile provider onboarding
-and the visual redesign remain.
+connection counts), pull-to-refresh, recent activities, provider connection
+forms (Omron/iGPSPORT/Garmin/Zwift + Garmin MFA + Strava browser consent),
+sync-now and weigh-in/blood-pressure quick-add. The visual redesign remains.
 
 ## M6 — Extras ☐
 
