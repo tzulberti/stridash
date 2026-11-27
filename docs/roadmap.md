@@ -189,13 +189,14 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 **Progress 2026-11-27:** the mobile Expo app now has login/register, secure
 token storage (`expo-secure-store`, localStorage on web), a phone-sized
 dashboard (latest weight/body fat/sleep/steps/resting HR, activity and
-connection counts), pull-to-refresh, recent activities, provider status and
-sync-now. Mobile provider onboarding/manual entry and the visual redesign
-remain.
+connection counts), pull-to-refresh, recent activities, provider status,
+sync-now and weigh-in/blood-pressure quick-add. Mobile provider onboarding
+and the visual redesign remain.
 
 ## M6 — Extras ☐
 
-- [ ] Manual entry: weight / BP quick-add from the app
+- [x] Manual entry: weight / BP quick-add from the app — web dashboard form +
+      mobile dashboard quick-add (`POST /api/measurements`, provider MANUAL)
 - [x] Full JSON account export — streamed, includes per-sample activity series
       (2026-11-22)
 - [ ] CSV export (user owns their data)

@@ -175,3 +175,21 @@ export async function loadDashboard(token: string, baseUrl?: string): Promise<Da
 export function syncConnection(id: string, token: string): Promise<unknown> {
   return apiRequest(`/connections/${id}/sync`, { method: 'POST', token });
 }
+
+export type ManualMeasurement =
+  | {
+      kind: 'WEIGH_IN';
+      weightKg: number;
+      bodyFatPct?: number;
+    }
+  | {
+      kind: 'BLOOD_PRESSURE';
+      systolicMmhg: number;
+      diastolicMmhg: number;
+      pulseBpm?: number;
+    };
+
+/** Quick-add a manual weigh-in or blood-pressure reading (provider MANUAL). */
+export function createMeasurement(token: string, measurement: ManualMeasurement): Promise<unknown> {
+  return apiRequest('/measurements', { method: 'POST', token, body: measurement });
+}

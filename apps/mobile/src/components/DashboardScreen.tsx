@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { ManualEntry } from '@/components/ManualEntry';
 import {
   loadDashboard,
   syncConnection,
@@ -159,6 +160,8 @@ export function DashboardScreen(props: { token: string; onSignOut: () => void })
                 theme={theme}
               />
             </View>
+
+            <ManualEntry token={token} onSaved={() => void load()} />
 
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Connections</Text>
             {data.connections.length === 0 && (

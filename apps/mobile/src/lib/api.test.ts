@@ -8,6 +8,7 @@ import {
   loadDashboard,
   login,
   syncConnection,
+  createMeasurement,
 } from './api';
 
 afterEach(() => {
@@ -165,5 +166,25 @@ describe('mobile endpoints', () => {
     expect(String(url)).toBe(`${DEFAULT_API_URL}/api/connections/c1/sync`);
     expect(init.method).toBe('POST');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+  });
+
+  it('posts a manual measurement', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 'm1' })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createMeasurement('tok', {
+      kind: 'BLOOD_PRESSURE',
+      systolicMmhg: 120,
+      diastolicMmhg: 80,
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(String(url)).toBe(`${DEFAULT_API_URL}/api/measurements`);
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({
+      kind: 'BLOOD_PRESSURE',
+      systolicMmhg: 120,
+      diastolicMmhg: 80,
+    });
   });
 });

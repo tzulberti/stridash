@@ -95,8 +95,8 @@ maintainability. Check the box when the fix (and its test) has landed.
 > providers → sync), dashboard quick-add for weigh-ins/body-fat and blood
 > pressure (`POST /api/measurements`, provider MANUAL), latest sync-log error
 > surfacing and a first mobile dashboard/login (secure token storage, cards,
-> recent activities, provider sync) landed. Mobile provider setup/manual entry
-> and the full redesign remain.
+> recent activities, provider sync, weigh-in/blood-pressure quick-add) landed.
+> Mobile provider setup and the full redesign remain.
 
 ---
 
