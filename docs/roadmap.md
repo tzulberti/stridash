@@ -171,7 +171,9 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       connection
 - [x] Manual entry UI — weight/body-fat and blood-pressure quick-add on the
       dashboard (`POST /api/measurements`, provider MANUAL)
-- [ ] Mobile (Expo) app UI — dashboards phone-sized
+- [ ] Mobile (Expo) app UI — dashboards phone-sized (login/register,
+      secure session, dashboard cards, recent activities, provider sync
+      landed; provider onboarding/manual entry/redesign remain)
 - [ ] General overview dashboard: one aggregated home view beyond today's
       stat cards — training load, steps/sleep/body-battery/weight trends,
       gear wear status, connection/sync health (2026-11 request)
@@ -183,6 +185,13 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       iGPSPORT has no per-ride edit signal (FIT re-download is the only
       option). Deletion detection (an activity removed at the provider) is
       still undetected for every provider.
+
+**Progress 2026-11-27:** the mobile Expo app now has login/register, secure
+token storage (`expo-secure-store`, localStorage on web), a phone-sized
+dashboard (latest weight/body fat/sleep/steps/resting HR, activity and
+connection counts), pull-to-refresh, recent activities, provider status and
+sync-now. Mobile provider onboarding/manual entry and the visual redesign
+remain.
 
 ## M6 — Extras ☐
 

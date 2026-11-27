@@ -93,9 +93,10 @@ maintainability. Check the box when the fix (and its test) has landed.
 >
 > **Status 2026-11-27 (M5):** web registration/onboarding (register → connect
 > providers → sync), dashboard quick-add for weigh-ins/body-fat and blood
-> pressure (`POST /api/measurements`, provider MANUAL), and latest
-> sync-log error surfacing on the connections page landed. Mobile UI and the
-> full redesign remain.
+> pressure (`POST /api/measurements`, provider MANUAL), latest sync-log error
+> surfacing and a first mobile dashboard/login (secure token storage, cards,
+> recent activities, provider sync) landed. Mobile provider setup/manual entry
+> and the full redesign remain.
 
 ---
 

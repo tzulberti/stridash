@@ -1,81 +1,60 @@
-/**
- * Stridash smoke screen (M1): verifies the app boots on all three platforms
- * and can reach the Stridash API. Replaced by the real dashboard in M5.
- */
-
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
-import { fetchHealth, getApiUrl } from '@/lib/api';
-import type { HealthResponse } from '@stridash/types';
-
-// Server targeting from env: EXPO_PUBLIC_API_URL=http://192.168.x.x:3000
-const API_URL = getApiUrl();
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { DashboardScreen } from '@/components/DashboardScreen';
+import { LoginScreen } from '@/components/LoginScreen';
+import { useTheme } from '@/hooks/use-theme';
+import { readTokens, saveTokens, clearTokens } from '@/lib/session';
+import type { AuthTokens } from '@/lib/api';
 
 export default function HomeScreen() {
-  const [state, setState] = useState<'checking' | 'up' | 'down'>('checking');
-  const [version, setVersion] = useState<string>('');
+  const theme = useTheme();
+  const [tokens, setTokens] = useState<AuthTokens | null | undefined>(undefined);
 
   useEffect(() => {
     let alive = true;
-    async function check(): Promise<void> {
-      try {
-        const body: HealthResponse = await fetchHealth(API_URL);
-        if (!alive) return;
-        setVersion(body.version);
-        setState('up');
-      } catch {
-        if (alive) setState('down');
-      }
-    }
-    void check();
+    readTokens()
+      .then((stored) => {
+        if (alive) setTokens(stored);
+      })
+      .catch(() => {
+        if (alive) setTokens(null);
+      });
     return () => {
       alive = false;
     };
   }, []);
 
-  return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title">Stridash</ThemedText>
-      <ThemedText>One dashboard for every stride.</ThemedText>
-
-      <View style={styles.statusRow}>
-        {state === 'checking' ? (
-          <ActivityIndicator size="small" />
-        ) : (
-          <ThemedText type="smallBold" style={state === 'up' ? styles.up : styles.down}>
-            {state === 'up' ? `● API up (v${version})` : '● API unreachable'}
-          </ThemedText>
-        )}
+  if (tokens === undefined) {
+    return (
+      <View style={[styles.center, { backgroundColor: theme.background }]}>
+        <ActivityIndicator color={theme.text} />
+        <Text style={{ color: theme.textSecondary }}>Opening Stridash…</Text>
       </View>
+    );
+  }
 
-      <ThemedText type="small" style={styles.hint}>
-        Server: {API_URL} — set EXPO_PUBLIC_API_URL to point at yours.
-      </ThemedText>
-    </ThemedView>
+  if (!tokens) {
+    return (
+      <LoginScreen
+        onTokens={(next) => {
+          setTokens(next);
+          void saveTokens(next);
+        }}
+      />
+    );
+  }
+
+  return (
+    <DashboardScreen
+      token={tokens.accessToken}
+      onSignOut={() => {
+        setTokens(null);
+        void clearTokens();
+      }}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.four,
-    gap: Spacing.one,
-  },
-  statusRow: {
-    minHeight: 28,
-    justifyContent: 'center',
-    marginTop: Spacing.three,
-  },
-  up: { color: '#2e7d32' },
-  down: { color: '#b02a2a' },
-  hint: {
-    textAlign: 'center',
-    marginTop: Spacing.two,
-  },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
 });
