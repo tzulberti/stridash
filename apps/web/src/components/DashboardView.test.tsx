@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { Activity, Measurement } from '@stridash/types';
-import { DashboardView, type DailyWellnessRow, type SleepRow } from './DashboardView';
+import {
+  DashboardView,
+  type DailyWellnessRow,
+  type GearSummary,
+  type SleepRow,
+} from './DashboardView';
+import type { ConnectionRow } from './ConnectionsSection';
 import { setLang } from '../lib/i18n/index';
 import { setLocale, setUnit } from '../lib/format';
 
@@ -109,6 +115,8 @@ const baseProps = {
   activitiesFeed: activities,
   openActivity: vi.fn(),
   loading: false,
+  connections: [] as ConnectionRow[],
+  gear: [] as GearSummary[],
 };
 
 function renderDashboard(over: Partial<typeof baseProps> = {}) {
@@ -208,6 +216,41 @@ describe('DashboardView', () => {
       target: { value: 'GARMIN' },
     });
     expect(baseProps.setFeedProv).toHaveBeenCalledWith('GARMIN');
+  });
+
+  it('shows training load, gear wear and connection health', () => {
+    const withLoad = [
+      { ...activities[0]!, id: 'a1', trainingLoad: 50, startTime: '2026-11-20T08:00:00.000Z' },
+      { ...activities[0]!, id: 'a2', trainingLoad: 70, startTime: '2026-11-21T08:00:00.000Z' },
+    ] as unknown as Activity[];
+    const gear: GearSummary[] = [
+      {
+        id: 'g1',
+        name: 'Race bike',
+        kind: 'BIKE',
+        thresholdM: 10_000,
+        retiredAt: null,
+        usage: { distanceM: 5_000, durationS: 3_600, count: 2 },
+      },
+    ];
+    const connections: ConnectionRow[] = [
+      {
+        id: 'c1',
+        provider: 'GARMIN',
+        providerUserId: 'rider',
+        status: 'ACTIVE',
+        lastSyncedAt: '2026-11-27T08:00:00.000Z',
+      },
+    ];
+    renderDashboard({ activitiesIn: withLoad, activitiesFeed: withLoad, gear, connections });
+
+    expect(screen.getByRole('heading', { name: 'Training load' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Gear' })).toBeTruthy();
+    expect(screen.getByText('Race bike')).toBeTruthy();
+    expect(screen.getByText(/limit 50%/)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Connections' })).toBeTruthy();
+    expect(screen.getAllByText('garmin').length).toBeGreaterThan(0);
+    expect(screen.getByText('active')).toBeTruthy();
   });
 
   it('shows errors and the loading state', () => {

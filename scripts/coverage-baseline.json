@@ -6,9 +6,9 @@
     "branches": 80.42
   },
   "web": {
-    "lines": 89.86,
-    "statements": 89.86,
+    "lines": 90,
+    "statements": 90,
     "functions": 75.1,
-    "branches": 80.96
+    "branches": 80.79
   }
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Activity, Measurement } from '@stridash/types';
 import { api } from '../lib/api';
 import type { ConnectionRow } from '../components/ConnectionsSection';
-import type { DailyWellnessRow, SleepRow } from '../components/DashboardView';
+import type { DailyWellnessRow, GearSummary, SleepRow } from '../components/DashboardView';
 
 /**
  * Loads everything the dashboard/connections pages need. Pagination is
@@ -18,6 +18,7 @@ export function useDashboardData(token: string | null, onUnauthorized: () => voi
   const [activities, setActivities] = useState<Activity[]>([]);
   const [sleep, setSleep] = useState<SleepRow[]>([]);
   const [wellness, setWellness] = useState<DailyWellnessRow[]>([]);
+  const [gear, setGear] = useState<GearSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -27,12 +28,14 @@ export function useDashboardData(token: string | null, onUnauthorized: () => voi
       setError(null);
       try {
         // measurements newest-first already; charts want oldest-first
-        const [conns, meas] = await Promise.all([
+        const [conns, meas, gearRes] = await Promise.all([
           api<{ items: ConnectionRow[] }>('/connections', { token: tok }),
           api<{ items: Measurement[] }>('/measurements', { token: tok, body: undefined }),
+          api<{ items: GearSummary[] }>('/gear', { token: tok }).catch(() => ({ items: [] })),
         ]);
         setConnections(conns.items);
         setMeasurements(meas.items);
+        setGear(gearRes.items ?? []);
 
         // activities paginate server-side (max 100/page, cursor) — pull all
         // pages so the feed and the stat card cover the full history
@@ -98,6 +101,7 @@ export function useDashboardData(token: string | null, onUnauthorized: () => voi
     activities,
     sleep,
     wellness,
+    gear,
     error,
     setError,
     loading,

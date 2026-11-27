@@ -74,8 +74,18 @@ export default function App() {
     clearTokens();
     setToken(null);
   }, []);
-  const { connections, measurements, activities, sleep, wellness, error, setError, loading, load } =
-    useDashboardData(token, onUnauthorized);
+  const {
+    connections,
+    measurements,
+    activities,
+    sleep,
+    wellness,
+    gear,
+    error,
+    setError,
+    loading,
+    load,
+  } = useDashboardData(token, onUnauthorized);
 
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
   // settings-owned preferences; the module-level formatter unit + locale are
@@ -616,6 +626,8 @@ export default function App() {
       activitiesFeed={activitiesFeed}
       openActivity={openActivity}
       loading={loading}
+      connections={connections}
+      gear={gear}
     />
   );
 }

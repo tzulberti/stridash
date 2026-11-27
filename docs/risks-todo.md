@@ -94,9 +94,10 @@ maintainability. Check the box when the fix (and its test) has landed.
 > **Status 2026-11-27 (M5):** web registration/onboarding (register → connect
 > providers → sync), dashboard quick-add for weigh-ins/body-fat and blood
 > pressure (`POST /api/measurements`, provider MANUAL), latest sync-log error
-> surfacing and the mobile app (secure token storage, dashboard cards, recent
-> activities, provider connect/MFA/Strava consent, sync and weigh-in/BP
-> quick-add) landed. The full visual redesign remains.
+> surfacing, a training-load/gear-wear/connection-health overview and the
+> mobile app (secure token storage, dashboard cards, recent activities,
+> provider connect/MFA/Strava consent, sync and weigh-in/BP quick-add) landed.
+> The full visual redesign remains.
 
 ---
 
@@ -881,8 +882,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 88.46% lines/statements, 91.91% functions, 80.42% branches; web 89.86%
-lines/statements, 75.1% functions, 80.96% branches (App.tsx is still the
+server 88.46% lines/statements, 91.91% functions, 80.42% branches; web 90%
+lines/statements, 75.1% functions, 80.79% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)

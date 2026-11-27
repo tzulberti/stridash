@@ -177,9 +177,9 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       secure session, dashboard cards, recent activities, provider
       connect/MFA/Strava consent, sync and quick-add landed; visual redesign
       remains)
-- [ ] General overview dashboard: one aggregated home view beyond today's
-      stat cards — training load, steps/sleep/body-battery/weight trends,
-      gear wear status, connection/sync health (2026-11 request)
+- [x] General overview dashboard: one aggregated home view beyond today's
+      stat cards — training-load trend, steps/sleep/body-battery/weight
+      trends, gear wear status and connection/sync health (2026-11 request)
 - [ ] UI redesign pass over the web app — layout, navigation, visual design,
       responsive on small screens (2026-11 request; scope to be defined)
 - [x] Edit detection beyond Garmin: Zwift's detail payload carries

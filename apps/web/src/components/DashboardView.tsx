@@ -1,11 +1,20 @@
 import type { ReactNode } from 'react';
 import type { Activity, Measurement } from '@stridash/types';
 import { t, type MsgKey } from '../lib/i18n/index';
-import { TYPE_EMOJI, fmtDate, fmtKm, fmtMin, fmtSpeed } from '../lib/format';
+import {
+  TYPE_EMOJI,
+  fmtDate,
+  fmtKm,
+  fmtMin,
+  fmtSpeed,
+  metersPerUnit,
+  unitLabel,
+} from '../lib/format';
 import { Card } from './Card';
 import { DatePicker } from './DatePicker';
 import { LineChart } from './LineChart';
 import { ManualEntry } from './ManualEntry';
+import type { ConnectionRow } from './ConnectionsSection';
 
 export interface SleepRow {
   dateKey: string;
@@ -50,6 +59,15 @@ export interface DailyWellnessRow {
   batteryMin: number | null;
   batteryMax: number | null;
   batteryLatest: number | null;
+}
+
+export interface GearSummary {
+  id: string;
+  name: string;
+  kind: string;
+  thresholdM: number | null;
+  retiredAt: string | null;
+  usage: { distanceM: number; durationS: number; count: number };
 }
 
 // ⟵ body-composition chart channel descriptors (labels are i18n KEYS —
@@ -161,6 +179,8 @@ export function DashboardView(props: {
   activitiesFeed: Activity[];
   openActivity: (id: string) => void;
   loading: boolean;
+  connections: ConnectionRow[];
+  gear: GearSummary[];
 }) {
   const {
     header,
@@ -197,6 +217,8 @@ export function DashboardView(props: {
     activitiesFeed,
     openActivity,
     loading,
+    connections,
+    gear,
   } = props;
 
   return (
@@ -278,6 +300,16 @@ export function DashboardView(props: {
       </div>
 
       <ManualEntry token={token} onSaved={onMeasurementSaved} />
+
+      <section>
+        <h2>{t('detail.trainingLoad')}</h2>
+        <LineChart
+          points={activitiesIn
+            .filter((a) => a.trainingLoad != null)
+            .map((a) => ({ x: new Date(a.startTime).getTime(), y: a.trainingLoad! }))}
+          color="#d29922"
+        />
+      </section>
 
       <section>
         <h2>{t('dash.bodyComp')}</h2>
@@ -374,6 +406,51 @@ export function DashboardView(props: {
           unit={DAILY_METRIC[dailyMetric].unit}
           label={t(DAILY_METRIC[dailyMetric].label)}
         />
+      </section>
+
+      <section>
+        <h2>{t('gear.heading')}</h2>
+        {gear.length === 0 ? (
+          <p className="muted">{t('gear.none')}</p>
+        ) : (
+          gear.map((g) => {
+            const pct =
+              g.thresholdM && g.thresholdM > 0
+                ? Math.round((g.usage.distanceM / g.thresholdM) * 100)
+                : null;
+            return (
+              <div key={g.id} className={`card gear-card ${g.retiredAt ? 'revoked' : ''}`}>
+                <strong>{g.name}</strong> <span className="pill">{g.kind.toLowerCase()}</span>
+                <p className="muted">
+                  {Math.round(g.usage.distanceM / metersPerUnit()).toLocaleString()} {unitLabel()}
+                  {pct !== null ? ` · ${t('gear.limit', { value: `${pct}%` })}` : ''}
+                  {g.retiredAt ? ` · ${t('gear.retired')}` : ''}
+                </p>
+              </div>
+            );
+          })
+        )}
+      </section>
+
+      <section>
+        <h2>{t('conn.heading')}</h2>
+        {connections.length === 0 ? (
+          <p className="muted">{t('conn.noLinks')}</p>
+        ) : (
+          connections.map((c) => (
+            <div key={c.id} className={`conn-card ${c.status.toLowerCase()}`}>
+              <div className="conn-head">
+                <span className="conn-provider">{c.provider.toLowerCase()}</span>
+                <span className="conn-status">{c.status.toLowerCase()}</span>
+              </div>
+              <div className="conn-sub">
+                {t('conn.lastSync', {
+                  date: c.lastSyncedAt ? fmtDate(c.lastSyncedAt) : t('conn.never'),
+                })}
+              </div>
+            </div>
+          ))
+        )}
       </section>
 
       <section>
