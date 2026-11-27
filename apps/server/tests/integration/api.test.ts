@@ -46,6 +46,9 @@ const env: Env = {
   STRIDASH_LOGIN_RATE_LIMIT: 1000,
   STRIDASH_CONNECTION_RATE_LIMIT: 1000,
   STRIDASH_CONNECTION_RATE_WINDOW_MS: 60_000,
+  STRIDASH_SYNC_RATE_LIMIT: 1000,
+  STRIDASH_SYNC_RATE_WINDOW_MS: 60_000,
+  STRIDASH_MAX_API_TOKENS: 20,
   STRIDASH_TRUST_PROXY: false,
 };
 const app = createApp(env);
@@ -2040,6 +2043,22 @@ describe('account export + delete', () => {
         })
       ).status,
     ).toBe(401);
+  });
+
+  it('caps live API tokens per user', async () => {
+    const limited = createApp({ ...env, STRIDASH_MAX_API_TOKENS: 1 });
+    const first = await limited.request('/api/tokens', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify({ name: 'limit-1' }),
+    });
+    expect(first.status).toBe(201);
+    const second = await limited.request('/api/tokens', {
+      method: 'POST',
+      ...authed(aliceToken, { method: 'POST' }),
+      body: JSON.stringify({ name: 'limit-2' }),
+    });
+    expect(second.status).toBe(409);
   });
 
   it('streams CSV exports with RFC escaping and validates the type', async () => {

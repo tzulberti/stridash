@@ -324,6 +324,20 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     if (!body.success) {
       return c.json({ error: 'Invalid request', detail: body.error.flatten().fieldErrors }, 400);
     }
+    const active = await prisma.apiToken.count({
+      where: {
+        userId: c.get('userId'),
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+    });
+    if (active >= env.STRIDASH_MAX_API_TOKENS) {
+      return c.json(
+        {
+          error: `API token limit reached (${env.STRIDASH_MAX_API_TOKENS}) — revoke an old token first`,
+        },
+        409,
+      );
+    }
     const expiresAt = body.data.expiresInDays
       ? new Date(Date.now() + body.data.expiresInDays * 86_400_000)
       : null;

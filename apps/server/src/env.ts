@@ -95,6 +95,15 @@ const envSchema = z
       .int()
       .positive()
       .default(15 * 60 * 1000),
+    /** Manual sync triggers per user within one window (default 30/15 min). */
+    STRIDASH_SYNC_RATE_LIMIT: z.coerce.number().int().positive().default(30),
+    STRIDASH_SYNC_RATE_WINDOW_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(15 * 60 * 1000),
+    /** Maximum live long-lived API tokens per user (default 20). */
+    STRIDASH_MAX_API_TOKENS: z.coerce.number().int().positive().default(20),
     /**
      * Background sync interval for active connections. Connections whose
      * `lastSyncedAt` is older than this are queued automatically; `0` disables

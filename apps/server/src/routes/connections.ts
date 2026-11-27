@@ -87,6 +87,10 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
     env.STRIDASH_CONNECTION_RATE_LIMIT,
     env.STRIDASH_CONNECTION_RATE_WINDOW_MS,
   );
+  const syncLimiter = new FixedWindowLimiter(
+    env.STRIDASH_SYNC_RATE_LIMIT,
+    env.STRIDASH_SYNC_RATE_WINDOW_MS,
+  );
   routes.use('/', async (c, next) => {
     if (c.req.method !== 'POST') return next();
     const result = createLimiter.consume(`connection:create:${c.get('userId')}`);
@@ -642,6 +646,12 @@ export function connectionRoutes(env: Env): Hono<{ Variables: { userId: string }
         { error: 'Connection is not active — reconnect the account', status: connection.status },
         409,
       );
+    }
+
+    const rate = syncLimiter.consume(`connection-sync:${c.get('userId')}`);
+    if (!rate.allowed) {
+      c.header('Retry-After', String(rate.retryAfterS));
+      return c.json({ error: 'Too many sync requests — try again later' }, 429);
     }
 
     // Atomic per-connection claim: concurrent syncs would race token rotation

@@ -119,6 +119,9 @@ const env = {
   STRIDASH_JWT_SECRET: 'y'.repeat(32),
   STRIDASH_CONNECTION_RATE_LIMIT: 1_000,
   STRIDASH_CONNECTION_RATE_WINDOW_MS: 60_000,
+  STRIDASH_SYNC_RATE_LIMIT: 1_000,
+  STRIDASH_SYNC_RATE_WINDOW_MS: 60_000,
+  STRIDASH_MAX_API_TOKENS: 20,
 } as unknown as Env;
 
 const app = new Hono();
@@ -744,6 +747,38 @@ describe('POST /connections/:id/sync and history', () => {
 
     expect(res.status).toBe(409);
     expect(queue.release).toHaveBeenCalledWith(id, expect.any(Date));
+  });
+
+  it('throttles manual sync triggers per user', async () => {
+    const id = randomUUID();
+    const active = {
+      id,
+      userId: 'user-1',
+      provider: 'IGPSPORT',
+      status: 'ACTIVE',
+    };
+    prisma.connection.findFirst.mockResolvedValueOnce(active).mockResolvedValueOnce(active);
+    const limited = new Hono();
+    limited.route(
+      '/connections',
+      connectionRoutes({
+        ...env,
+        STRIDASH_SYNC_RATE_LIMIT: 1,
+        STRIDASH_SYNC_RATE_WINDOW_MS: 60_000,
+      } as Env),
+    );
+    const request = () =>
+      limited.request(`/connections/${id}/sync`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+
+    expect((await request()).status).toBe(202);
+    const second = await request();
+    expect(second.status).toBe(429);
+    expect(second.headers.get('retry-after')).toBeTruthy();
+    expect(queue.enqueue).toHaveBeenCalledTimes(1);
   });
 
   it('exposes PARTIAL history rows and stale-lock state', async () => {
