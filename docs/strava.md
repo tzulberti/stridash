@@ -16,6 +16,9 @@ Strava, so one Strava account can surface activities recorded on either.
    STRIDASH_STRAVA_CLIENT_SECRET=...
    # optional; defaults to $STRIDASH_PUBLIC_URL/api/strava/callback
    STRIDASH_STRAVA_REDIRECT_URI=https://stridash.example.com/api/strava/callback
+   # webhook callback + verification token
+   STRIDASH_STRAVA_WEBHOOK_URL=https://stridash.example.com/api/strava/webhook
+   STRIDASH_STRAVA_WEBHOOK_VERIFY_TOKEN=change-me-random
    STRIDASH_STRAVA_BACKFILL_DAYS=365
    ```
 
@@ -45,16 +48,27 @@ the database.
 Strava can push activity create/update events instead of waiting for the
 interval scheduler:
 
-1. Set `STRIDASH_STRAVA_WEBHOOK_VERIFY_TOKEN` to a random string.
-2. Create the subscription with the Strava API app credentials:
+1. Set `STRIDASH_STRAVA_WEBHOOK_URL` and a random
+   `STRIDASH_STRAVA_WEBHOOK_VERIFY_TOKEN`.
+2. Create the subscription with the helper script:
+
+   ```bash
+   npm run strava:webhook -w @stridash/server -- create
+   npm run strava:webhook -w @stridash/server -- list
+   ```
+
+   The equivalent raw request is:
 
    ```bash
    curl -X POST https://www.strava.com/api/v3/push_subscriptions \
      -F client_id="$STRIDASH_STRAVA_CLIENT_ID" \
      -F client_secret="$STRIDASH_STRAVA_CLIENT_SECRET" \
-     -F callback_url="https://stridash.example.com/api/strava/webhook" \
+     -F callback_url="$STRIDASH_STRAVA_WEBHOOK_URL" \
      -F verify_token="$STRIDASH_STRAVA_WEBHOOK_VERIFY_TOKEN"
    ```
+
+   Remove it with
+   `npm run strava:webhook -w @stridash/server -- delete <id>`.
 
 3. Strava immediately calls `GET /api/strava/webhook` with
    `hub.mode=subscribe&hub.verify_token=…&hub.challenge=…`; Stridash echoes the

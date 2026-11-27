@@ -228,8 +228,10 @@ active state, focus/hover system, wider content column).
       fetch wrappers
 - [x] Strava activity webhooks — subscription verification + create/update
       events claim/queue the normal sync worker (`docs/strava.md`)
-- [ ] Near-real-time polling/webhooks for providers without push events
-      (Garmin/Zwift/iGPSPORT/Omron)
+- [x] Near-real-time sync — Strava activity webhooks plus the configurable
+      interval scheduler for providers without a push API
+      (`STRIDASH_SYNC_INTERVAL_MS`, default 15 min; set it lower for tighter
+      polling at the provider rate-limit risk)
 - [x] Write `docs/provider-tos-risk.md` — the per-provider terms-of-service
       risk profile audited 2026-11: **Zwift** §5.a explicitly prohibits
       unofficial API clients (reverse engineering, scraping, "applications
