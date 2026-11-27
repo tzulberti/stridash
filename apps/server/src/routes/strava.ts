@@ -19,6 +19,8 @@ import {
   type StravaOAuthConfig,
 } from '../providers/strava/client.js';
 import { upsertStableConnection } from '../services/connection-identity.js';
+import { enqueueConnectionSync, releaseSyncLock, SYNC_STALE_MS } from '../services/sync-queue.js';
+import { FixedWindowLimiter } from '../rate-limit.js';
 import { safeErrorForLog } from '../redact.js';
 import type { Env } from '../env.js';
 
@@ -86,6 +88,63 @@ const connectionSelect = {
 
 export function stravaRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   const routes = new Hono<{ Variables: { userId: string } }>();
+  const webhookLimiter = new FixedWindowLimiter(30, 60_000);
+
+  routes.get('/webhook', (c) => {
+    const expected = env.STRIDASH_STRAVA_WEBHOOK_VERIFY_TOKEN;
+    if (!expected) return c.json({ error: 'Strava webhook is not configured' }, 503);
+    const mode = c.req.query('hub.mode');
+    const token = c.req.query('hub.verify_token');
+    const challenge = c.req.query('hub.challenge');
+    if (mode !== 'subscribe' || token !== expected || !challenge) {
+      return c.json({ error: 'Invalid webhook verification' }, 403);
+    }
+    return c.json({ 'hub.challenge': challenge });
+  });
+
+  routes.post('/webhook', async (c) => {
+    const body = (await c.req.json().catch(() => null)) as {
+      object_type?: string;
+      aspect_type?: string;
+      object_id?: number | string;
+      owner_id?: number | string;
+    } | null;
+    if (!body) return c.json({ error: 'Invalid body' }, 400);
+    // Strava retries non-2xx; acknowledge event types we deliberately ignore.
+    if (body.object_type !== 'activity' || body.owner_id == null) return c.json({ ok: true });
+    if (body.aspect_type === 'delete') return c.json({ ok: true });
+
+    const ownerId = String(body.owner_id);
+    const perOwner = webhookLimiter.consume(`strava-webhook:${ownerId}`);
+    if (!perOwner.allowed) {
+      c.header('Retry-After', String(perOwner.retryAfterS));
+      return c.json({ error: 'Too many webhook events — try again later' }, 429);
+    }
+
+    const connections = await prisma.connection.findMany({
+      where: { provider: 'STRAVA', providerUserId: ownerId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    for (const connection of connections) {
+      const claimedAt = new Date();
+      const claim = await prisma.connection.updateMany({
+        where: {
+          id: connection.id,
+          status: 'ACTIVE',
+          OR: [
+            { syncStartedAt: null },
+            { syncStartedAt: { lt: new Date(claimedAt.getTime() - SYNC_STALE_MS) } },
+          ],
+        },
+        data: { syncStartedAt: claimedAt },
+      });
+      if (claim.count === 0) continue;
+      if (!enqueueConnectionSync(env, { connectionId: connection.id, claimedAt })) {
+        await releaseSyncLock(connection.id, claimedAt);
+      }
+    }
+    return c.json({ ok: true });
+  });
 
   routes.get('/authorize', async (c) => {
     let userId: string;

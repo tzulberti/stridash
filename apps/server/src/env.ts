@@ -117,6 +117,8 @@ const envSchema = z
      * Defaults to `${STRIDASH_PUBLIC_URL}/api/strava/callback` at request time.
      */
     STRIDASH_STRAVA_REDIRECT_URI: z.string().url().optional(),
+    /** Strava push-subscription verification token (GET /api/strava/webhook). */
+    STRIDASH_STRAVA_WEBHOOK_VERIFY_TOKEN: z.string().min(1).optional(),
     /** First-sync history window; later syncs use the lastSyncedAt watermark. */
     STRIDASH_STRAVA_BACKFILL_DAYS: z.coerce.number().int().positive().default(365),
     /** First weight/blood-pressure backfill window for Garmin health. */

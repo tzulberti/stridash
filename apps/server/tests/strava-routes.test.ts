@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 
-const { prisma, auth, identity, exchange, client } = vi.hoisted(() => ({
-  prisma: { connection: { updateMany: vi.fn() } },
+const { prisma, auth, identity, exchange, client, queue } = vi.hoisted(() => ({
+  prisma: { connection: { updateMany: vi.fn(), findMany: vi.fn() } },
   auth: { requireUserId: vi.fn() },
   identity: { upsert: vi.fn() },
   exchange: vi.fn(),
   client: { authorizeUrl: vi.fn() },
+  queue: { enqueue: vi.fn(), release: vi.fn() },
 }));
 
 vi.mock('../src/db.js', () => ({ prisma }));
@@ -16,6 +17,11 @@ vi.mock('../src/crypto.js', () => ({
 }));
 vi.mock('../src/services/connection-identity.js', () => ({
   upsertStableConnection: identity.upsert,
+}));
+vi.mock('../src/services/sync-queue.js', () => ({
+  enqueueConnectionSync: queue.enqueue,
+  releaseSyncLock: queue.release,
+  SYNC_STALE_MS: 15 * 60 * 1000,
 }));
 vi.mock('../src/auth.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/auth.js')>();
@@ -42,6 +48,7 @@ const env = {
   STRIDASH_STRAVA_CLIENT_ID: 'client-1',
   STRIDASH_STRAVA_CLIENT_SECRET: 'secret-1',
   STRIDASH_PUBLIC_URL: 'https://stridash.example',
+  STRIDASH_STRAVA_WEBHOOK_VERIFY_TOKEN: 'hook-token',
 } as unknown as Env;
 
 const app = new Hono();
@@ -57,6 +64,12 @@ const tokens = {
 
 beforeEach(() => {
   prisma.connection.updateMany.mockReset();
+  prisma.connection.findMany.mockReset();
+  prisma.connection.findMany.mockResolvedValue([]);
+  queue.enqueue.mockReset();
+  queue.release.mockReset();
+  queue.enqueue.mockReturnValue(true);
+  queue.release.mockResolvedValue(undefined);
   auth.requireUserId.mockReset();
   auth.requireUserId.mockResolvedValue('user-1');
   identity.upsert.mockReset();
@@ -174,5 +187,81 @@ describe('GET /strava/callback', () => {
       'https://stridash.example/connections?strava=error',
     );
     errorLog.mockRestore();
+  });
+});
+
+describe('Strava webhook', () => {
+  it('answers the subscription challenge only with the configured token', async () => {
+    const ok = await app.request(
+      '/strava/webhook?hub.mode=subscribe&hub.verify_token=hook-token&hub.challenge=abc',
+    );
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ 'hub.challenge': 'abc' });
+
+    const bad = await app.request(
+      '/strava/webhook?hub.mode=subscribe&hub.verify_token=nope&hub.challenge=abc',
+    );
+    expect(bad.status).toBe(403);
+  });
+
+  it('claims and queues an active connection for activity create/update', async () => {
+    prisma.connection.findMany.mockResolvedValueOnce([{ id: 'c1' }]);
+    prisma.connection.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    const res = await app.request('/strava/webhook', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        object_type: 'activity',
+        aspect_type: 'create',
+        object_id: 123,
+        owner_id: 42,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(prisma.connection.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { provider: 'STRAVA', providerUserId: '42', status: 'ACTIVE' },
+      }),
+    );
+    expect(queue.enqueue).toHaveBeenCalledWith(
+      env,
+      expect.objectContaining({ connectionId: 'c1', claimedAt: expect.any(Date) }),
+    );
+  });
+
+  it('ignores deletes/unknown owners and releases a rejected claim', async () => {
+    await app.request('/strava/webhook', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ object_type: 'activity', aspect_type: 'delete', owner_id: 42 }),
+    });
+    expect(prisma.connection.findMany).not.toHaveBeenCalled();
+
+    const noOwner = await app.request('/strava/webhook', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ object_type: 'activity', aspect_type: 'create' }),
+    });
+    expect(noOwner.status).toBe(200);
+
+    prisma.connection.findMany.mockResolvedValueOnce([{ id: 'c1' }, { id: 'c2' }]);
+    prisma.connection.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+    queue.enqueue.mockReturnValueOnce(false);
+    const res = await app.request('/strava/webhook', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        object_type: 'activity',
+        aspect_type: 'update',
+        owner_id: 42,
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(queue.enqueue).toHaveBeenCalledTimes(1);
+    expect(queue.release).toHaveBeenCalledWith('c2', expect.any(Date));
   });
 });

@@ -40,6 +40,34 @@ The OAuth `state` is a 10-minute HS256 JWT containing the Stridash user id; the
 callback verifies it before exchanging any code. No pending state is stored in
 the database.
 
+## Webhooks (near-real-time sync)
+
+Strava can push activity create/update events instead of waiting for the
+interval scheduler:
+
+1. Set `STRIDASH_STRAVA_WEBHOOK_VERIFY_TOKEN` to a random string.
+2. Create the subscription with the Strava API app credentials:
+
+   ```bash
+   curl -X POST https://www.strava.com/api/v3/push_subscriptions \
+     -F client_id="$STRIDASH_STRAVA_CLIENT_ID" \
+     -F client_secret="$STRIDASH_STRAVA_CLIENT_SECRET" \
+     -F callback_url="https://stridash.example.com/api/strava/webhook" \
+     -F verify_token="$STRIDASH_STRAVA_WEBHOOK_VERIFY_TOKEN"
+   ```
+
+3. Strava immediately calls `GET /api/strava/webhook` with
+   `hub.mode=subscribe&hub.verify_token=…&hub.challenge=…`; Stridash echoes the
+   challenge only when the token matches.
+
+`POST /api/strava/webhook` accepts `activity` create/update events, finds the
+active STRAVA connection by `owner_id`, atomically claims it and queues the
+normal sync worker. Deletes are acknowledged but not applied (deletion
+detection is still roadmap work). Each owner is capped at 30 events/minute.
+Strava does not sign webhook POSTs, so the endpoint only trusts the
+`owner_id` → active-connection lookup; the actual data still comes from the
+authenticated Strava API.
+
 ## Sync behaviour
 
 - **Watermark:** the first run asks Strava for activities after

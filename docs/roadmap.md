@@ -222,7 +222,10 @@ phone breakpoints); the larger visual-design pass remains.
       generated with `npm run openapi:client`, exported from
       `@stridash/types` for web/mobile/MCP; runtime calls stay as thin
       fetch wrappers
-- [ ] Garadget-style webhooks/poll for near-real-time sync where APIs allow
+- [x] Strava activity webhooks — subscription verification + create/update
+      events claim/queue the normal sync worker (`docs/strava.md`)
+- [ ] Near-real-time polling/webhooks for providers without push events
+      (Garmin/Zwift/iGPSPORT/Omron)
 - [x] Write `docs/provider-tos-risk.md` — the per-provider terms-of-service
       risk profile audited 2026-11: **Zwift** §5.a explicitly prohibits
       unofficial API clients (reverse engineering, scraping, "applications

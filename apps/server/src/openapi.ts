@@ -322,6 +322,28 @@ export function openapiDocument(version = '0.1.0') {
         },
       },
 
+      '/api/strava/webhook': {
+        get: {
+          tags: ['strava'],
+          summary: 'Strava push-subscription verification challenge',
+          parameters: [
+            { name: 'hub.mode', in: 'query', schema: { type: 'string' } },
+            { name: 'hub.verify_token', in: 'query', schema: { type: 'string' } },
+            { name: 'hub.challenge', in: 'query', schema: { type: 'string' } },
+          ],
+          responses: { '200': jsonResponse(object), '403': errorResponse, '503': errorResponse },
+        },
+        post: {
+          tags: ['strava'],
+          summary: 'Strava activity create/update event',
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: object } },
+          },
+          responses: { '200': jsonResponse(object), '429': errorResponse },
+        },
+      },
+
       '/api/connections': {
         get: {
           tags: ['connections'],
