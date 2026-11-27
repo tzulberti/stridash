@@ -104,8 +104,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > activities/measurements/sleep/wellness downloads from Settings. The
 > per-provider terms risk profile is documented in
 > `docs/provider-tos-risk.md`. An OpenAPI 3.1 spec is served at
-> `/api/openapi.json` and generated into `docs/openapi.json`; the typed client,
-> BLE, push and webhooks remain.
+> `/api/openapi.json`, generated into `docs/openapi.json`, and the generated
+> path/component types live in `packages/types/src/openapi.ts`; BLE, push and
+> webhooks remain.
 
 ---
 

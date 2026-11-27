@@ -30,6 +30,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/coverage/**',
       'apps/server/src/generated/**',
+      'packages/types/src/openapi.ts',
       'apps/mobile/**',
     ],
   },

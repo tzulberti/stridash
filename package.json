@@ -20,6 +20,7 @@
     "coverage:gate": "node scripts/coverage-gate.mjs",
     "coverage:update": "node scripts/coverage-gate.mjs --update",
     "audit:ci": "node scripts/audit-gate.mjs",
+    "openapi:client": "openapi-typescript docs/openapi.json -o packages/types/src/openapi.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev:server": "npm run dev -w @stridash/server",
@@ -35,6 +36,7 @@
     "@vitest/coverage-v8": "^3.2.7",
     "eslint": "^9.18.0",
     "globals": "^17.14.0",
+    "openapi-typescript": "^7.13.0",
     "prettier": "^3.4.2",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.73.0"

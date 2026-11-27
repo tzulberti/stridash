@@ -431,3 +431,6 @@ export type PaginatedResponse<T> = {
   items: T[];
   nextCursor: string | null;
 };
+
+/** Generated OpenAPI 3.1 path/component types (see docs/openapi.json). */
+export type * from './openapi.js';
