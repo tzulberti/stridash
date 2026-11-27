@@ -300,4 +300,7 @@ export const ja: Record<MsgKey, string> = {
   'auth.haveAccount': 'アカウントをお持ちですか？サインイン',
   'auth.needAccount': 'アカウントが必要ですか？作成',
   'conn.lastSyncIssue': '前回の同期 {status} — 取得 {pulled}、失敗 {failed}',
+  'settings.csvActivities': 'アクティビティCSVをダウンロード',
+  'settings.csvMeasurements': '測定CSVをダウンロード',
+  'settings.csvDesc': '表計算ソフト用エクスポート',
 };

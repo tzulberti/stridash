@@ -300,4 +300,7 @@ export const ko: Record<MsgKey, string> = {
   'auth.haveAccount': '이미 계정이 있나요? 로그인',
   'auth.needAccount': '계정이 필요하신가요? 만들기',
   'conn.lastSyncIssue': '마지막 동기화 {status} — {pulled}개 가져옴, {failed}개 실패',
+  'settings.csvActivities': '활동 CSV 다운로드',
+  'settings.csvMeasurements': '측정 CSV 다운로드',
+  'settings.csvDesc': '스프레드시트용 내보내기',
 };

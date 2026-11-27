@@ -300,4 +300,7 @@ export const es: Record<MsgKey, string> = {
   'auth.haveAccount': '¿Ya tienes una cuenta? Inicia sesión',
   'auth.needAccount': '¿Necesitas una cuenta? Crea una',
   'conn.lastSyncIssue': 'última sincronización {status} — {pulled} obtenidos, {failed} fallidos',
+  'settings.csvActivities': 'Descargar actividades CSV',
+  'settings.csvMeasurements': 'Descargar mediciones CSV',
+  'settings.csvDesc': 'Exportaciones para hojas de cálculo',
 };

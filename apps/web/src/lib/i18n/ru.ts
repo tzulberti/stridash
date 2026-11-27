@@ -299,4 +299,7 @@ export const ru: Record<MsgKey, string> = {
   'auth.haveAccount': 'Уже есть аккаунт? Войти',
   'auth.needAccount': 'Нужен аккаунт? Создайте',
   'conn.lastSyncIssue': 'последняя синхронизация {status} — {pulled} получено, {failed} ошибок',
+  'settings.csvActivities': 'Скачать активности CSV',
+  'settings.csvMeasurements': 'Скачать измерения CSV',
+  'settings.csvDesc': 'Экспорт для таблиц',
 };

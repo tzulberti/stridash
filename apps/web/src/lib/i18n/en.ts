@@ -316,6 +316,9 @@ export const en = {
   'auth.haveAccount': 'Already have an account? Sign in',
   'auth.needAccount': 'Need an account? Create one',
   'conn.lastSyncIssue': 'last sync {status} — {pulled} pulled, {failed} failed',
+  'settings.csvActivities': 'Download activities CSV',
+  'settings.csvMeasurements': 'Download measurements CSV',
+  'settings.csvDesc': 'Spreadsheet-ready exports',
 } as const;
 
 export type MsgKey = keyof typeof en;

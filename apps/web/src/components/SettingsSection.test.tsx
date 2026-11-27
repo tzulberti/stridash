@@ -136,6 +136,34 @@ describe('SettingsSection', () => {
     expect(click).toHaveBeenCalled();
   });
 
+  it('downloads activities CSV with the CSV endpoint', async () => {
+    const blob = new Blob(['id,startTime\r\n'], { type: 'text/csv' });
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(blob, {
+          status: 200,
+          headers: { 'Content-Disposition': 'attachment; filename="stridash-activities.csv"' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const createObjectURL = vi.fn(() => 'blob:csv');
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    renderSettings();
+    await screen.findByText('alice@example.com');
+    fireEvent.click(screen.getByRole('button', { name: 'Download activities CSV' }));
+
+    expect(await screen.findByText('Export downloaded.')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith('/api/export/csv?type=activities', {
+      headers: { Authorization: 'Bearer tok' },
+    });
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:csv');
+    expect(click).toHaveBeenCalled();
+  });
+
   it('surfaces an export failure', async () => {
     vi.stubGlobal(
       'fetch',

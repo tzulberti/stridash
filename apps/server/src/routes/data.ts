@@ -6,6 +6,7 @@ import { requireUserId } from '../auth.js';
 import type { Env } from '../env.js';
 import { safeErrorForLog } from '../redact.js';
 import { exportFilename, exportWebStream } from '../services/account-export.js';
+import { CSV_KINDS, csvFilename, csvWebStream, type CsvKind } from '../services/csv-export.js';
 import { resyncGarminActivity } from '../services/garmin-sync.js';
 import { resyncIgpSportActivity } from '../services/igpsport-sync.js';
 import { resyncZwiftActivity } from '../services/zwift-sync.js';
@@ -240,6 +241,23 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
   });
 
   // ─── Account data: full export + hard delete ───────────────────────────────
+
+  /** CSV exports (activities / measurements / sleep / wellness) — streaming,
+   * one flat table per request so it opens directly in a spreadsheet. */
+  routes.get('/export/csv', (c) => {
+    const kind = c.req.query('type') as CsvKind | undefined;
+    if (!kind || !CSV_KINDS.includes(kind)) {
+      return c.json({ error: `type must be one of: ${CSV_KINDS.join(', ')}` }, 400);
+    }
+    return new Response(csvWebStream(c.get('userId'), kind), {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${csvFilename(kind)}"`,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  });
 
   /** Full JSON dump of everything this user's account holds ("raw payload is
    * the authority" — activities carry their raw/detail payloads as-received).

@@ -1957,6 +1957,36 @@ describe('account export + delete', () => {
     expect(measurements.some((m) => m.notes === 'export-page-204')).toBe(true);
   });
 
+  it('streams CSV exports with RFC escaping and validates the type', async () => {
+    const created = await app.request('/api/measurements', {
+      method: 'POST',
+      ...authed(token, { method: 'POST' }),
+      body: JSON.stringify({
+        kind: 'WEIGH_IN',
+        measuredAt: '2040-02-01T07:00:00.000Z',
+        weightKg: 81.2,
+        notes: 'a, "quoted" note',
+      }),
+    });
+    expect(created.status).toBe(201);
+
+    const csv = await app.request('/api/export/csv?type=measurements', authed(token));
+    expect(csv.status).toBe(200);
+    expect(csv.headers.get('content-type')).toContain('text/csv');
+    expect(csv.headers.get('content-disposition')).toContain('stridash-measurements-');
+    const text = await csv.text();
+    expect(text.split('\r\n')[0]).toContain('measuredAt,provider,kind');
+    expect(text).toContain('81.2');
+    expect(text).toContain('"a, ""quoted"" note"');
+
+    const activities = await app.request('/api/export/csv?type=activities', authed(token));
+    expect(activities.status).toBe(200);
+    expect((await activities.text()).split('\r\n')[0]).toContain('startTime,headline,type');
+
+    expect((await app.request('/api/export/csv?type=nope', authed(token))).status).toBe(400);
+    expect((await app.request('/api/export/csv', authed(token))).status).toBe(400);
+  });
+
   it('hard-deletes the account and cascades everything; the token dies after', async () => {
     const res = await app.request('/api/me', authed(token, { method: 'DELETE' }));
     expect(res.status).toBe(200);

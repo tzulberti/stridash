@@ -302,4 +302,7 @@ export const nl: Record<MsgKey, string> = {
   'auth.haveAccount': 'Heb je al een account? Inloggen',
   'auth.needAccount': 'Nog geen account? Aanmaken',
   'conn.lastSyncIssue': 'laatste sync {status} — {pulled} opgehaald, {failed} mislukt',
+  'settings.csvActivities': 'Activiteiten-CSV downloaden',
+  'settings.csvMeasurements': 'Metingen-CSV downloaden',
+  'settings.csvDesc': 'Exports voor spreadsheets',
 };

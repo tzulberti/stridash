@@ -301,4 +301,7 @@ export const fr: Record<MsgKey, string> = {
   'auth.haveAccount': 'Déjà inscrit ? Se connecter',
   'auth.needAccount': 'Pas encore de compte ? En créer un',
   'conn.lastSyncIssue': 'dernière synchro {status} — {pulled} récupérés, {failed} échoués',
+  'settings.csvActivities': 'Télécharger les activités CSV',
+  'settings.csvMeasurements': 'Télécharger les mesures CSV',
+  'settings.csvDesc': 'Exports prêts pour tableur',
 };

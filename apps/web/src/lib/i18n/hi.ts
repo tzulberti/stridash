@@ -299,4 +299,7 @@ export const hi: Record<MsgKey, string> = {
   'auth.haveAccount': 'पहले से खाता है? साइन इन करें',
   'auth.needAccount': 'खाता चाहिए? बनाएं',
   'conn.lastSyncIssue': 'पिछला सिंक {status} — {pulled} प्राप्त, {failed} विफल',
+  'settings.csvActivities': 'गतिविधियाँ CSV डाउनलोड करें',
+  'settings.csvMeasurements': 'माप CSV डाउनलोड करें',
+  'settings.csvDesc': 'स्प्रेडशीट एक्सपोर्ट',
 };

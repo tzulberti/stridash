@@ -302,4 +302,7 @@ export const de: Record<MsgKey, string> = {
   'auth.haveAccount': 'Bereits ein Konto? Anmelden',
   'auth.needAccount': 'Noch kein Konto? Erstellen',
   'conn.lastSyncIssue': 'letzter Sync {status} — {pulled} geladen, {failed} fehlgeschlagen',
+  'settings.csvActivities': 'Aktivitäten als CSV',
+  'settings.csvMeasurements': 'Messungen als CSV',
+  'settings.csvDesc': 'Tabellenfertige Exporte',
 };

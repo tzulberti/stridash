@@ -115,6 +115,31 @@ export function SettingsSection(props: {
     }
   }
 
+  async function exportCsv(kind: 'activities' | 'measurements'): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/export/csv?type=${kind}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`CSV export failed (HTTP ${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download =
+        res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] ??
+        `stridash-${kind}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setNote(t('settings.exported'));
+    } catch (err) {
+      setError(String(err).replace(/^Error: /, ''));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteAccount(): Promise<void> {
     setBusy(true);
     setError(null);
@@ -240,6 +265,25 @@ export function SettingsSection(props: {
         <button type="button" className="btn" disabled={busy} onClick={() => void exportData()}>
           {busy ? t('settings.preparing') : t('settings.download')}
         </button>
+        <p className="muted">{t('settings.csvDesc')}</p>
+        <div className="setting-row">
+          <button
+            type="button"
+            className="btn ghost small"
+            disabled={busy}
+            onClick={() => void exportCsv('activities')}
+          >
+            {t('settings.csvActivities')}
+          </button>
+          <button
+            type="button"
+            className="btn ghost small"
+            disabled={busy}
+            onClick={() => void exportCsv('measurements')}
+          >
+            {t('settings.csvMeasurements')}
+          </button>
+        </div>
       </article>
 
       <article className="card settings-card danger-zone">

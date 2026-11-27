@@ -202,7 +202,9 @@ sync-now and weigh-in/blood-pressure quick-add. The visual redesign remains.
       mobile dashboard quick-add (`POST /api/measurements`, provider MANUAL)
 - [x] Full JSON account export — streamed, includes per-sample activity series
       (2026-11-22)
-- [ ] CSV export (user owns their data)
+- [x] CSV export (user owns their data) — streaming
+      `/api/export/csv?type=activities|measurements|sleep|wellness`
+      plus Settings-page download buttons
 - [ ] Direct BLE pairing to the Omron scale on mobile (bypass cloud)
 - [x] Production Docker Compose: single API + web image, Postgres volume,
       Caddy TLS, migrations on startup

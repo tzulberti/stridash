@@ -295,4 +295,7 @@ export const zh: Record<MsgKey, string> = {
   'auth.haveAccount': '已有账户？登录',
   'auth.needAccount': '需要账户？创建一个',
   'conn.lastSyncIssue': '上次同步 {status} — 获取 {pulled}，失败 {failed}',
+  'settings.csvActivities': '下载活动 CSV',
+  'settings.csvMeasurements': '下载测量 CSV',
+  'settings.csvDesc': '电子表格导出',
 };
