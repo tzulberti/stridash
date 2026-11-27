@@ -486,6 +486,7 @@ export default function App() {
 
   const header = (
     <AppHeader
+      current={route.name}
       goHome={goHome}
       openConnections={openConnections}
       openGear={openGear}

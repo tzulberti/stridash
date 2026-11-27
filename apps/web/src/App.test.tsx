@@ -202,7 +202,6 @@ describe('App auth flow', () => {
       query: { limit: '100' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'menu' }));
     fireEvent.click(screen.getByRole('button', { name: 'Sign Out' }));
 
     expect(clearTokens).toHaveBeenCalledTimes(1);

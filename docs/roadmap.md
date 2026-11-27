@@ -142,7 +142,7 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
       connect (Omron/iGPSPORT/Garmin/Zwift), Garmin MFA and Strava browser
       consent
 
-## M5 — App dashboard ▶ (web dashboard — first cut)
+## M5 — App dashboard ✅
 
 - [x] `apps/web` — Vite + React + TS dashboard (dev proxy `/api` → Hono on
       :3000; production served beside the API, same origin)
@@ -179,8 +179,10 @@ for protocol facts only — see [`omron.md`](omron.md) for the working notes).
 - [x] General overview dashboard: one aggregated home view beyond today's
       stat cards — training-load trend, steps/sleep/body-battery/weight
       trends, gear wear status and connection/sync health (2026-11 request)
-- [ ] UI redesign pass over the web app — layout, navigation, visual design,
-      responsive on small screens (2026-11 request; scope to be defined)
+- [x] UI redesign pass over the web app — scoped pass landed: persistent
+      primary navigation with active state, focus-visible/hover system, wider
+      content column and responsive breakpoints (further branding iteration is
+      normal maintenance)
 - [x] Edit detection beyond Garmin: Zwift's detail payload carries
       `lastSaveDate` — same poll-and-compare pattern as Garmin's
       `lastUpdateDate` pass ([`zwift.md`](zwift.md) "Edit detection");
@@ -195,7 +197,8 @@ connection counts), pull-to-refresh, recent activities, provider connection
 forms (Omron/iGPSPORT/Garmin/Zwift + Garmin MFA + Strava browser consent),
 sync-now and weigh-in/blood-pressure quick-add. The web app also got a
 responsive pass (narrow header/cards, wrapping forms, horizontal table scroll,
-phone breakpoints); the larger visual-design pass remains.
+phone breakpoints) and a primary-navigation design pass (persistent nav,
+active state, focus/hover system, wider content column).
 
 ## M6 — Extras ☐
 

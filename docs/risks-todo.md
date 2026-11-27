@@ -97,8 +97,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > pressure (`POST /api/measurements`, provider MANUAL), latest sync-log error
 > surfacing, a training-load/gear-wear/connection-health overview and the
 > mobile app (secure token storage, dashboard cards, recent activities,
-> provider connect/MFA/Strava consent, sync and weigh-in/BP quick-add) and a
-> responsive web pass landed. The larger visual redesign remains.
+> provider connect/MFA/Strava consent, sync and weigh-in/BP quick-add), a
+> responsive web pass and a primary-navigation/design pass landed. M5 is
+> closed.
 >
 > **Status 2026-11-27 (M6):** CSV export landed — streaming, RFC-escaped
 > activities/measurements/sleep/wellness downloads from Settings. The
@@ -898,8 +899,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 89.42% lines/statements, 92.11% functions, 80.85% branches; web 90.05%
-lines/statements, 75% functions, 80.62% branches (App.tsx is still the
+server 89.42% lines/statements, 92.11% functions, 80.85% branches; web 90.01%
+lines/statements, 74.9% functions, 80.62% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)

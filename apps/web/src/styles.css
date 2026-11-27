@@ -45,7 +45,7 @@ body {
 }
 
 main {
-  max-width: 980px;
+  max-width: 1040px;
   margin: 0 auto;
   padding: 24px 16px 64px;
 }
@@ -70,6 +70,8 @@ header {
   gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
 header .sources {
   flex: 1;
@@ -79,6 +81,46 @@ header .sources {
 }
 header h1 {
   margin-right: auto;
+}
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.header-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.header-nav a:hover,
+.header-nav a.active {
+  color: var(--text);
+  background: var(--hover);
+}
+.header-nav a.active {
+  color: var(--accent);
+}
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.card,
+.conn-card {
+  transition: border-color 120ms ease;
+}
+.card:hover,
+.conn-card:hover {
+  border-color: var(--accent);
+}
+.list tbody tr:hover {
+  background: var(--hover);
 }
 footer {
   margin-top: 48px;
@@ -756,58 +798,10 @@ footer {
   font-size: 13px;
 }
 
-/* header — brand goes home, hamburger sits at the top-right */
+/* header — brand goes home */
 .brand {
   color: inherit;
   text-decoration: none;
-}
-.menu-wrap {
-  position: relative;
-  margin-left: auto; /* pins the hamburger to the right edge */
-}
-.hamburger {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-  padding: 6px 12px;
-}
-.menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
-  display: flex;
-  flex-direction: column;
-  min-width: 180px;
-  padding: 6px;
-  z-index: 50;
-}
-.menu a,
-.menu button {
-  background: none;
-  border: none;
-  border-radius: 8px;
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-  font-size: 14px;
-  padding: 8px 12px;
-  text-align: left;
-  text-decoration: none;
-}
-.menu a:hover,
-.menu button:hover {
-  background: var(--border);
-}
-.menu button.danger {
-  color: var(--danger);
 }
 
 /* settings page */
@@ -912,6 +906,14 @@ footer {
   }
   .conn-form {
     max-width: none;
+  }
+  .header-nav {
+    margin-left: 0;
+    width: 100%;
+  }
+  .header-nav a {
+    padding: 5px 8px;
+    font-size: 13px;
   }
   .chart-cfg-groups {
     flex-direction: column;
