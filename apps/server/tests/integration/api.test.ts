@@ -108,6 +108,15 @@ describe('health', () => {
     expect(body.status).toBe('ok');
     expect(new Date(body.startedAt as string).getTime()).toBeGreaterThan(0);
   });
+
+  it('serves the OpenAPI document', async () => {
+    const res = await app.request('/api/openapi.json');
+    expect(res.status).toBe(200);
+    const body = await json(res);
+    expect(body.openapi).toBe('3.1.0');
+    expect((body.paths as Json)['/api/measurements']).toBeTruthy();
+    expect((body.paths as Json)['/api/export/csv']).toBeTruthy();
+  });
 });
 
 describe('auth', () => {

@@ -103,7 +103,9 @@ maintainability. Check the box when the fix (and its test) has landed.
 > **Status 2026-11-27 (M6):** CSV export landed — streaming, RFC-escaped
 > activities/measurements/sleep/wellness downloads from Settings. The
 > per-provider terms risk profile is documented in
-> `docs/provider-tos-risk.md`. BLE, push, OpenAPI and webhooks remain.
+> `docs/provider-tos-risk.md`. An OpenAPI 3.1 spec is served at
+> `/api/openapi.json` and generated into `docs/openapi.json`; the typed client,
+> BLE, push and webhooks remain.
 
 ---
 

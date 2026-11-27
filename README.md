@@ -75,7 +75,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 3. ▶ **M3 – Garmin Connect integration** — server-side activities, wellness, gear, sleep, weight/body composition and blood pressure built; live health-endpoint smoke test remains
 4. ✅ **M4 – Omron scale integration** — weight + body composition time series (server side)
 5. ▶ **M5 – App dashboard** — web dashboard, onboarding, manual entry, overview health, mobile UI and a responsive pass are live; the larger visual-design pass remains
-6. ☐ **M6 – Extras** — CSV export is live; direct BLE scale support, OpenAPI, webhooks, push and multi-user hardening remain
+6. ☐ **M6 – Extras** — CSV export and the OpenAPI spec are live; typed client, direct BLE scale support, webhooks, push and multi-user hardening remain
 
 ## Docs
 
@@ -84,6 +84,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 - [Deployment](docs/deployment.md) — production Compose, TLS and key rotation
 - [Strava](docs/strava.md) — OAuth setup, scopes and sync behaviour
 - [Provider ToS risk](docs/provider-tos-risk.md) — per-provider terms/risk notes
+- [OpenAPI](docs/openapi.json) — API spec (also served at `/api/openapi.json`)
 - [Risks & TODO](docs/risks-todo.md) — open security/correctness/maintainability work
 - [Roadmap](docs/roadmap.md) — milestones and known feature gaps
 

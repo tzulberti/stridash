@@ -15,6 +15,7 @@ import { stravaRoutes } from './routes/strava.js';
 import { dataRoutes } from './routes/data.js';
 import { drainSyncQueue, recoverStaleSyncLocks } from './services/sync-queue.js';
 import { startSyncScheduler } from './services/sync-scheduler.js';
+import { openapiDocument } from './openapi.js';
 
 /** Nothing in the API accepts a body anywhere near this — it is a DoS guard. */
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -91,6 +92,8 @@ export function createApp(env: Env): TypedHono {
       startedAt: BOOTED_AT.toISOString(),
     }),
   );
+
+  app.get('/api/openapi.json', (c) => c.json(openapiDocument(env.STRIDASH_VERSION)));
 
   app.route('/api/auth', authRoutes(env));
   app.route('/api/strava', stravaRoutes(env));

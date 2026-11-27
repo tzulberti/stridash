@@ -20,7 +20,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "data:merge-activities": "tsx --env-file=.env src/scripts/merge-duplicate-activities.ts"
+    "data:merge-activities": "tsx --env-file=.env src/scripts/merge-duplicate-activities.ts",
+    "openapi:generate": "tsx src/scripts/write-openapi.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
