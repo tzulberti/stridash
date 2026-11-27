@@ -862,3 +862,90 @@ footer {
   font-size: 13px;
   padding: 6px 10px;
 }
+
+.strava-connect {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+/* ─── Responsive pass (M5) ──────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  main {
+    padding: 16px 10px 48px;
+  }
+  h1 {
+    font-size: 20px;
+  }
+  h2 {
+    margin-top: 22px;
+  }
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .card {
+    padding: 10px 12px;
+  }
+  .card-value {
+    font-size: 18px;
+  }
+  .range-bar {
+    gap: 6px;
+    padding: 8px;
+  }
+  .range-bar .dp {
+    flex: 1 1 140px;
+  }
+  .range-bar .dp-btn {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .conn-head,
+  .conn-actions,
+  .conn-confirm,
+  .mfa-row,
+  .setting-row,
+  .strava-connect {
+    flex-wrap: wrap;
+  }
+  .conn-form {
+    max-width: none;
+  }
+  .chart-cfg-groups {
+    flex-direction: column;
+  }
+  .list th,
+  .list td {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .settings-card table {
+    display: block;
+    overflow-x: auto;
+  }
+  .login-card {
+    width: 100%;
+    padding: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  header {
+    gap: 8px;
+  }
+  .brand h1 {
+    font-size: 18px;
+  }
+  .conn-actions .btn {
+    flex: 1;
+  }
+  .cards {
+    grid-template-columns: 1fr;
+  }
+  .chart-tip-date,
+  .chart-tip-val {
+    font-size: 9px;
+  }
+}

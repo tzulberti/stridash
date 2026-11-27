@@ -97,8 +97,8 @@ maintainability. Check the box when the fix (and its test) has landed.
 > pressure (`POST /api/measurements`, provider MANUAL), latest sync-log error
 > surfacing, a training-load/gear-wear/connection-health overview and the
 > mobile app (secure token storage, dashboard cards, recent activities,
-> provider connect/MFA/Strava consent, sync and weigh-in/BP quick-add) landed.
-> The full visual redesign remains.
+> provider connect/MFA/Strava consent, sync and weigh-in/BP quick-add) and a
+> responsive web pass landed. The larger visual redesign remains.
 >
 > **Status 2026-11-27 (M6):** CSV export landed — streaming, RFC-escaped
 > activities/measurements/sleep/wellness downloads from Settings. BLE, push,

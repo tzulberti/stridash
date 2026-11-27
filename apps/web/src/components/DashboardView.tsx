@@ -484,53 +484,55 @@ export function DashboardView(props: {
         {activitiesFeed.length === 0 && (
           <p className="empty">{activitiesIn.length ? t('dash.noMatch') : t('dash.noneInRange')}</p>
         )}
-        <table className="list">
-          <thead>
-            <tr>
-              <th></th>
-              <th>{t('feed.when')}</th>
-              <th>{t('feed.type')}</th>
-              <th>{t('feed.provider')}</th>
-              <th>{t('feed.workout')}</th>
-              <th>{t('feed.distance')}</th>
-              <th>{t('feed.time')}</th>
-              <th>{t('feed.avgSpeed')}</th>
-              <th>{t('feed.hr')}</th>
-              <th>{t('feed.power')}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {activitiesFeed.map((a) => (
-              <tr key={a.id}>
-                <td>{TYPE_EMOJI[a.type] ?? '⌚'}</td>
-                <td>{fmtDate(a.startTime)}</td>
-                <td>{a.type}</td>
-                <td>{(a.providers ?? []).map((p) => p.toLowerCase()).join(', ')}</td>
-                <td>{a.workoutName ?? '—'}</td>
-                <td>{fmtKm(a.distanceM)}</td>
-                <td>{fmtMin(a.durationS)}</td>
-                <td>{fmtSpeed(a.avgSpeedMs)}</td>
-                <td>{a.avgHr ?? '—'}</td>
-                <td>
-                  {a.avgPowerW ?? '—'}
-                  {has(a.avgPowerW) ? ' W' : ''}
-                </td>
-                <td>
-                  <a
-                    href={`/activity/${a.id}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      openActivity(a.id);
-                    }}
-                  >
-                    {t('feed.details')}
-                  </a>
-                </td>
+        <div className="table-scroll">
+          <table className="list">
+            <thead>
+              <tr>
+                <th></th>
+                <th>{t('feed.when')}</th>
+                <th>{t('feed.type')}</th>
+                <th>{t('feed.provider')}</th>
+                <th>{t('feed.workout')}</th>
+                <th>{t('feed.distance')}</th>
+                <th>{t('feed.time')}</th>
+                <th>{t('feed.avgSpeed')}</th>
+                <th>{t('feed.hr')}</th>
+                <th>{t('feed.power')}</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {activitiesFeed.map((a) => (
+                <tr key={a.id}>
+                  <td>{TYPE_EMOJI[a.type] ?? '⌚'}</td>
+                  <td>{fmtDate(a.startTime)}</td>
+                  <td>{a.type}</td>
+                  <td>{(a.providers ?? []).map((p) => p.toLowerCase()).join(', ')}</td>
+                  <td>{a.workoutName ?? '—'}</td>
+                  <td>{fmtKm(a.distanceM)}</td>
+                  <td>{fmtMin(a.durationS)}</td>
+                  <td>{fmtSpeed(a.avgSpeedMs)}</td>
+                  <td>{a.avgHr ?? '—'}</td>
+                  <td>
+                    {a.avgPowerW ?? '—'}
+                    {has(a.avgPowerW) ? ' W' : ''}
+                  </td>
+                  <td>
+                    <a
+                      href={`/activity/${a.id}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openActivity(a.id);
+                      }}
+                    >
+                      {t('feed.details')}
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {loading && <p>{t('common.loading')}</p>}

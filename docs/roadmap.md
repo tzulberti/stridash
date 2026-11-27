@@ -194,7 +194,9 @@ token storage (`expo-secure-store`, localStorage on web), a phone-sized
 dashboard (latest weight/body fat/sleep/steps/resting HR, activity and
 connection counts), pull-to-refresh, recent activities, provider connection
 forms (Omron/iGPSPORT/Garmin/Zwift + Garmin MFA + Strava browser consent),
-sync-now and weigh-in/blood-pressure quick-add. The visual redesign remains.
+sync-now and weigh-in/blood-pressure quick-add. The web app also got a
+responsive pass (narrow header/cards, wrapping forms, horizontal table scroll,
+phone breakpoints); the larger visual-design pass remains.
 
 ## M6 — Extras ☐
 
