@@ -77,9 +77,10 @@ maintainability. Check the box when the fix (and its test) has landed.
 > **Status 2026-11-27 (close-out):** C1 is closed — `App.tsx` is ~571 lines
 > with pages/components, `hooks/useDashboardData.ts` and `lib/*` extracted;
 > T20 is closed (63 DOM tests, web line coverage 88.8%); C2 is closed around
-> the shared identity/series services; T21 has the mobile runner + API-helper
-> tests (screen tests move with the M5 UI). The only remaining operator task
-> is running the D2 duplicate-merge script against existing deployments.
+> the shared identity/series services; T21 has the mobile runner, API-helper
+> tests and component/screen tests (login, dashboard, connect/MFA,
+> quick-add). The only remaining operator task is running the D2
+> duplicate-merge script against existing deployments.
 >
 > **Status 2026-11-27 (M2):** Strava integration built — OAuth authorize/callback,
 > encrypted rotating tokens, incremental activity/detail/streams sync, gear
@@ -975,10 +976,11 @@ lines. The full web suite (including pure helpers) is 147 tests.
 `src/lib/api.ts` with 4 tests (default/trimmed URL, successful health payload,
 non-2xx failure, 100% lines). The smoke screen now uses the helper.
 
-**Landed 2026-11-27:** the current mobile app is still the M1 smoke screen
-(no dashboard/settings screens yet), so the pure API helper is the meaningful
-testable unit. React Native component/screen tests move to M5 when those
-screens exist; the runner/config are already in place.
+**Landed 2026-11-27:** the mobile app now has a login/register screen, mobile
+dashboard, provider connection form, and manual measurement card. Screen tests
+render the Expo web target (`react-native-web` alias) under jsdom: login, the
+dashboard/sync/sign-out path, Omron/Garmin-MFA/Strava connection flows and the
+measurement quick-add. Mobile suite: 26 tests (13 API + 13 component).
 - [x] **T22. Redaction/privacy tests.** `redact.ts` is 40.7%. Cover
       case-insensitive token keys, nested objects/arrays, the depth limit,
       short vs long values, non-string values, and assert tokens never reach a
