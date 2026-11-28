@@ -3,8 +3,11 @@ import react from '@vitejs/plugin-react';
 import { renderHeadersFile } from './src/lib/security-headers';
 
 // Dev-only proxy: the app calls same-origin /api; requests are forwarded to
-// the Hono server. In production the dashboard is served/sidecared next to
-// the API, so no proxy is involved.
+// the Hono server. In production the dashboard is served/sidecarred next to
+// the API, so no proxy is involved. Compose sets this to http://server:3000
+// because localhost inside the web container is not the API container.
+const apiProxy = process.env.STRIDASH_API_PROXY ?? 'http://localhost:3000';
+
 export default defineConfig({
   plugins: [
     react(),
@@ -26,7 +29,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+      '/api': { target: apiProxy, changeOrigin: true },
     },
   },
 });

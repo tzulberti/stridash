@@ -7,7 +7,7 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc --noEmit",
-    "dev": "tsx --env-file=.env watch src/index.ts",
+    "dev": "tsx watch --env-file=.env src/index.ts",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

@@ -95,7 +95,58 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 
 ## Development
 
-Requirements: Node ≥ 20, Docker (for the local Postgres), npm ≥ 10.
+Requirements: Docker (both paths below). Node ≥ 20 and npm ≥ 10 are only
+needed for the local-toolchain path.
+
+### Docker-only development (no local Node/Prisma)
+
+If you only have Docker, the dev image includes Node, npm, Prisma and the
+workspace dependencies. The checkout is bind-mounted for hot reload; Postgres,
+the API and Vite all run in Compose:
+
+```bash
+# once: create the server env file (skip if apps/server/.env already exists)
+cp apps/server/.env.example apps/server/.env
+# replace STRIDASH_JWT_SECRET and STRIDASH_ENC_KEY with 32+ char random values
+
+docker compose -f docker-compose.dev.yml up --build
+```
+
+`npm run dev:docker` is the same command if you already have Node/npm. Then open
+<http://localhost:5173>; the API is on <http://localhost:3000>.
+Postgres is published on `localhost:5433`.
+
+Stop everything with:
+
+```bash
+docker compose -f docker-compose.dev.yml down
+```
+
+The API container generates the Prisma client and applies committed migrations
+on every start. Source changes hot-reload through the bind mount. If
+`package.json`/`package-lock.json` change, rebuild the image and replace the
+dependency volume:
+
+```bash
+docker compose -f docker-compose.dev.yml down
+docker volume rm stridash-dev-node_modules
+docker compose -f docker-compose.dev.yml up --build
+```
+
+Run checks inside the containers, for example:
+
+```bash
+docker compose -f docker-compose.dev.yml exec server npm run typecheck
+docker compose -f docker-compose.dev.yml exec server npm run lint
+docker compose -f docker-compose.dev.yml exec server npm test -w @stridash/server -- --project unit
+docker compose -f docker-compose.dev.yml exec web npm test -w @stridash/web
+```
+
+The integration test tier starts its own Postgres via testcontainers and is not
+wired to the host Docker socket by default; run that tier on the host or add the
+socket explicitly if you need it.
+
+### Local toolchain
 
 ```bash
 npm install                         # install all workspace dependencies

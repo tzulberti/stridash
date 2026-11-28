@@ -109,10 +109,9 @@ describe('SettingsSection', () => {
   });
 
   it('downloads the JSON export and shows the success note', async () => {
-    const blob = new Blob(['{"ok":true}'], { type: 'application/json' });
     const fetchMock = vi.fn(
       async () =>
-        new Response(blob, {
+        new Response('{"ok":true}', {
           status: 200,
           headers: { 'Content-Disposition': 'attachment; filename="stridash-export.json"' },
         }),
@@ -137,10 +136,9 @@ describe('SettingsSection', () => {
   });
 
   it('downloads activities CSV with the CSV endpoint', async () => {
-    const blob = new Blob(['id,startTime\r\n'], { type: 'text/csv' });
     const fetchMock = vi.fn(
       async () =>
-        new Response(blob, {
+        new Response('id,startTime\r\n', {
           status: 200,
           headers: { 'Content-Disposition': 'attachment; filename="stridash-activities.csv"' },
         }),
