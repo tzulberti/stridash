@@ -22,9 +22,9 @@ at the host, and inbound 80/443 (Caddy needs 80 for the ACME challenge).
 cp deploy/.env.example deploy/.env
 chmod 600 deploy/.env
 # edit deploy/.env: domain, POSTGRES_PASSWORD, JWT/encryption keys
-docker compose --env-file deploy/.env -f docker-compose.prod.yml up -d --build
+./scripts/docker-prod.sh up -d --build
 
-docker compose --env-file deploy/.env -f docker-compose.prod.yml ps
+./scripts/docker-prod.sh ps
 curl https://your.domain.example/api/health
 ```
 
@@ -46,7 +46,7 @@ To upgrade:
 
 ```bash
 git pull
-docker compose --env-file deploy/.env -f docker-compose.prod.yml up -d --build
+./scripts/docker-prod.sh up -d --build
 ```
 
 The app applies pending migrations before starting. Run **one app replica**:

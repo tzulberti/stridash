@@ -3,9 +3,10 @@
 # Development image: Node + all workspace dependencies, no application source.
 # docker-compose.dev.yml bind-mounts the checkout over /app and keeps the
 # installed node_modules in a named volume, so local Node/npm/Prisma are not
-# required.
+# required. The runtime version comes from .nvmrc via scripts/docker-dev.sh.
 
-FROM node:26-bookworm-slim
+ARG NODE_VERSION
+FROM node:${NODE_VERSION}-bookworm-slim
 
 # Prisma downloads/uses an OpenSSL-compatible engine; slim needs these.
 RUN apt-get update \

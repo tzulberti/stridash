@@ -23,6 +23,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NODE_VERSION: ${NODE_VERSION:?run through scripts/docker-prod.sh}
     restart: unless-stopped
     # The server drains in-flight sync work for up to 30s on SIGTERM. Docker's
     # default 10s stop timeout would SIGKILL it mid-sync.

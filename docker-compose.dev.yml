@@ -6,6 +6,8 @@ x-dev-app: &dev-app
   build:
     context: .
     dockerfile: Dockerfile.dev
+    args:
+      NODE_VERSION: ${NODE_VERSION:?run through scripts/docker-dev.sh}
   image: stridash-dev:local
   init: true
   working_dir: /app

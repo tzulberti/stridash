@@ -1,9 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
+# Single source of truth for the runtime version: .nvmrc. Build through
+# scripts/docker-prod.sh (or pass --build-arg NODE_VERSION=$(cat .nvmrc)).
+ARG NODE_VERSION
+
 # ─── dependencies ────────────────────────────────────────────────────────────
 # Install only the workspaces the production image needs. The mobile app is
 # deliberately excluded; it does not need to be in the server image.
-FROM node:26-bookworm-slim AS deps
+FROM node:${NODE_VERSION}-bookworm-slim AS deps
 # Prisma detects the OpenSSL version to pick its engine; slim lacks openssl.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates \
@@ -29,7 +33,7 @@ RUN npm run prisma:generate -w @stridash/server \
  && npm run build -w @stridash/web
 
 # ─── runtime ─────────────────────────────────────────────────────────────────
-FROM node:26-bookworm-slim AS runtime
+FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 # The Prisma CLI/engine and outbound HTTPS need these at runtime.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates \

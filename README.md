@@ -96,7 +96,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 ## Development
 
 Requirements: Docker (both paths below). Node ≥ 26 and npm ≥ 11 are only
-needed for the local-toolchain path (`.nvmrc` pins the LTS line).
+needed for the local-toolchain path (`.nvmrc` pins the exact LTS patch).
 
 ### Docker-only development (no local Node/Prisma)
 
@@ -109,7 +109,7 @@ the API and Vite all run in Compose:
 cp apps/server/.env.example apps/server/.env
 # replace STRIDASH_JWT_SECRET and STRIDASH_ENC_KEY with 32+ char random values
 
-docker compose -f docker-compose.dev.yml up --build
+./scripts/docker-dev.sh up --build
 ```
 
 `npm run dev:docker` is the same command if you already have Node/npm. Then open
@@ -119,7 +119,7 @@ Postgres is published on `localhost:5433`.
 Stop everything with:
 
 ```bash
-docker compose -f docker-compose.dev.yml down
+./scripts/docker-dev.sh down
 ```
 
 The API container generates the Prisma client and applies committed migrations
@@ -128,23 +128,27 @@ on every start. Source changes hot-reload through the bind mount. If
 dependency volume:
 
 ```bash
-docker compose -f docker-compose.dev.yml down
+./scripts/docker-dev.sh down
 docker volume rm stridash-dev-node_modules
-docker compose -f docker-compose.dev.yml up --build
+./scripts/docker-dev.sh up --build
 ```
 
 Run checks inside the containers, for example:
 
 ```bash
-docker compose -f docker-compose.dev.yml exec server npm run typecheck
-docker compose -f docker-compose.dev.yml exec server npm run lint
-docker compose -f docker-compose.dev.yml exec server npm test -w @stridash/server -- --project unit
-docker compose -f docker-compose.dev.yml exec web npm test -w @stridash/web
+./scripts/docker-dev.sh exec server npm run typecheck
+./scripts/docker-dev.sh exec server npm run lint
+./scripts/docker-dev.sh exec server npm test -w @stridash/server -- --project unit
+./scripts/docker-dev.sh exec web npm test -w @stridash/web
 ```
 
 The integration test tier starts its own Postgres via testcontainers and is not
 wired to the host Docker socket by default; run that tier on the host or add the
 socket explicitly if you need it.
+
+The Node runtime is defined once in `.nvmrc`. The `docker-dev.sh` /
+`docker-prod.sh` wrappers read it and pass it to Docker as a build argument, so
+Dockerfiles and Compose files never duplicate the version.
 
 ### Local toolchain
 
@@ -194,7 +198,7 @@ API + web image and runs it behind Caddy with automatic HTTPS:
 ```bash
 cp deploy/.env.example deploy/.env
 # edit domain, Postgres password, JWT/encryption secrets
-docker compose --env-file deploy/.env -f docker-compose.prod.yml up -d --build
+./scripts/docker-prod.sh up -d --build
 ```
 
 The app applies migrations on startup and only Caddy publishes ports 80/443;
