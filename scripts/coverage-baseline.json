@@ -1,14 +1,14 @@
 {
   "server": {
-    "lines": 89.31,
-    "statements": 89.31,
-    "functions": 92.24,
-    "branches": 80.87
+    "lines": 89.39,
+    "statements": 89.39,
+    "functions": 92.28,
+    "branches": 81.02
   },
   "web": {
-    "lines": 90.01,
-    "statements": 90.01,
-    "functions": 74.9,
-    "branches": 80.62
+    "lines": 90.83,
+    "statements": 90.83,
+    "functions": 76.57,
+    "branches": 81.34
   }
 }

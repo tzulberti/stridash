@@ -3,12 +3,13 @@ import { t } from '../lib/i18n/index';
 export function AppHeader(props: {
   current?: string;
   goHome: () => void;
+  openSearch: () => void;
   openConnections: () => void;
   openGear: () => void;
   openSettings: () => void;
   signOut: () => void;
 }) {
-  const { current, goHome, openConnections, openGear, openSettings, signOut } = props;
+  const { current, goHome, openSearch, openConnections, openGear, openSettings, signOut } = props;
   const active = (name: string) => (current === name ? 'active' : undefined);
 
   return (
@@ -25,6 +26,17 @@ export function AppHeader(props: {
         <h1>🦾 Stridash</h1>
       </a>
       <nav className="header-nav" aria-label="Primary">
+        <a
+          href="/search"
+          className={active('search')}
+          aria-current={current === 'search' ? 'page' : undefined}
+          onClick={(e) => {
+            e.preventDefault();
+            openSearch();
+          }}
+        >
+          {t('nav.search')}
+        </a>
         <a
           href="/connections"
           className={active('connections')}

@@ -1370,6 +1370,41 @@
               "type": "string",
               "format": "date-time"
             }
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "description": "Comma-separated activity types (RUN,RIDE,VIRTUAL_RIDE,WALK,HIKE,SWIM,WORKOUT,OTHER)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "gearId",
+            "in": "query",
+            "description": "Only activities linked to this gear id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "distanceMinM",
+            "in": "query",
+            "description": "Minimum distance in meters",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "distanceMaxM",
+            "in": "query",
+            "description": "Maximum distance in meters",
+            "schema": {
+              "type": "number",
+              "minimum": 0
+            }
           }
         ],
         "responses": {

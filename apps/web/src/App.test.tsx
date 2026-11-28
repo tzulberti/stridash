@@ -208,6 +208,23 @@ describe('App auth flow', () => {
     expect(await screen.findByText('One dashboard for every stride.')).toBeTruthy();
   });
 
+  it('opens advanced search from a deep link and applies URL filters', async () => {
+    readToken.mockReturnValue('tok');
+    window.history.replaceState(null, '', '/search?types=RUN&show=types');
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: 'Advanced search' })).toBeTruthy();
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith('/activities', {
+        token: 'tok',
+        query: { limit: '100', types: 'RUN' },
+      }),
+    );
+    expect(screen.getByRole('link', { name: 'Advanced search' }).getAttribute('aria-current')).toBe(
+      'page',
+    );
+  });
+
   it('clears a dead session when the first load gets a 401', async () => {
     readToken.mockReturnValue('tok');
     apiMock.mockImplementation(async (path: string) => {

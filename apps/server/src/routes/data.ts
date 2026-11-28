@@ -14,13 +14,55 @@ import { serializeRow } from '../serialize.js';
 import { uuidParam } from '../params.js';
 import { createApiToken, listApiTokens, revokeApiToken } from '../services/api-tokens.js';
 
-const listQuerySchema = z.object({
-  /** ISO date lower bound (activities.start_time / measurements.measured_at) */
-  from: z.string().datetime().optional(),
-  to: z.string().datetime().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().uuid().optional(),
-});
+const ACTIVITY_TYPES = [
+  'RUN',
+  'RIDE',
+  'VIRTUAL_RIDE',
+  'WALK',
+  'HIKE',
+  'SWIM',
+  'WORKOUT',
+  'OTHER',
+] as const;
+
+/** Comma-separated `types=RUN,RIDE`; absent/empty means every type. */
+const activityTypesParam = z.preprocess(
+  (value) =>
+    typeof value === 'string'
+      ? value
+          .split(',')
+          .map((v) => v.trim())
+          .filter(Boolean)
+      : value,
+  z.array(z.enum(ACTIVITY_TYPES)).min(1).max(ACTIVITY_TYPES.length).optional(),
+);
+
+const listQuerySchema = z
+  .object({
+    /** ISO date lower/upper bound on activities.start_time. */
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+    /** Activity type filter; repeated values are comma-separated. */
+    types: activityTypesParam,
+    /** Exact gear id; activities with no gear never match. */
+    gearId: z.string().uuid().optional(),
+    /** Distance range in meters; either bound may be omitted. */
+    distanceMinM: z.coerce.number().finite().nonnegative().optional(),
+    distanceMaxM: z.coerce.number().finite().nonnegative().optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    cursor: z.string().uuid().optional(),
+  })
+  .refine(
+    (q) =>
+      q.distanceMinM === undefined ||
+      q.distanceMaxM === undefined ||
+      q.distanceMinM <= q.distanceMaxM,
+    { message: 'distanceMinM must be <= distanceMaxM', path: ['distanceMinM'] },
+  )
+  .refine((q) => !q.from || !q.to || new Date(q.from) <= new Date(q.to), {
+    message: 'from must be <= to',
+    path: ['from'],
+  });
 
 const apiTokenCreateSchema = z.object({
   name: z.string().min(1).max(80),
@@ -399,6 +441,16 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
               startTime: {
                 ...(q.data.from ? { gte: new Date(q.data.from) } : {}),
                 ...(q.data.to ? { lte: new Date(q.data.to) } : {}),
+              },
+            }
+          : {}),
+        ...(q.data.types ? { type: { in: q.data.types } } : {}),
+        ...(q.data.gearId ? { gearId: q.data.gearId } : {}),
+        ...(q.data.distanceMinM !== undefined || q.data.distanceMaxM !== undefined
+          ? {
+              distanceM: {
+                ...(q.data.distanceMinM !== undefined ? { gte: q.data.distanceMinM } : {}),
+                ...(q.data.distanceMaxM !== undefined ? { lte: q.data.distanceMaxM } : {}),
               },
             }
           : {}),

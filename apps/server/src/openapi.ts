@@ -53,6 +53,35 @@ const listParams = [
   { name: 'to', in: 'query', schema: { type: 'string', format: 'date-time' } },
 ] as const;
 
+const activityListParams = [
+  ...listParams,
+  {
+    name: 'types',
+    in: 'query',
+    description:
+      'Comma-separated activity types (RUN,RIDE,VIRTUAL_RIDE,WALK,HIKE,SWIM,WORKOUT,OTHER)',
+    schema: { type: 'string' },
+  },
+  {
+    name: 'gearId',
+    in: 'query',
+    description: 'Only activities linked to this gear id',
+    schema: { type: 'string', format: 'uuid' },
+  },
+  {
+    name: 'distanceMinM',
+    in: 'query',
+    description: 'Minimum distance in meters',
+    schema: { type: 'number', minimum: 0 },
+  },
+  {
+    name: 'distanceMaxM',
+    in: 'query',
+    description: 'Maximum distance in meters',
+    schema: { type: 'number', minimum: 0 },
+  },
+] as const;
+
 const listResponse = jsonResponse({
   type: 'object',
   properties: {
@@ -542,7 +571,7 @@ export function openapiDocument(version = '0.1.0') {
           tags: ['activities'],
           summary: 'Activity feed',
           security: bearer,
-          parameters: listParams,
+          parameters: activityListParams,
           responses: { '200': listResponse },
         },
       },

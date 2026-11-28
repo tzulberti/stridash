@@ -899,8 +899,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 89.31% lines/statements, 92.24% functions, 80.87% branches; web 90.01%
-lines/statements, 74.9% functions, 80.62% branches (App.tsx is still the
+server 89.39% lines/statements, 92.28% functions, 81.02% branches; web 90.83%
+lines/statements, 76.57% functions, 81.34% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)

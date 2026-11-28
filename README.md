@@ -75,7 +75,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 3. ▶ **M3 – Garmin Connect integration** — server-side activities, wellness, gear, sleep, weight/body composition and blood pressure built; live health-endpoint smoke test remains
 4. ✅ **M4 – Omron scale integration** — weight + body composition time series (server side)
 5. ✅ **M5 – App dashboard** — web dashboard, onboarding, manual entry, overview health, mobile UI, responsive layout and primary-navigation design pass are live
-6. ☐ **M6 – Extras** — CSV export, OpenAPI spec/types, push notifications, Strava webhooks, multi-user caps and near-real-time sync are live; direct BLE scale support remains
+6. ☐ **M6 – Extras** — CSV export, OpenAPI spec/types, push notifications, Strava webhooks, multi-user caps, near-real-time sync and advanced activity search are live; direct BLE scale support remains
 7. ✅ **M7 – MCP server** — stdio + stateless Streamable HTTP, read-only activity/measurement/wellness/gear tools and API-token auth
 
 ## Docs
@@ -85,6 +85,7 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 - [Deployment](docs/deployment.md) — production Compose, TLS and key rotation
 - [Strava](docs/strava.md) — OAuth setup, scopes and sync behaviour
 - [Provider ToS risk](docs/provider-tos-risk.md) — per-provider terms/risk notes
+- [Advanced search](docs/advanced-search.md) — query builder and activity API filters
 - [OpenAPI](docs/openapi.json) — API spec (also served at `/api/openapi.json`)
 - [API tokens](docs/api-tokens.md) — long-lived tokens for MCP/automation
 - [MCP server](docs/mcp.md) — read-only LLM tools over stdio

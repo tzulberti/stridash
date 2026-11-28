@@ -119,6 +119,7 @@ describe('health', () => {
     expect(body.openapi).toBe('3.1.0');
     expect((body.paths as Json)['/api/measurements']).toBeTruthy();
     expect((body.paths as Json)['/api/export/csv']).toBeTruthy();
+    expect(JSON.stringify((body.paths as Json)['/api/activities'])).toContain('distanceMinM');
   });
 });
 
@@ -724,6 +725,52 @@ describe('activities list', () => {
     const items = (await json(res)).items as Json[];
     expect(items).toHaveLength(1);
     expect(items[0].providers).toEqual(['ZWIFT']);
+  });
+
+  it('filters by activity type and distance range', async () => {
+    const runs = (await json(
+      await app.request('/api/activities?types=RUN', authed(aliceToken)),
+    )) as { items: Json[] };
+    expect(runs.items.map((i) => i.headline)).toEqual(['Morning run']);
+
+    const both = (await json(
+      await app.request('/api/activities?types=RUN,VIRTUAL_RIDE', authed(aliceToken)),
+    )) as { items: Json[] };
+    expect(both.items).toHaveLength(2);
+
+    const short = (await json(
+      await app.request('/api/activities?distanceMaxM=6000', authed(aliceToken)),
+    )) as { items: Json[] };
+    expect(short.items.map((i) => i.headline)).toEqual(['Morning run']);
+
+    const long = (await json(
+      await app.request('/api/activities?distanceMinM=6000&distanceMaxM=30000', authed(aliceToken)),
+    )) as { items: Json[] };
+    expect(long.items.map((i) => i.headline)).toEqual(['Zwift - Half an Hour of Relaxation']);
+  });
+
+  it('rejects malformed advanced-search filters', async () => {
+    expect((await app.request('/api/activities?types=BOGUS', authed(aliceToken))).status).toBe(400);
+    expect((await app.request('/api/activities?types=', authed(aliceToken))).status).toBe(400);
+    expect(
+      (
+        await app.request(
+          '/api/activities?distanceMinM=10000&distanceMaxM=1000',
+          authed(aliceToken),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (await app.request('/api/activities?gearId=not-a-uuid', authed(aliceToken))).status,
+    ).toBe(400);
+    expect(
+      (
+        await app.request(
+          '/api/activities?from=2026-11-10T00:00:00.000Z&to=2026-11-01T00:00:00.000Z',
+          authed(aliceToken),
+        )
+      ).status,
+    ).toBe(400);
   });
 
   it('paginates with the cursor', async () => {
@@ -1824,6 +1871,22 @@ describe('gear', () => {
     expect((shoes.usage as Json).distanceM).toBe(5_100); // the run's distance
     expect((shoes.usage as Json).count).toBe(1);
     expect((items.find((g) => g.id === bikeId)!.usage as Json).count).toBe(0);
+  });
+
+  it('filters activities by gear id without leaking other users', async () => {
+    const own = (await json(
+      await app.request(`/api/activities?gearId=${shoesId}`, authed(aliceToken)),
+    )) as { items: Json[] };
+    expect(own.items.map((i) => i.headline)).toEqual(['Morning run']);
+
+    const bob = await prisma.user.findUniqueOrThrow({ where: { email: 'bob@test.stridash' } });
+    const bobGear = await prisma.gear.create({
+      data: { userId: bob.id, name: "Bob's shoes", kind: 'SHOES' },
+    });
+    const foreign = (await json(
+      await app.request(`/api/activities?gearId=${bobGear.id}`, authed(aliceToken)),
+    )) as { items: Json[] };
+    expect(foreign.items).toHaveLength(0);
   });
 
   it('creates a component with an install date; usage stays windowed', async () => {

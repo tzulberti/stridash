@@ -6,6 +6,7 @@ import { setLang } from '../lib/i18n/index';
 const baseProps = {
   current: 'dashboard',
   goHome: vi.fn(),
+  openSearch: vi.fn(),
   openConnections: vi.fn(),
   openGear: vi.fn(),
   openSettings: vi.fn(),
@@ -23,6 +24,8 @@ describe('AppHeader', () => {
   it('routes to each page from the primary navigation', () => {
     render(<AppHeader {...baseProps} />);
 
+    fireEvent.click(screen.getByRole('link', { name: 'Advanced search' }));
+    expect(baseProps.openSearch).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('link', { name: 'Providers Sync' }));
     expect(baseProps.openConnections).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('link', { name: 'Gear' }));
@@ -39,6 +42,11 @@ describe('AppHeader', () => {
       'page',
     );
     expect(screen.getByRole('link', { name: 'Gear' }).getAttribute('aria-current')).toBeNull();
+
+    rerender(<AppHeader {...baseProps} current="search" />);
+    expect(screen.getByRole('link', { name: 'Advanced search' }).getAttribute('aria-current')).toBe(
+      'page',
+    );
 
     rerender(<AppHeader {...baseProps} current="gear" />);
     expect(screen.getByRole('link', { name: 'Gear' }).getAttribute('aria-current')).toBe('page');

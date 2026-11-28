@@ -22,6 +22,7 @@ import { useDashboardData } from './hooks/useDashboardData';
 import { ConnectionsSection } from './components/ConnectionsSection';
 import { GearSection } from './components/GearSection';
 import { ActivityDetail } from './components/ActivityDetail';
+import { AdvancedSearchSection } from './components/AdvancedSearchSection';
 import {
   BODY_METRIC,
   DAILY_METRIC,
@@ -274,6 +275,12 @@ export default function App() {
     window.history.pushState(null, '', '/connections');
     setRoute({ name: 'connections' });
   }
+  function openSearch(): void {
+    // keep the current query/results when the nav item is clicked in place
+    if (route.name === 'search') return;
+    window.history.pushState(null, '', '/search');
+    setRoute({ name: 'search' });
+  }
   function openGear(): void {
     window.history.pushState(null, '', '/gear');
     setRoute({ name: 'gear' });
@@ -488,6 +495,7 @@ export default function App() {
     <AppHeader
       current={route.name}
       goHome={goHome}
+      openSearch={openSearch}
       openConnections={openConnections}
       openGear={openGear}
       openSettings={openSettings}
@@ -509,6 +517,22 @@ export default function App() {
           chartChannels={chartChannels}
         />
         {loading && <p>{t('common.loading')}</p>}
+        {footer}
+      </main>
+    );
+  }
+
+  // the advanced-search page is its own URL: /search
+  if (route.name === 'search') {
+    return (
+      <main>
+        {header}
+        <AdvancedSearchSection
+          token={token ?? ''}
+          gear={gear}
+          openActivity={openActivity}
+          onBack={goHome}
+        />
         {footer}
       </main>
     );

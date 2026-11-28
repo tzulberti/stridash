@@ -319,6 +319,26 @@ export const en = {
   'settings.csvActivities': 'Download activities CSV',
   'settings.csvMeasurements': 'Download measurements CSV',
   'settings.csvDesc': 'Spreadsheet-ready exports',
+
+  // ─── advanced search ──────────────────────────────────────────────────────
+  'nav.search': 'Advanced search',
+  'search.intro': 'Build a query to find activities across your full history.',
+  'search.builder': 'Query builder',
+  'search.hint': 'All conditions are combined with AND.',
+  'search.date': 'Date range',
+  'search.addFilter': 'Add filter',
+  'search.removeFilter': 'Remove filter',
+  'search.anyGear': 'Any gear',
+  'search.min': 'min',
+  'search.max': 'max',
+  'search.run': 'Search',
+  'search.clear': 'Clear filters',
+  'search.results': 'Results',
+  'search.resultCount': '{n} activities',
+  'search.resultCountMore': '{n}+ activities',
+  'search.none': 'No activities match this query.',
+  'search.loadMore': 'Load more',
+  'search.invalidDistance': 'Minimum distance cannot be greater than maximum distance.',
 } as const;
 
 export type MsgKey = keyof typeof en;

@@ -209,6 +209,10 @@ active state, focus/hover system, wider content column).
 - [x] CSV export (user owns their data) — streaming
       `/api/export/csv?type=activities|measurements|sleep|wellness`
       plus Settings-page download buttons
+- [x] Advanced activity search (`/search`) — query-builder page with date
+      range, multi-type, gear and distance-range filters, shareable URL state
+      and cursor paging; API accepts `types`, `gearId`, `distanceMinM` and
+      `distanceMaxM` (`docs/advanced-search.md`)
 - [ ] Direct BLE pairing to the Omron scale on mobile (bypass cloud)
 - [x] Production Docker Compose: single API + web image, Postgres volume,
       Caddy TLS, migrations on startup
