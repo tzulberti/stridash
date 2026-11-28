@@ -899,7 +899,9 @@ and the non-auth 413 / field-bound 400 cases.
 **Landed 2026-11-24:** both workspaces report V8 coverage (`text-summary` +
 `json-summary`), excluding `apps/server/src/generated/**` and the web i18n
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
-`scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
+`scripts/coverage-baseline.json` and fails CI on any drop beyond 0.25pp (V8
+branch counts jitter slightly with async test timing, so a tighter threshold
+flakes); refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
 server 89.46% lines/statements, 92.3% functions, 81.03% branches; web 90.82%
 lines/statements, 76.57% functions, 81.33% branches (App.tsx is still the

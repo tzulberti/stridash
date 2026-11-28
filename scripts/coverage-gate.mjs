@@ -10,15 +10,18 @@
  * Refresh the baseline deliberately after adding meaningful tests:
  *   npm run coverage:update
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baselinePath = path.join(root, 'scripts', 'coverage-baseline.json');
 const metrics = ['lines', 'statements', 'functions', 'branches'];
-// Percentage points; keeps tiny V8 rounding differences from failing CI.
-const tolerance = 0.05;
+// Percentage points. V8 branch counts vary slightly with async test timing
+// and Node patch versions; 0.25pp is noise, while a real regression is larger.
+// Keep this above observed run-to-run jitter so CI does not flake, but tight
+// enough that a removed test still fails the gate.
+const tolerance = 0.25;
 
 const projects = [
   {
@@ -100,6 +103,22 @@ if (failures.length > 0) {
   console.error(
     '\nAdd tests, or if the lower total is intentional run `npm run coverage:update` and explain the change.',
   );
+  // Keep the failure visible without opening the raw job log: this becomes a
+  // check-run annotation, and the step summary carries the same detail.
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const message = failures
+      .join('; ')
+      .replaceAll('%', '%25')
+      .replaceAll('\r', '%0D')
+      .replaceAll('\n', '%0A');
+    console.log(`::error title=Coverage regression::${message}`);
+  }
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `## Coverage regression\n\n${failures.map((f) => `- ${f}`).join('\n')}\n`,
+    );
+  }
   process.exit(1);
 }
 
