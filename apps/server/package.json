@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^12.2.1",
-    "@types/node": "^22.10.5",
+    "@types/node": "^26.6.11",
     "prisma": "^7.10.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",

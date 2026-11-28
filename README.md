@@ -95,8 +95,8 @@ See [`docs/roadmap.md`](docs/roadmap.md) for the full plan. Milestone summary:
 
 ## Development
 
-Requirements: Docker (both paths below). Node ≥ 20 and npm ≥ 10 are only
-needed for the local-toolchain path.
+Requirements: Docker (both paths below). Node ≥ 26 and npm ≥ 11 are only
+needed for the local-toolchain path (`.nvmrc` pins the LTS line).
 
 ### Docker-only development (no local Node/Prisma)
 

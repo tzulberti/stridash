@@ -5,7 +5,7 @@
   "description": "One dashboard for every stride — open-source fitness aggregator",
   "license": "AGPL-3.0-or-later",
   "engines": {
-    "node": ">=20"
+    "node": ">=26"
   },
   "workspaces": [
     "apps/*",
