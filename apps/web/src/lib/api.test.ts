@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api, setTokenListener, tryRefresh } from './api';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { api, setTokenListener, tryRefresh, type TokenListener } from './api';
 import { readToken, saveTokens, storedRefreshToken } from './token-storage';
 
 function memoryStorage(): Storage {
@@ -29,10 +29,10 @@ const json = (body: unknown, status = 200): Response =>
     headers: { 'content-type': 'application/json' },
   });
 
-let listener: ReturnType<typeof vi.fn>;
+let listener: Mock<TokenListener>;
 
 beforeEach(() => {
-  listener = vi.fn();
+  listener = vi.fn<TokenListener>();
   setTokenListener(listener);
   withStorage();
 });

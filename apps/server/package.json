@@ -25,7 +25,7 @@
     "strava:webhook": "tsx --env-file=.env src/scripts/strava-webhook.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.7",
+    "@hono/node-server": "^2.1.11",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@stridash/types": "*",
@@ -34,11 +34,11 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "^12.2.1",
+    "@testcontainers/postgresql": "^12.2.2",
     "@types/node": "^26.6.11",
     "prisma": "^7.10.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
-    "vitest": "^3.2.4"
+    "vitest": "^5.1.2"
   }
 }

@@ -1,7 +1,1 @@
-{
-  "GHSA-3g3m-2fjr-6pw4": "Expo CLI build chain (glob). Currently moderate; kept explicit here so a severity bump is reviewed alongside the mobile Expo upgrade rather than silently failing/passing CI.",
-  "GHSA-g3hv-75wg-m249": "Expo CLI build chain (minimatch). Currently moderate; same review trigger as the glob entry.",
-  "GHSA-7589-6fvf-x4pw": "Effect ReDoS (Schema.TemplateLiteral) reached only through @prisma/config in the Prisma CLI. Prisma 7.10.1 pins effect 3.20.0 with no compatible 7.x fix; the API runtime does not import it. Revisit with Prisma 8.",
-  "npm:@prisma/config": "Prisma CLI config loader (generate/migrate only), vulnerable only because it depends on effect 3.20.0. Not loaded by the API runtime.",
-  "npm:prisma": "Prisma CLI build/migration tooling inherits the @prisma/config/effect advisory; not part of the running API. Revisit with Prisma 8."
-}
+{}

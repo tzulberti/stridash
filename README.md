@@ -175,8 +175,8 @@ Hono app in-process against a throwaway Postgres started by
 testcontainers, with every migration applied), and web helper tests.
 `npm test` needs Docker for the integration tier; the dev database is
 never touched. `npm run audit:ci` gates production dependencies on
-high/critical advisories; `scripts/audit-allowlist.json` records the few
-reviewed build-chain exceptions. `npm run test:ci` sets
+high/critical advisories; `scripts/audit-allowlist.json` starts empty and is
+only for a reviewed exception with a documented reason. `npm run test:ci` sets
 `STRIDASH_TEST_REUSE=1`, which keeps the container between runs
 (~5.6s → ~1s warm-up) — useful in GitHub Actions and for repeated local runs:
 

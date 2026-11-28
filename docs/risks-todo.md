@@ -356,30 +356,31 @@ wholesale, and the real exposure is S4. Expo pulls high-severity transitives.
       Expo dev-chain noise explicitly).
 - [x] Plan the zod 4 migration (`valibot`/`standard-schema` alternative is fine,
       but keep one validation lib).
-- [x] Revisit mobile Expo major upgrade separately — **closed 2026-11-21**:
-      the latest published Expo is 58.0.26 and it is already installed;
-      `npx expo install --fix` aligned the SDK 58 package ranges (including
-      `expo-web-browser` 58.1.0) and `npx expo install --check` reports up to
-      date. `glob`/`minimatch` now report moderate only (below the gate); no
-      newer Expo major exists to move to.
+- [x] Revisit mobile Expo major upgrade separately — **closed 2026-11-28**:
+      Expo 58.1.0 and the SDK 58 package ranges are installed; the remaining
+      `@expo/fingerprint → minimatch` pin is overridden to the fixed 11.0.9.
+      `npm audit` now reports zero advisories.
 
 **Landed 2026-11-19:** `zod` is now 4.6.7 (one validation library; env,
 auth, data and connection schemas unchanged and all tests pass).
 `npm run audit:ci` runs `npm audit --omit=dev --json` and fails on
 high/critical advisories unless `scripts/audit-allowlist.json` has a justified
-entry; the known Expo CLI `glob`/`minimatch` findings are explicitly listed.
-CI runs the gate before the static checks. `--omit=dev` now reports no
-high/critical findings apart from the Prisma CLI chain below (moderate
-Expo/hono entries remain below the gate). The mobile Expo SDK 58 package
-alignment landed 2026-11-21; it was not a major-version move because 58.0.26 is
-the latest published release.
+entry. CI runs the gate before the static checks.
 
 **2026-11-20:** the registry later flagged Prisma’s CLI chain
 (`effect` ← `@prisma/config` ← `prisma`) as **high** (Effect ReDoS). Prisma
-7.10.1 pins `effect@3.20.0` and offers no compatible 7.x fix, and the running
-API never imports that CLI/config path — so the three findings are explicitly
-allow-listed until the Prisma 8 upgrade. `npm run audit:ci` still fails on any
-new high/critical advisory outside the allow-list.
+7.10.1 pins `effect@3.20.0` and offers no compatible 7.x fix, so it was
+temporarily allow-listed while the API runtime (which never imports that
+CLI/config path) was unaffected.
+
+**2026-11-28:** the dependency refresh cleared **all** reported advisories
+(`npm audit` = 0). The allow-list is empty again. Relevant moves: Expo 58.1,
+Vitest/coverage 5.1, `@hono/node-server` 2.1, testcontainers 12.2.2, plus
+reviewed overrides for the remaining transitive pins (`effect` 3.22.5,
+`archiver` 8, `minimatch` 11.0.9). Prisma itself stays on stable 7.10.1; the
+override is tested by Prisma generate/migrate and the integration suite.
+Vitest 5 changed V8 coverage remapping, so the coverage baseline was refreshed
+separately (see T16).
 
 ### [x] S9. Small hardening items — **Low**
 
@@ -903,9 +904,11 @@ translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 branch counts jitter slightly with async test timing, so a tighter threshold
 flakes); refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 89.46% lines/statements, 92.3% functions, 81.03% branches; web 90.82%
-lines/statements, 76.57% functions, 81.33% branches (App.tsx is still the
-untested bulk — tracked by C1/T20).
+server 86.66% lines, 84.46% statements, 84.15% functions, 70.14% branches;
+web 86.94% lines, 84.94% statements, 79.02% functions, 74.58% branches
+(App.tsx is still the untested bulk — tracked by C1/T20). The 2026-11-28
+Vitest 5 upgrade changed V8’s source remapping/counting, so this baseline
+replaces the earlier Vitest 3 totals; test coverage itself did not regress.
 
 ### Whole-codebase (baseline 2026-11-26)
 
@@ -1019,7 +1022,7 @@ npm run typecheck                       # all workspaces
 npx vitest run --project unit           # apps/server, 91 tests
 npm test -w @stridash/web               # 42 tests
 npx vitest run --project integration    # apps/server, 62 tests (needs Docker)
-npm audit --omit=dev                    # Prisma CLI highs are allow-listed
+npm audit --omit=dev                    # no known findings (2026-11-28)
 ```
 
 Probes that confirmed findings (recreate as real regression tests):
