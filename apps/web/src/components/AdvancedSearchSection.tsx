@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Activity, ActivityType } from '@stridash/types';
+import type { Activity, ActivityPage, ActivityQueryRequest, ActivityType } from '@stridash/types';
 import { api } from '../lib/api';
 import {
   FEED_TYPES,
@@ -96,17 +96,18 @@ function readState(): SearchState {
   };
 }
 
-function queryOf(filters: SearchFilters): Record<string, string> {
-  const query: Record<string, string> = { limit: '100' };
-  if (filters.from) query.from = `${filters.from}T00:00:00.000Z`;
-  if (filters.to) query.to = `${filters.to}T23:59:59.999Z`;
-  if (filters.types.length) query.types = filters.types.join(',');
-  if (filters.gearId) query.gearId = filters.gearId;
+function bodyOf(filters: SearchFilters, cursor?: string | null): ActivityQueryRequest {
+  const body: ActivityQueryRequest = { limit: 100 };
+  if (filters.from) body.from = `${filters.from}T00:00:00.000Z`;
+  if (filters.to) body.to = `${filters.to}T23:59:59.999Z`;
+  if (filters.types.length) body.types = filters.types;
+  if (filters.gearId) body.gearId = filters.gearId;
   const min = metersParam(filters.minDistance);
   const max = metersParam(filters.maxDistance);
-  if (min !== null) query.distanceMinM = min;
-  if (max !== null) query.distanceMaxM = max;
-  return query;
+  if (min !== null) body.distanceMinM = Number(min);
+  if (max !== null) body.distanceMaxM = Number(max);
+  if (cursor) body.cursor = cursor;
+  return body;
 }
 
 function syncUrl(filters: SearchFilters, active: FilterId[]): void {
@@ -196,9 +197,10 @@ export function AdvancedSearchSection(props: {
       setLoading(true);
       setError(null);
       try {
-        const res = await api<{ items: Activity[]; nextCursor: string | null }>('/activities', {
+        const res = await api<ActivityPage>('/activities/query', {
+          method: 'QUERY',
           token,
-          query: cursor ? { ...queryOf(next), cursor } : queryOf(next),
+          body: bodyOf(next, cursor),
         });
         if (seq !== requestSeq.current) return;
         setItems((prev) => (cursor ? [...prev, ...res.items] : res.items));

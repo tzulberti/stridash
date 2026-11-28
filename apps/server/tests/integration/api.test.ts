@@ -116,10 +116,11 @@ describe('health', () => {
     const res = await app.request('/api/openapi.json');
     expect(res.status).toBe(200);
     const body = await json(res);
-    expect(body.openapi).toBe('3.1.0');
+    expect(body.openapi).toBe('3.2.0');
     expect((body.paths as Json)['/api/measurements']).toBeTruthy();
     expect((body.paths as Json)['/api/export/csv']).toBeTruthy();
     expect(JSON.stringify((body.paths as Json)['/api/activities'])).toContain('distanceMinM');
+    expect((body.paths as Json)['/api/activities/query']).toHaveProperty('query');
   });
 });
 
@@ -771,6 +772,50 @@ describe('activities list', () => {
         )
       ).status,
     ).toBe(400);
+  });
+
+  it('supports the HTTP QUERY search endpoint with a JSON body', async () => {
+    const res = await app.request('/api/activities/query', {
+      ...authed(aliceToken, {
+        method: 'QUERY',
+        body: JSON.stringify({
+          types: ['RUN'],
+          distanceMinM: 1000,
+          distanceMaxM: 6000,
+        }),
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await json(res)) as { items: Json[]; nextCursor: unknown };
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]!.headline).toBe('Morning run');
+    expect(body.items[0]!.providers).toEqual(['GARMIN']);
+    expect(body.nextCursor).toBeNull();
+  });
+
+  it('validates QUERY bodies and auth like the GET endpoint', async () => {
+    const bad = await app.request('/api/activities/query', {
+      ...authed(aliceToken, {
+        method: 'QUERY',
+        body: JSON.stringify({ types: ['BOGUS'] }),
+      }),
+    });
+    expect(bad.status).toBe(400);
+
+    const inverted = await app.request('/api/activities/query', {
+      ...authed(aliceToken, {
+        method: 'QUERY',
+        body: JSON.stringify({ distanceMinM: 10_000, distanceMaxM: 1_000 }),
+      }),
+    });
+    expect(inverted.status).toBe(400);
+
+    const noAuth = await app.request('/api/activities/query', {
+      method: 'QUERY',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(noAuth.status).toBe(401);
   });
 
   it('paginates with the cursor', async () => {

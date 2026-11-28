@@ -101,14 +101,16 @@ maintainability. Check the box when the fix (and its test) has landed.
 > responsive web pass and a primary-navigation/design pass landed. M5 is
 > closed.
 >
-> **Status 2026-11-27 (M6):** CSV export landed — streaming, RFC-escaped
+> **Status 2026-11-28 (M6):** CSV export landed — streaming, RFC-escaped
 > activities/measurements/sleep/wellness downloads from Settings. The
 > per-provider terms risk profile is documented in
-> `docs/provider-tos-risk.md`. An OpenAPI 3.1 spec is served at
+> `docs/provider-tos-risk.md`. An OpenAPI 3.2 spec is served at
 > `/api/openapi.json`, generated into `docs/openapi.json`, and the generated
 > path/component types live in `packages/types/src/openapi.ts`; Expo push
-> notifications, Strava activity webhooks, per-user sync/token caps and the
-> subscription-management CLI landed as well. BLE direct pairing remains.
+> notifications, Strava activity webhooks, per-user sync/token caps, the
+> subscription-management CLI and the advanced activity search page landed as
+> well. Search uses `QUERY /api/activities/query` (RFC 10008) with a JSON body,
+> while the GET feed remains compatible. BLE direct pairing remains.
 >
 > **Status 2026-11-27 (M7):** long-lived per-user API tokens landed
 > (`POST/GET /api/tokens`, revoke, hashed at rest, accepted by every
@@ -899,8 +901,8 @@ and the non-auth 413 / field-bound 400 cases.
 translation payloads. `scripts/coverage-gate.mjs` compares the totals with
 `scripts/coverage-baseline.json` and fails CI on any drop beyond 0.05pp; refresh
 the baseline deliberately with `npm run coverage:update`. Current baseline:
-server 89.39% lines/statements, 92.28% functions, 81.02% branches; web 90.83%
-lines/statements, 76.57% functions, 81.34% branches (App.tsx is still the
+server 89.46% lines/statements, 92.3% functions, 81.03% branches; web 90.82%
+lines/statements, 76.57% functions, 81.33% branches (App.tsx is still the
 untested bulk — tracked by C1/T20).
 
 ### Whole-codebase (baseline 2026-11-26)

@@ -37,32 +37,60 @@ const activityTypesParam = z.preprocess(
   z.array(z.enum(ACTIVITY_TYPES)).min(1).max(ACTIVITY_TYPES.length).optional(),
 );
 
+const activityFilterFields = {
+  /** ISO date lower/upper bound on activities.start_time. */
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  /** Exact gear id; activities with no gear never match. */
+  gearId: z.string().uuid().optional(),
+  /** Distance range in meters; either bound may be omitted. */
+  distanceMinM: z.coerce.number().finite().nonnegative().optional(),
+  distanceMaxM: z.coerce.number().finite().nonnegative().optional(),
+};
+
+const validDistanceRange = (q: { distanceMinM?: number; distanceMaxM?: number }): boolean =>
+  q.distanceMinM === undefined || q.distanceMaxM === undefined || q.distanceMinM <= q.distanceMaxM;
+
+const validDateRange = (q: { from?: string; to?: string }): boolean =>
+  !q.from || !q.to || new Date(q.from) <= new Date(q.to);
+
+const distanceRangeIssue = {
+  message: 'distanceMinM must be <= distanceMaxM',
+  path: ['distanceMinM'],
+};
+
+const dateRangeIssue = { message: 'from must be <= to', path: ['from'] };
+
 const listQuerySchema = z
   .object({
-    /** ISO date lower/upper bound on activities.start_time. */
-    from: z.string().datetime().optional(),
-    to: z.string().datetime().optional(),
+    ...activityFilterFields,
     /** Activity type filter; repeated values are comma-separated. */
     types: activityTypesParam,
-    /** Exact gear id; activities with no gear never match. */
-    gearId: z.string().uuid().optional(),
-    /** Distance range in meters; either bound may be omitted. */
-    distanceMinM: z.coerce.number().finite().nonnegative().optional(),
-    distanceMaxM: z.coerce.number().finite().nonnegative().optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
     cursor: z.string().uuid().optional(),
   })
-  .refine(
-    (q) =>
-      q.distanceMinM === undefined ||
-      q.distanceMaxM === undefined ||
-      q.distanceMinM <= q.distanceMaxM,
-    { message: 'distanceMinM must be <= distanceMaxM', path: ['distanceMinM'] },
-  )
-  .refine((q) => !q.from || !q.to || new Date(q.from) <= new Date(q.to), {
-    message: 'from must be <= to',
-    path: ['from'],
-  });
+  .refine(validDistanceRange, distanceRangeIssue)
+  .refine(validDateRange, dateRangeIssue);
+
+/** Body of the QUERY /activities/query endpoint (structured, future-proof). */
+const activityQuerySchema = z
+  .object({
+    ...activityFilterFields,
+    types: z.array(z.enum(ACTIVITY_TYPES)).min(1).max(ACTIVITY_TYPES.length).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    cursor: z.string().uuid().optional(),
+  })
+  .refine(validDistanceRange, distanceRangeIssue)
+  .refine(validDateRange, dateRangeIssue);
+
+type ActivityFilterValues = {
+  from?: string;
+  to?: string;
+  types?: (typeof ACTIVITY_TYPES)[number][];
+  gearId?: string;
+  distanceMinM?: number;
+  distanceMaxM?: number;
+};
 
 const apiTokenCreateSchema = z.object({
   name: z.string().min(1).max(80),
@@ -428,38 +456,44 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
     return c.json({ ok: true });
   });
 
-  routes.get('/activities', async (c) => {
-    const q = listQuerySchema.safeParse(c.req.query());
-    if (!q.success)
-      return c.json({ error: 'Invalid query', detail: q.error.flatten().fieldErrors }, 400);
-
+  /**
+   * Shared activity-feed read used by GET /activities and QUERY
+   * /activities/query. Keeps filtering, cursor semantics and provider
+   * provenance identical across both transports.
+   */
+  async function activityFeedPage(
+    userId: string,
+    filters: ActivityFilterValues,
+    limit: number,
+    cursor?: string,
+  ) {
     const items = await prisma.activity.findMany({
       where: {
-        userId: c.get('userId'),
-        ...(q.data.from || q.data.to
+        userId,
+        ...(filters.from || filters.to
           ? {
               startTime: {
-                ...(q.data.from ? { gte: new Date(q.data.from) } : {}),
-                ...(q.data.to ? { lte: new Date(q.data.to) } : {}),
+                ...(filters.from ? { gte: new Date(filters.from) } : {}),
+                ...(filters.to ? { lte: new Date(filters.to) } : {}),
               },
             }
           : {}),
-        ...(q.data.types ? { type: { in: q.data.types } } : {}),
-        ...(q.data.gearId ? { gearId: q.data.gearId } : {}),
-        ...(q.data.distanceMinM !== undefined || q.data.distanceMaxM !== undefined
+        ...(filters.types ? { type: { in: filters.types } } : {}),
+        ...(filters.gearId ? { gearId: filters.gearId } : {}),
+        ...(filters.distanceMinM !== undefined || filters.distanceMaxM !== undefined
           ? {
               distanceM: {
-                ...(q.data.distanceMinM !== undefined ? { gte: q.data.distanceMinM } : {}),
-                ...(q.data.distanceMaxM !== undefined ? { lte: q.data.distanceMaxM } : {}),
+                ...(filters.distanceMinM !== undefined ? { gte: filters.distanceMinM } : {}),
+                ...(filters.distanceMaxM !== undefined ? { lte: filters.distanceMaxM } : {}),
               },
             }
           : {}),
       },
       select: feedActivitySelect,
       orderBy: { startTime: 'desc' },
-      take: q.data.limit,
+      take: limit,
       // cursor semantics: without skip the cursor row itself is re-served
-      ...(q.data.cursor ? { cursor: { id: q.data.cursor }, skip: 1 } : {}),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
 
     // which providers delivered each row (for the feed's provider filter);
@@ -479,10 +513,32 @@ export function dataRoutes(env: Env): Hono<{ Variables: { userId: string } }> {
       providersBy.set(s.activityId, list);
     }
 
-    return c.json({
+    return {
       items: items.map((a) => ({ ...serializeRow(a), providers: providersBy.get(a.id) ?? [] })),
-      nextCursor: items.length === q.data.limit ? (items.at(-1)?.id ?? null) : null,
-    });
+      nextCursor: items.length === limit ? (items.at(-1)?.id ?? null) : null,
+    };
+  }
+
+  routes.get('/activities', async (c) => {
+    const q = listQuerySchema.safeParse(c.req.query());
+    if (!q.success)
+      return c.json({ error: 'Invalid query', detail: q.error.flatten().fieldErrors }, 400);
+
+    return c.json(await activityFeedPage(c.get('userId'), q.data, q.data.limit, q.data.cursor));
+  });
+
+  /**
+   * Structured activity search over HTTP QUERY (RFC 10008). Filters live in a
+   * JSON body so future nested/complex criteria do not hit URL-length limits
+   * or leak into access logs. GET /activities remains the compatible feed for
+   * the dashboard, MCP and older clients.
+   */
+  routes.query('/activities/query', async (c) => {
+    const q = activityQuerySchema.safeParse(await c.req.json().catch(() => null));
+    if (!q.success)
+      return c.json({ error: 'Invalid query', detail: q.error.flatten().fieldErrors }, 400);
+
+    return c.json(await activityFeedPage(c.get('userId'), q.data, q.data.limit, q.data.cursor));
   });
 
   // ─── Wellness: nightly sleep + daily wearer metrics ──────────────────────

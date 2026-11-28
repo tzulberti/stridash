@@ -1101,6 +1101,14 @@ export interface paths {
                     cursor?: string;
                     from?: string;
                     to?: string;
+                    /** @description Comma-separated activity types (RUN,RIDE,VIRTUAL_RIDE,WALK,HIKE,SWIM,WORKOUT,OTHER) */
+                    types?: string;
+                    /** @description Only activities linked to this gear id */
+                    gearId?: string;
+                    /** @description Minimum distance in meters */
+                    distanceMinM?: number;
+                    /** @description Maximum distance in meters */
+                    distanceMaxM?: number;
                 };
                 header?: never;
                 path?: never;
@@ -1125,6 +1133,22 @@ export interface paths {
                 };
             };
         };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activities/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
         put?: never;
         post?: never;
         delete?: never;
@@ -1994,6 +2018,21 @@ export interface components {
         };
         Activity: {
             [key: string]: unknown;
+        };
+        ActivityQuery: {
+            /** Format: date-time */
+            from?: string;
+            /** Format: date-time */
+            to?: string;
+            types?: ("RUN" | "RIDE" | "VIRTUAL_RIDE" | "WALK" | "HIKE" | "SWIM" | "WORKOUT" | "OTHER")[];
+            /** Format: uuid */
+            gearId?: string;
+            distanceMinM?: number;
+            distanceMaxM?: number;
+            /** @default 50 */
+            limit: number;
+            /** Format: uuid */
+            cursor?: string;
         };
         Measurement: {
             [key: string]: unknown;

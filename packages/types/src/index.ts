@@ -211,6 +211,24 @@ export interface Activity {
   createdAt: string;
 }
 
+/** Body for the HTTP QUERY activity-search endpoint. */
+export interface ActivityQueryRequest {
+  from?: string;
+  to?: string;
+  types?: ActivityType[];
+  gearId?: string;
+  distanceMinM?: number;
+  distanceMaxM?: number;
+  limit?: number;
+  cursor?: string;
+}
+
+/** Cursor-paginated activity results (GET feed and QUERY search). */
+export interface ActivityPage {
+  items: Activity[];
+  nextCursor: string | null;
+}
+
 /** Recording device — the physical hardware that produced activities
  * (Garmin watch, iGPSPORT head unit). `sourceDeviceId` is the FIT device
  * message's serial; `model` is the friendly name when the provider resolves
@@ -432,5 +450,5 @@ export type PaginatedResponse<T> = {
   nextCursor: string | null;
 };
 
-/** Generated OpenAPI 3.1 path/component types (see docs/openapi.json). */
+/** Generated OpenAPI 3.2 path/component types (see docs/openapi.json). */
 export type * from './openapi.js';

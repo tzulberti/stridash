@@ -94,6 +94,7 @@ function mockApi() {
     if (path === '/connections') return { items: [] };
     if (path === '/measurements') return { items: [measurement] };
     if (path === '/activities') return { items: [activity], nextCursor: null };
+    if (path === '/activities/query') return { items: [activity], nextCursor: null };
     if (path === '/sleeps') return { items: opts?.query?.to ? [] : [sleepRow] };
     if (path === '/wellness') return { items: opts?.query?.to ? [] : [wellnessRow] };
     if (path === '/auth/login') return { accessToken: 'at', refreshToken: 'rt' };
@@ -215,9 +216,10 @@ describe('App auth flow', () => {
 
     expect(await screen.findByRole('heading', { name: 'Advanced search' })).toBeTruthy();
     await waitFor(() =>
-      expect(apiMock).toHaveBeenCalledWith('/activities', {
+      expect(apiMock).toHaveBeenCalledWith('/activities/query', {
+        method: 'QUERY',
         token: 'tok',
-        query: { limit: '100', types: 'RUN' },
+        body: { limit: 100, types: ['RUN'] },
       }),
     );
     expect(screen.getByRole('link', { name: 'Advanced search' }).getAttribute('aria-current')).toBe(

@@ -84,9 +84,10 @@ describe('AdvancedSearchSection', () => {
     expect(screen.getByLabelText('min distance')).toBeTruthy();
 
     expect(await screen.findByText('1 activities')).toBeTruthy();
-    expect(apiMock).toHaveBeenCalledWith('/activities', {
+    expect(apiMock).toHaveBeenCalledWith('/activities/query', {
+      method: 'QUERY',
       token: 'tok',
-      query: { limit: '100' },
+      body: { limit: 100 },
     });
     expect(screen.getByText('Sweet spot')).toBeTruthy();
 
@@ -103,16 +104,17 @@ describe('AdvancedSearchSection', () => {
     render(<AdvancedSearchSection {...baseProps} />);
 
     await waitFor(() =>
-      expect(apiMock).toHaveBeenCalledWith('/activities', {
+      expect(apiMock).toHaveBeenCalledWith('/activities/query', {
+        method: 'QUERY',
         token: 'tok',
-        query: {
-          limit: '100',
+        body: {
+          limit: 100,
           from: '2026-11-01T00:00:00.000Z',
           to: '2026-11-30T23:59:59.999Z',
-          types: 'RUN,RIDE',
+          types: ['RUN', 'RIDE'],
           gearId: 'g1',
-          distanceMinM: '5000',
-          distanceMaxM: '10000',
+          distanceMinM: 5000,
+          distanceMaxM: 10000,
         },
       }),
     );
@@ -149,17 +151,19 @@ describe('AdvancedSearchSection', () => {
     fireEvent.change(screen.getByLabelText('min distance'), { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     await waitFor(() =>
-      expect(apiMock).toHaveBeenLastCalledWith('/activities', {
+      expect(apiMock).toHaveBeenLastCalledWith('/activities/query', {
+        method: 'QUERY',
         token: 'tok',
-        query: { limit: '100', distanceMinM: '2000' },
+        body: { limit: 100, distanceMinM: 2000 },
       }),
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
     await waitFor(() =>
-      expect(apiMock).toHaveBeenLastCalledWith('/activities', {
+      expect(apiMock).toHaveBeenLastCalledWith('/activities/query', {
+        method: 'QUERY',
         token: 'tok',
-        query: { limit: '100' },
+        body: { limit: 100 },
       }),
     );
     expect(screen.getByLabelText('min distance')).toHaveProperty('value', '');
@@ -187,14 +191,15 @@ describe('AdvancedSearchSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     await waitFor(() =>
-      expect(apiMock).toHaveBeenLastCalledWith('/activities', {
+      expect(apiMock).toHaveBeenLastCalledWith('/activities/query', {
+        method: 'QUERY',
         token: 'tok',
-        query: {
-          limit: '100',
-          types: 'RUN',
+        body: {
+          limit: 100,
+          types: ['RUN'],
           gearId: 'g1',
-          distanceMinM: '5000',
-          distanceMaxM: '10000',
+          distanceMinM: 5000,
+          distanceMaxM: 10000,
         },
       }),
     );
@@ -213,8 +218,8 @@ describe('AdvancedSearchSection', () => {
   });
 
   it('appends the next page with the cursor from the applied query', async () => {
-    apiMock.mockImplementation(async (_path: string, opts?: { query?: Record<string, string> }) =>
-      opts?.query?.cursor
+    apiMock.mockImplementation(async (_path: string, opts?: { body?: Record<string, unknown> }) =>
+      opts?.body?.cursor
         ? { items: [run], nextCursor: null }
         : { items: [ride], nextCursor: 'cursor-1' },
     );
@@ -224,9 +229,10 @@ describe('AdvancedSearchSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
 
     await waitFor(() =>
-      expect(apiMock).toHaveBeenLastCalledWith('/activities', {
+      expect(apiMock).toHaveBeenLastCalledWith('/activities/query', {
+        method: 'QUERY',
         token: 'tok',
-        query: { limit: '100', cursor: 'cursor-1' },
+        body: { limit: 100, cursor: 'cursor-1' },
       }),
     );
     expect(await screen.findByText('2 activities')).toBeTruthy();
