@@ -15,8 +15,8 @@
   },
   "dependencies": {
     "@stridash/types": "*",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
